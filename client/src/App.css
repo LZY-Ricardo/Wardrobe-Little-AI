@@ -1,0 +1,41 @@
+.App {
+  text-align: center;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.App-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+h1 {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.5rem 1rem;
+  margin: 1rem 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background-color: #646cff;
+  color: white;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+button:hover {
+  border-color: #646cff;
+  background-color: #535bf2;
+}
+
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
