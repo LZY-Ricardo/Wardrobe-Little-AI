@@ -1,10 +1,10 @@
-import './App.css'
+import  WrapperRouter  from './router'
 
 function App() {
   return (
-    <div className="App">
-
-    </div>
+    <>
+      <WrapperRouter />
+    </>
   )
 }
 

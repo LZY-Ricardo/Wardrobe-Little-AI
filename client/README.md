@@ -72,3 +72,26 @@ export default defineConfig({
 2. 使用行内注释：`/* px-to-viewport-ignore */`
 3. 使用行内注释忽略下一行：`/* px-to-viewport-ignore-next */`
 
+# css 预处理器
+使用 less 减少css样式冗余
+
+# 路由配置
+使用 react-router-dom 配置路由，实现页面跳转。
+创建router文件夹 采取集中式管理路由
+在router文件夹下创建index.jsx文件 配置路由
+在App.jsx文件中引入路由配置文件
+
+# UI库
+Ant Design Mobile 
+
+# html 标签样式重置
+使用 CSS Reset 重置 html 标签的默认样式
+
+# css 样式隔离
+使用 css modules 实现样式隔离，避免全局样式冲突。
+
+# axios 配置
+
+
+
+
