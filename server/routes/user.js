@@ -86,8 +86,6 @@ router.post('/register', async (ctx) => {
 
 router.post('/test',verify(), async (ctx) => {
     console.log('测试成功');
-
-    
     ctx.body = {
         code: 1,
         msg: '测试成功'
@@ -96,8 +94,7 @@ router.post('/test',verify(), async (ctx) => {
 
 router.post('/refresh_token', async (ctx) => {
     const { refresh_token } = ctx.request.body
-    console.log('收到刷新token请求:', refresh_token ? '有token' : '无token');
-    
+    console.log('收到刷新token请求:', refresh_token ? '有刷新token' : '无刷新token');
     let decoded = refreshToken(refresh_token)
     if (decoded) {
         let data = {
@@ -108,7 +105,6 @@ router.post('/refresh_token', async (ctx) => {
         const access_token = sign(data, '1h')
         const new_refresh_token = sign(data, '7d')
         console.log('刷新成功');
-        
         ctx.body = {
             code: 1,
             msg: '刷新成功',
@@ -116,14 +112,13 @@ router.post('/refresh_token', async (ctx) => {
             refresh_token: new_refresh_token
         }
     } else { // 长token也过期了或无效
-        console.log('刷新token失败：token无效或已过期');
+        console.log('刷新token失败：长token无效或已过期');
         ctx.status = 401
         ctx.body = {
-            code: 0,
+            code: 3,
             msg: '登录已过期，请重新登录'
         }
     }
-
 })
 
 

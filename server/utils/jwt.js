@@ -9,16 +9,17 @@ function sign(options, time = '24h') {
 function verify() {
     return async (ctx, next) => {
         const authHeader = ctx.request.header.authorization
-        if (authHeader) {
+        console.log('Authorization头:', authHeader);
+        if (authHeader) { // 登录过
             // 处理Bearer token格式
             const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
             try {
                 let res = jwt.verify(token, 'lzy')
-                console.log('Token验证成功:', res);
+                console.log('短Token验证成功:', res);
                 ctx.userId = res.id
                 await next()
-            } catch (error) {
-                console.error('Token验证失败:', error.message);
+            } catch (error) { // 短token已过期
+                console.error('短Token验证失败:', error.message);
                 ctx.status = 401
                 ctx.body = {
                     code: 0,
@@ -26,11 +27,11 @@ function verify() {
                     error: error.message
                 }
             }
-        } else {
-            console.log('未提供Authorization头');
-            ctx.status = 402
+        } else { // 未登录
+            console.log('未提供Authorization头即未登录账号');
+            ctx.status = 401
             ctx.body = {
-                code: 0,
+                code: 2,
                 msg: '请先登录'
             }
         }
@@ -42,7 +43,6 @@ function refreshToken(refresh_token) {
         console.error('刷新token为空');
         return null;
     }
-    
     try {
         // 处理可能的Bearer前缀
         const token = refresh_token.startsWith('Bearer ') ? refresh_token.slice(7) : refresh_token;

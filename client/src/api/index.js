@@ -38,18 +38,28 @@ axios.interceptors.response.use(
     },
     error => { // 状态码不是 200 走进这个回调函数
         if (error.response.status === 401) { // 短token已过期
-            const originalRequest = error.config
-
-            if (!config_retry) { 
-                config_retry = true 
+            // console.log(error);
+            if (error.response.data.code === 2) { // 未登录
+                // console.log('未登录');
+                Toast.show({
+                    icon: 'fail',
+                    content: '请先登录',
+                    duration: 1000
+                })
+                setTimeout(() => {
+                    window.location.href = '/login'
+                }, 1000)
+            }
+            if (error.response.data.code === 0) { // 短token过期
+                // console.log('短token过期');
+                const originalRequest = error.config
                 // 刷新token(长和短)
                 return axios.post('/user/refresh_token', {
                     refresh_token: localStorage.getItem('refresh_token')
                 }).then(res => {
-                    console.log('刷新token响应:', res);
+                    // console.log('刷新token响应:', res);
                     if (res.code === 1) {
-                        console.log('刷新token成功');
-
+                        // console.log('刷新token成功');
                         localStorage.setItem('access_token', res.access_token)
                         localStorage.setItem('refresh_token', res.refresh_token)
                         // 更新原始请求的token头
@@ -58,8 +68,9 @@ axios.interceptors.response.use(
                         return axios(originalRequest)
                     }
                 })
-            } else if (res.code === 0) { // 长token也过期了
-                console.log('长token已过期');
+            }
+            if (error.response.data.code === 3) { // 长token也过期了
+                // console.log('长token已过期');
                 // 清除本地token
                 localStorage.removeItem('access_token')
                 localStorage.removeItem('refresh_token')
@@ -73,18 +84,8 @@ axios.interceptors.response.use(
                     window.location.href = '/login'
                 }, 1000)
             }
+        }
 
-        }
-        if (error.response.status === 402) { // 未登录
-            Toast.show({
-                icon: 'fail',
-                content: '请先登录',
-                duration: 1000
-            })
-            setTimeout(() => {
-                window.location.href = '/login'
-            }, 1000)
-        }
         return Promise.reject(error)
     }
 )
