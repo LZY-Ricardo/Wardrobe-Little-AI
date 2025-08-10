@@ -1,0 +1,241 @@
+.add {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    /* 确保填满父容器 */
+    position: relative;
+    /* 为子元素的定位提供参考 */
+
+    .header {
+        height: 50px;
+        display: flex;
+        justify-content: space-between;
+        padding: 14px;
+        background: #FFFFFF rgba(0, 0, 0, 0.001);
+        box-shadow: 0 1px 2px 0px rgba(0, 0, 0, 0.05);
+        box-sizing: border-box;
+
+        .headerBack {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+        }
+
+        .headerTitle {
+            font-weight: 500;
+            font-size: 14px;
+            color: #000000;
+            line-height: 21px;
+            text-align: center;
+        }
+
+        .headerQuestion {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 25px;
+        }
+    }
+
+    .container {
+        padding: 14px;
+        background-color: #F9FAFB;
+        height: calc(100vh - 120px);
+        /* 设置固定高度，减去头部和底部导航栏 */
+        overflow-y: auto; /* 只在content区域滚动 */
+
+        .name {
+            padding: 7px;
+            background-color: #fff;
+            display: flex;
+            box-sizing: border-box;
+            box-shadow: 0px 1px 2px 0px rgba(0, 0, 0, 0.05);
+            border-radius: 11px 11px 11px 11px;
+            margin-bottom: 20px;
+
+            label {
+                padding: 8px 0;
+            }
+
+            input {
+                flex-grow: 1;
+                margin-left: 14px;
+            }
+        }
+
+        .img {
+            .uploadBox {
+                display: block;
+                width: 100%;
+                height: 200px;
+                border: 1px solid #D9D9D9;
+                border-radius: 9px 9px 9px 9px;
+                background-color: #fff;
+                position: relative;
+                overflow: hidden;
+                transition: all 0.8s ease;
+
+                &:hover {
+                    border-color: #3B82F6;
+                }
+
+                .previewImg {
+                    width: 100%;
+                    height: 100%;
+                    object-fit: contain;
+                }
+
+                .uploadContent {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    width: 100%;
+                    padding: 0 20px;
+                    box-sizing: border-box;
+                }
+
+                .cameraIcon {
+                    font-size: 48px;
+                    color: #bbb;
+                    margin-bottom: 16px;
+                }
+
+                .uploadText {
+                    text-align: center;
+                }
+
+                p {
+                    font-size: 16px;
+                    color: #666;
+                    margin-bottom: 8px;
+                }
+
+                .uploadTip {
+                    font-size: 12px;
+                    color: #999;
+                    line-height: 1.5;
+                }
+            }
+
+            .statusOverlay {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                color: white;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                font-size: 16px;
+                border-radius: 9px;
+            }
+
+            .fileInput {
+                display: none;
+            }
+        }
+
+        .analyzeBtn {
+            margin-top: 14px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .detail {
+            background: #FFFFFF;
+            box-shadow: 0 1px 2px 0px rgba(0, 0, 0, 0.05);
+            border-radius: 11px 11px 11px 11px;
+            padding: 14px;
+            margin-top: 14px;
+
+            .detailType {
+                margin-bottom: 7px;
+                display: flex;
+                padding: 0 14px;
+
+                label {
+                    margin: 5px 0;
+                }
+
+                input {
+                    flex-grow: 1;
+                    margin-left: 20px;
+                }
+            }
+
+            .detailColor {
+                margin-bottom: 7px;
+                display: flex;
+                padding: 0 14px;
+
+                label {
+                    margin: 5px 0;
+                }
+
+                input {
+                    flex-grow: 1;
+                    margin-left: 20px;
+                }
+            }
+
+            .detailStyle {
+                margin-bottom: 7px;
+                display: flex;
+                padding: 0 14px;
+
+                label {
+                    margin: 5px 0;
+                }
+
+                input {
+                    flex-grow: 1;
+                    margin-left: 20px;
+                }
+            }
+
+            .detailSeason {
+                margin-bottom: 7px;
+                display: flex;
+                padding: 0 14px;
+
+                label {
+                    margin: 5px 14px;
+                }
+
+                input {
+                    flex-grow: 1;
+                    margin-left: 18px;
+                }
+
+            }
+
+            .detailMaterial {
+                display: flex;
+                padding: 0 14px;
+
+                label {
+                    margin: 5px 0;
+                    text-align: center;
+
+                }
+
+                input {
+                    flex-grow: 1;
+                    margin-left: 20px;
+                }
+            }
+        }
+
+        .submit {
+            margin-top: 14px;
+        }
+    }
+}

@@ -11,6 +11,8 @@ const Match = React.lazy(() => import('../pages/Match'))
 const Outfit = React.lazy(() => import('../pages/Outfit'))
 const Recommend = React.lazy(() => import('../pages/Recommend'))
 const Person = React.lazy(() => import('../pages/Person'))
+const Add = React.lazy(() => import('../pages/Add'))
+
 
 const routes = [
     {
@@ -66,6 +68,15 @@ const routes = [
             </Layout>
         )
     },
+    {
+        path: '/add',
+        element: (
+            <Layout>
+                <Add />
+            </Layout>
+        )
+    },
+
 ]
 
 function WrapperRoutes() {
