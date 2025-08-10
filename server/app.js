@@ -1,6 +1,7 @@
 const Koa = require('koa')
 const app = new Koa()
 const userRouter = require('./routes/user')
+const clothesRouter = require('./routes/clothes')
 const { bodyParser } = require('@koa/bodyparser');
 const cors = require('@koa/cors')
 
@@ -15,6 +16,9 @@ app.use(bodyParser({
 // 注册路由
 app.use(userRouter.routes());
 app.use(userRouter.allowedMethods());
+app.use(clothesRouter.routes());
+app.use(clothesRouter.allowedMethods());
+
 
 // 引入配置文件
 const config = require('./config')
