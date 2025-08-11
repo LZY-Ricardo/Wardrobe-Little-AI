@@ -25,7 +25,7 @@ axios.interceptors.request.use(
 axios.interceptors.response.use(
     response => { // 状态为 200 走进这个回调函数
         if (response.status === 200) {
-            if (response.data.code === 0) { // 逻辑性错误
+            if (response.data.code !== 1) { // 逻辑性错误
                 Toast.show({
                     icon: 'fail',
                     content: response.data.msg,

@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
-import { Button, Toast } from 'antd-mobile'
+import { Button, Toast, Dialog } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 
 export default function Add() {
     const navigate = useNavigate()
-    const [imageUrl, setImageUrl] = useState('')
+    const [imageUrl, setImageUrl] = useState('') // 上传的图片
     const [status, setStatus] = useState('') // 工作流状态
+    const nameRef = useRef(null)
     const fileRef = useRef(null)
     const typeRef = useRef(null)
     const colorRef = useRef(null)
@@ -63,7 +64,7 @@ export default function Add() {
             // 解析后端返回的字符串数据
             const data = JSON.parse(res.data);
             console.log('解析后的数据:', data);
-            
+
             // 填充表单字段
             typeRef.current.value = data.type || '';
             colorRef.current.value = data.color || '';
@@ -88,6 +89,72 @@ export default function Add() {
         }
     }
 
+    const handleUploadImage = async () => {
+        if (!nameRef.current.value) {
+            Toast.show({
+                icon: 'fail',
+                content: '请输入衣物名称',
+                duration: 1000
+            })
+            return
+        }
+        if (!typeRef.current.value) {
+            Toast.show({
+                icon: 'fail',
+                content: '请输入衣物类型',
+                duration: 1000
+            })
+            return
+        }
+        if (!colorRef.current.value) {
+            Toast.show({
+                icon: 'fail',
+                content: '请输入衣物颜色',
+                duration: 1000
+            })
+            return
+        }
+        if (!styleRef.current.value) {
+            Toast.show({
+                icon: 'fail',
+                content: '请输入衣物风格',
+                duration: 1000
+            })
+            return
+        }
+        if (!seasonRef.current.value) {
+            Toast.show({
+                icon: 'fail',
+                content: '请输入衣物适宜季节',
+                duration: 1000
+            })
+            return
+        }
+        const res = await axios.post('/clothes/uploadCloth', {
+            name: nameRef.current.value,
+            type: typeRef.current.value,
+            color: colorRef.current.value,
+            style: styleRef.current.value,
+            season: seasonRef.current.value,
+            material: materialRef.current.value,
+            image: imageUrl,
+        })
+        console.log('上传衣物成功', res);
+        setImageUrl('')
+        nameRef.current.value = ''
+        typeRef.current.value = ''
+        colorRef.current.value = ''
+        styleRef.current.value = ''
+        seasonRef.current.value = ''
+        materialRef.current.value = ''
+
+        Toast.show({
+            icon: 'success',
+            content: '上传成功',
+            duration: 1000
+        })
+    }
+
     return (
         <div className={styles.add}>
             <div className={styles.header}>
@@ -97,7 +164,14 @@ export default function Add() {
                 <div className={styles.headerTitle}>
                     添加衣物
                 </div>
-                <div className={styles.headerQuestion}>
+                <div
+                    className={styles.headerQuestion}
+                    onClick={() =>
+                        Dialog.alert({
+                            content: '麻烦您上传一下单件衣物的清晰照片哦，要是背景能简洁些就更好啦，辛苦您啦～',
+                        })
+                    }
+                >
                     <SvgIcon iconName="icon-qm" />
                 </div>
             </div>
@@ -105,7 +179,7 @@ export default function Add() {
             <div className={styles.container}>
                 <div className={styles.name}>
                     <label htmlFor="name">衣物名称</label>
-                    <input type="text" id="name" placeholder='请输入衣物名称' />
+                    <input ref={nameRef} type="text" id="name" placeholder='请输入衣物名称' />
 
                 </div>
                 <div className={styles.img}>
@@ -173,6 +247,7 @@ export default function Add() {
                     <Button
                         color='primary'
                         block
+                        onClick={handleUploadImage}
                     >确认添加到衣柜</Button>
                 </div>
             </div>

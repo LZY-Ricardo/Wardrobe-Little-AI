@@ -1,70 +1,74 @@
-const axios = require('axios')
-const fs = require('fs')
-const path = require('path')
-const FormData = require('form-data')
+// 数据库相关操作
+const mysql = require('mysql2')
+const config = require('../config')
 
-// 环境变量中获取 PAT TOKEN
-const patToken = process.env.COZE_PAT_TOKEN;
-const uploadUrl = 'https://api.coze.cn/v1/files/upload';
-const workflowUrl = 'https://api.coze.cn/v1/workflow/run';
-const workflow_id = process.env.COZE_WORKFLOW_ID; // 从环境变量获取
+// 创建线程池
+const pool = mysql.createPool({
+    host: config.db.host,
+    user: config.db.user,
+    password: config.db.password,
+    database: config.db.database,
+    port: config.db.port
+})
 
-// 上传图片到Coze并分析
-exports.analyzeClothes = async (ctx) => {
-    const req = ctx.request;
-    const res = ctx.response;
-    try {
-        const imageFile = ctx.request.file
-        if (!imageFile) {
-            ctx.status = 400;
-            ctx.body = { code: 0, msg: '请上传衣物图片' };
-            return;
-        }
-        // 1. 上传图片到COZE
-        const formData = new FormData()
-        formData.append('file', imageFile.buffer, {
-            filename: imageFile.originalname,
-            contentType: imageFile.mimetype
-        });
-        const uploadResponse = await axios.post(uploadUrl, formData, {
-            headers: {
-                'Authorization': `Bearer ${patToken}`,
-                'Content-Type': 'multipart/form-data'
-            }
-        });
-
-        if (uploadResponse.data.code !== 0) {
-            ctx.status = 500;
-            ctx.body = { code: 0, msg: '图片上传失败' };
-            return;
-        }
-        const file_id = uploadResponse.data.data.id
-        // 2. 调用Coze工作流
-        const workflowResponse = await axios.post(workflowUrl, {
-            workflow_id,
-            parameters: {
-                image: JSON.stringify({ file_id }),
-            }
-        }, {
-            headers: {
-                'Authorization': `Bearer ${patToken}`,
-                'Content-Type': 'application/json'
-            }
-        });
-        if (workflowResponse.data.code !== 0) {
-            ctx.status = 500;
-            ctx.body = { code: 0, msg: '分析失败' };
-            return;
-        }
-        // 解析返回结果
-        const analysisResult = JSON.parse(workflowResponse.data.data).output
-
-        // 返回分析结果给前端
-        ctx.body = { code: 1, data: analysisResult };
-
-    } catch (error) {
-        console.error('分析衣物错误:', error);
-        ctx.status = 500;
-        ctx.body = { code: 0, msg: '服务器错误' };
+// 执行sql的方法
+const allServices = {
+    async query(sql, params) {
+        return new Promise((resolve, reject) => {
+            pool.query(sql, params, (err, results) => {
+                if (err) {
+                    reject(err)
+                } else {
+                    resolve(results)
+                }
+            })
+        })
     }
-};
+}
+
+// 插入衣物数据
+const insertClothesData = async (data) => {
+    const { user_id, name, type, color, style, season, material, image, create_time, update_time } = data
+    const sql = 'INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    const params = [user_id, name, type, color, style, season, material, image, create_time, update_time]
+    const result = await allServices.query(sql, params)
+    if (result.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
+// 获取所有衣物数据
+const getAllClothes = async (user_id) => {
+    const sql = 'SELECT * FROM clothes WHERE user_id = ?'
+    const params = [user_id]
+    const result = await allServices.query(sql, params)
+    if (result.length > 0) {
+        return result
+    } else {
+        return false
+    }
+}
+
+// 删除衣物
+const deleteClothes = async (clothes_id) => {
+    console.log('------------删除衣物------------');
+    
+    const sql = 'DELETE FROM clothes WHERE cloth_id = ?'
+    const params = [clothes_id]
+    const result = await allServices.query(sql, params)
+    console.log('res',result);
+    if (result.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
+
+module.exports = {
+    insertClothesData,
+    getAllClothes,
+    deleteClothes,
+}
