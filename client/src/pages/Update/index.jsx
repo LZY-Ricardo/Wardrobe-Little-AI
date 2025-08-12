@@ -43,7 +43,16 @@ export default function Update() {
             return;
         }
 
-        // 验证文件大小（限制10MB）
+        // 验证文件大小（5KB到10MB之间）
+        if (file.size < 5 * 1024) {
+            Toast.show({
+                icon: 'fail',
+                content: '图片大小不能小于5KB',
+                duration: 1000
+            });
+            return;
+        }
+        
         if (file.size > 10 * 1024 * 1024) {
             Toast.show({
                 icon: 'fail',
@@ -65,13 +74,16 @@ export default function Update() {
             const base64 = await blobToBase64(compressedBlob);
             setImageUrl(base64);
 
-            // 显示压缩结果
+            // 后台打印压缩信息
             const compressionRatio = ((file.size - compressedBlob.size) / file.size * 100).toFixed(1);
-            Toast.show({
-                icon: 'success',
-                content: `压缩完成，减少了${compressionRatio}%`,
-                duration: 2000
+            console.log('图片压缩完成:', {
+                原始大小: formatFileSize(file.size),
+                压缩后大小: formatFileSize(compressedBlob.size),
+                压缩比例: `${compressionRatio}%`,
+                节省空间: formatFileSize(file.size - compressedBlob.size)
             });
+
+
 
         } catch (error) {
             console.error('图片压缩失败:', error);
@@ -264,13 +276,7 @@ export default function Update() {
                                         alt="预览图"
                                         className={styles.previewImg}
                                     />
-                                    {/* 显示压缩信息 */}
-                                    {originalSize > 0 && compressedSize > 0 && (
-                                        <div className={styles.compressionInfo}>
-                                            <span>原始: {formatFileSize(originalSize)}</span>
-                                            <span>压缩后: {formatFileSize(compressedSize)}</span>
-                                        </div>
-                                    )}
+
                                 </div>
                             ) : (
                                 <div className={styles.uploadContent}>
