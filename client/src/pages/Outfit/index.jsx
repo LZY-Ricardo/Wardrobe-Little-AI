@@ -226,21 +226,21 @@ export default function outfit() {
                   <img src={item.image || white} alt={item.name} />
                 </div>
                 <div className={styles.label}>
-                  <div 
+                  <div
                     className={styles['label-item']}
                     style={{
                       backgroundColor: itemColors[index]?.name?.bg || '#f5f5f5',
                       color: itemColors[index]?.name?.text || '#333'
                     }}
                   >{item.name}</div>
-                  <div 
+                  <div
                     className={styles['label-item']}
                     style={{
                       backgroundColor: itemColors[index]?.style?.bg || '#f5f5f5',
                       color: itemColors[index]?.style?.text || '#333'
                     }}
                   >{item.style}</div>
-                  <div 
+                  <div
                     className={styles['label-item']}
                     style={{
                       backgroundColor: itemColors[index]?.season?.bg || '#f5f5f5',
@@ -295,10 +295,16 @@ export default function outfit() {
                   <span className={styles['detail-label']}>常用程度：</span>
                   <span className={styles['detail-value']}>{selectedItem.frequency || '未知'}</span>
                 </div>
-                
+
                 <div className={styles['delete-button-container']}>
                   <button className={styles['delete-button']} onClick={handleDelete}>
                     删除衣物
+                  </button>
+                  <button
+                    className={styles['update-button']}
+                    onClick={() => navigate('/update', { state: selectedItem })}
+                  >
+                    更新衣物
                   </button>
                 </div>
               </div>

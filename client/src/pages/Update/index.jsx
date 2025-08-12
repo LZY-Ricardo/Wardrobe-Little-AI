@@ -1,18 +1,22 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast, Dialog } from 'antd-mobile'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import axios from '@/api'
 import { compressImage, blobToBase64, formatFileSize } from '@/utils/imageUtils'
 
-export default function Add() {
+
+export default function Update() {
     const navigate = useNavigate()
-    const [imageUrl, setImageUrl] = useState('') // 上传的图片
-    const [status, setStatus] = useState('') // 工作流状态
+    const location = useLocation()
+    const selectedItem = location.state
+    console.log(selectedItem);
     const [compressing, setCompressing] = useState(false);
     const [originalSize, setOriginalSize] = useState(0);
     const [compressedSize, setCompressedSize] = useState(0);
+    const [imageUrl, setImageUrl] = useState('') // 上传的图片
+    const [status, setStatus] = useState('') // 工作流状态
     const nameRef = useRef(null)
     const fileRef = useRef(null)
     const typeRef = useRef(null)
@@ -20,6 +24,9 @@ export default function Add() {
     const styleRef = useRef(null)
     const seasonRef = useRef(null)
     const materialRef = useRef(null)
+
+
+
 
     // 处理图片选择, 生成预览
     const handleImageChange = async (e) => {
@@ -83,7 +90,7 @@ export default function Add() {
         if (!imageUrl) {
             Toast.show({
                 icon: 'fail',
-                content: '请上传衣物图片',
+                content: '请上传需要更新的衣物图片',
                 duration: 1000
             });
             return;
@@ -144,8 +151,7 @@ export default function Add() {
         }
     }
 
-    // 上传衣物
-    const handleUploadCloth = async () => {
+    const handleUpdateCloth = async () => {
         if (!nameRef.current.value) {
             Toast.show({
                 icon: 'fail',
@@ -186,7 +192,7 @@ export default function Add() {
             })
             return
         }
-        const res = await axios.post('/clothes/uploadCloth', {
+        const res = await axios.put(`/clothes/${selectedItem.cloth_id}`, {
             name: nameRef.current.value,
             type: typeRef.current.value,
             color: colorRef.current.value,
@@ -195,21 +201,32 @@ export default function Add() {
             material: materialRef.current.value || '',
             image: imageUrl,
         })
-        console.log('上传衣物成功', res);
-        setImageUrl('')
-        nameRef.current.value = ''
-        typeRef.current.value = ''
-        colorRef.current.value = ''
-        styleRef.current.value = ''
-        seasonRef.current.value = ''
-        materialRef.current.value = ''
+        console.log('更新衣物信息成功', res);
 
         Toast.show({
             icon: 'success',
-            content: '上传成功',
+            content: '更新衣物信息成功',
             duration: 1000
         })
+
+        setTimeout(() => {
+            navigate(-1)
+        }, 1000)
+
     }
+
+    // 初始化表单数据
+    useEffect(() => {
+        if (selectedItem) {
+            nameRef.current.value = selectedItem.name
+            typeRef.current.value = selectedItem.type
+            colorRef.current.value = selectedItem.color
+            styleRef.current.value = selectedItem.style
+            seasonRef.current.value = selectedItem.season
+            materialRef.current.value = selectedItem.material
+            setImageUrl(selectedItem.image)
+        }
+    }, [selectedItem])
 
     return (
         <div className={styles.add}>
@@ -218,7 +235,7 @@ export default function Add() {
                     <SvgIcon iconName="icon-fanhui" />
                 </div>
                 <div className={styles.headerTitle}>
-                    添加衣物
+                    更新衣物
                 </div>
                 <div
                     className={styles.headerQuestion}
@@ -321,8 +338,8 @@ export default function Add() {
                     <Button
                         color='primary'
                         block
-                        onClick={handleUploadCloth}
-                    >确认添加到衣柜</Button>
+                        onClick={handleUpdateCloth}
+                    >确认更新衣物信息</Button>
                 </div>
             </div>
         </div>

@@ -66,9 +66,23 @@ const deleteClothes = async (clothes_id) => {
     }
 }
 
+// 更新衣物
+const updateClothes = async (data) => {
+    const { cloth_id, name, type, color, style, season, material, image, update_time } = data
+    const sql = 'UPDATE clothes SET name = ?, type = ?, color = ?, style = ?, season = ?, material = ?, image = ?, update_time = ? WHERE cloth_id = ?'
+    const params = [name, type, color, style, season, material, image, update_time, cloth_id]
+    const result = await allServices.query(sql, params)
+    if (result.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
 
 module.exports = {
     insertClothesData,
     getAllClothes,
     deleteClothes,
+    updateClothes,
+
 }
