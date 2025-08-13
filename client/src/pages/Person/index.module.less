@@ -1,0 +1,311 @@
+.person {
+  background-color: #f5f5f5;
+  min-height: 100vh;
+  padding: 0;
+
+  .userInfo {
+    background-color: #fff;
+    padding: 30px 20px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+
+    .avatar {
+      margin-right: 20px;
+
+      .avatarIcon {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background-color: #f0f0f0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 2px solid #e0e0e0;
+
+        svg {
+          width: 40px;
+          height: 40px;
+        }
+      }
+    }
+
+    .userDetails {
+      flex: 1;
+
+      .userName {
+        font-size: 20px;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .editIcon {
+          width: 16px;
+          height: 16px;
+          cursor: pointer;
+          opacity: 0.6;
+          transition: opacity 0.2s;
+
+          &:hover {
+            opacity: 1;
+          }
+        }
+
+        .editNameContainer {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          width: 100%;
+
+          .nameInput {
+            padding: 8px 12px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #333;
+            outline: none;
+            transition: border-color 0.2s;
+            max-width: 200px;
+
+            &:focus {
+              border-color: #1677ff;
+              box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+            }
+
+            &::placeholder {
+              color: #999;
+              font-weight: normal;
+            }
+          }
+
+          .editButtons {
+            display: flex;
+            gap: 8px;
+
+            button {
+              padding: 6px 16px;
+              border: none;
+              border-radius: 4px;
+              font-size: 14px;
+              cursor: pointer;
+              transition: all 0.2s;
+              font-weight: 500;
+
+              &:active {
+                transform: scale(0.95);
+              }
+            }
+
+            .saveBtn {
+              background-color: #1677ff;
+              color: white;
+
+              &:hover {
+                background-color: #4096ff;
+              }
+            }
+
+            .cancelBtn {
+              background-color: #f5f5f5;
+              color: #666;
+              border: 1px solid #d9d9d9;
+
+              &:hover {
+                background-color: #e6e6e6;
+                border-color: #b3b3b3;
+              }
+            }
+          }
+        }
+      }
+
+      .userAccount {
+        font-size: 14px;
+        color: #999;
+        margin-bottom: 12px;
+      }
+
+      .uploadPhoto {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 14px;
+        color: #666;
+        cursor: pointer;
+        padding: 8px 0;
+        transition: color 0.2s;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+
+        svg {
+          width: 16px;
+          height: 16px;
+        }
+
+        &:active {
+          color: #1677ff;
+          transform: scale(0.98);
+        }
+      }
+
+      .imagePreview {
+        margin-top: 12px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid #e0e0e0;
+        background-color: #fafafa;
+        max-width: 200px;
+        position: relative;
+
+        img {
+          width: 100%;
+          height: auto;
+          max-height: 300px;
+          object-fit: cover;
+          display: block;
+        }
+
+        .removeButton {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          background-color: rgba(0, 0, 0, 0.6);
+          border: none;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: all 0.2s;
+          z-index: 1;
+
+          &:hover {
+            background-color: rgba(0, 0, 0, 0.8);
+            transform: scale(1.1);
+          }
+
+          &:active {
+            transform: scale(0.95);
+          }
+
+          svg {
+            width: 16px;
+            height: 16px;
+          }
+        }
+      }
+    }
+  }
+
+  .menuList {
+    background-color: #fff;
+    border-radius: 0;
+
+    .menuItem {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.1s;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &:active {
+        background-color: #f0f0f0;
+        transform: scale(0.98);
+      }
+
+      .menuLeft {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 16px;
+        color: #333;
+
+        .menuIcon {
+          width: 20px;
+          height: 20px;
+        }
+      }
+
+      .menuRight {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        .genderValue {
+          font-size: 14px;
+          color: #999;
+        }
+      }
+
+      .arrow {
+        width: 16px;
+        height: 16px;
+        opacity: 0.5;
+      }
+
+      // 退出登录特殊样式
+      &:last-child {
+        .menuLeft {
+          color: #ff4d4f;
+
+          .menuIcon {
+            path {
+              fill: #ff4d4f;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+// 响应式设计
+@media (max-width: 768px) {
+  .person {
+    .userInfo {
+      padding: 20px 16px;
+
+      .avatar {
+        .avatarIcon {
+          width: 60px;
+          height: 60px;
+
+          svg {
+            width: 30px;
+            height: 30px;
+          }
+        }
+      }
+
+      .userDetails {
+        .userName {
+          font-size: 18px;
+        }
+      }
+    }
+
+    .menuList {
+      .menuItem {
+        padding: 14px 16px;
+
+        .menuLeft {
+          font-size: 15px;
+        }
+      }
+    }
+  }
+}

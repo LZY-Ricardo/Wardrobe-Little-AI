@@ -90,11 +90,49 @@ const checkUsername = async (username) => {
     }
 }
 
+// 上传全身照 
+const uploadPhoto = async (characterModel, id) => {
+    const sql = 'UPDATE user SET characterModel = ? WHERE id = ?'
+    const params = [characterModel, id]
+    const results = await allServices.query(sql, params)
+    if (results.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
+// 获取用户信息
+const getUserInfoById = async (id) => {
+    const sql = 'SELECT * FROM user WHERE id = ?'
+    const params = [id]
+    const results = await allServices.query(sql, params)
+    if (results.length > 0) {
+        return results[0]
+    } else {
+        return null
+    }
+}
+
+// 修改用户昵称
+const updateUserName = async (id, name) => {
+    const sql = 'UPDATE user SET name = ? WHERE id = ?'
+    const params = [name, id]
+    const results = await allServices.query(sql, params)
+    if (results.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
 
 module.exports = {
     userLogin,
     userRegister,
-    checkUsername
-
+    checkUsername,
+    uploadPhoto,
+    getUserInfoById,
+    updateUserName,
 }
 

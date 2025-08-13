@@ -68,12 +68,36 @@ const deleteClothes = async (clothes_id) => {
 
 // 更新衣物
 const updateClothes = async (data) => {
-    const { cloth_id, name, type, color, style, season, material, image, update_time } = data
-    const sql = 'UPDATE clothes SET name = ?, type = ?, color = ?, style = ?, season = ?, material = ?, image = ?, update_time = ? WHERE cloth_id = ?'
-    const params = [name, type, color, style, season, material, image, update_time, cloth_id]
+    const { cloth_id, name, type, color, style, season, material, favorite, image, update_time } = data
+    const sql = 'UPDATE clothes SET name = ?, type = ?, color = ?, style = ?, season = ?, material = ?, favorite = ?, image = ?, update_time = ? WHERE cloth_id = ?'
+    const params = [name, type, color, style, season, material, favorite, image, update_time, cloth_id]
     const result = await allServices.query(sql, params)
     if (result.affectedRows > 0) {
         return true
+    } else {
+        return false
+    }
+}
+
+// 获取上衣数据
+const getTopClothes   = async (user_id) => {
+    const sql = 'SELECT * FROM clothes WHERE user_id = ? AND type LIKE ?'
+    const params = [user_id, '%上衣%']
+    const result = await allServices.query(sql, params)
+    if (result.length > 0) {
+        return result
+    } else {
+        return false
+    }
+}
+
+// 获取下衣数据
+const getBotClothes   = async (user_id) => {
+    const sql = 'SELECT * FROM clothes WHERE user_id = ? AND type LIKE ?'
+    const params = [user_id, '%下衣%']
+    const result = await allServices.query(sql, params)
+    if (result.length > 0) {
+        return result
     } else {
         return false
     }
@@ -84,5 +108,7 @@ module.exports = {
     getAllClothes,
     deleteClothes,
     updateClothes,
+    getTopClothes,
+    getBotClothes,
 
 }

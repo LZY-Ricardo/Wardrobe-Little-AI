@@ -4,7 +4,7 @@ const clothesController = require('../controllers/clothesApi');
 const multer = require('@koa/multer');
 const upload = multer({ storage: multer.memoryStorage() });
 const { verify } = require('../utils/jwt')
-const { insertClothesData, getAllClothes, deleteClothes, updateClothes } = require('../controllers/clothes')
+const { insertClothesData, getAllClothes, deleteClothes, updateClothes, getTopClothes, getBotClothes } = require('../controllers/clothes')
 
 
 
@@ -115,7 +115,7 @@ router.delete('/:id', verify(), async (ctx) => {
 // 更新衣物
 router.put('/:id', verify(), async (ctx) => {
     const cloth_id = ctx.params.id
-    const { name, type, color, style, season, material, image } = ctx.request.body
+    const { name, type, color, style, season, material,favorite, image } = ctx.request.body
     const data = {
         cloth_id,
         name,
@@ -124,6 +124,7 @@ router.put('/:id', verify(), async (ctx) => {
         style,
         season,
         material,
+        favorite,
         image,
         update_time: Date.now(),
     }
@@ -150,6 +151,62 @@ router.put('/:id', verify(), async (ctx) => {
         }
     }
 })
+
+// 获取上衣数据
+router.get('/TopClothes', verify(), async (ctx) => {
+    const user_id = ctx.userId
+    try {
+        const res = await getTopClothes(user_id)
+        if (res) {
+            ctx.body = {
+                code: 1,
+                msg: '获取成功',
+                data: res,
+            }
+        } else {
+            ctx.body = {
+                code: 0,
+                msg: '获取失败',
+            }
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '获取失败',
+            error: error.message,
+        }
+    }
+})
+
+// 获取下衣数据
+router.get('/BotClothes', verify(), async (ctx) => {
+    const user_id = ctx.userId
+    try {
+        const res = await getBotClothes(user_id)
+        if (res) {
+            ctx.body = {
+                code: 1,
+                msg: '获取成功',
+                data: res,
+            }
+        } else {
+            ctx.body = {
+                code: 0,
+                msg: '获取失败',
+            }
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '获取失败',
+            error: error.message,
+        }
+    }
+})
+
+
+
+
 
 
 module.exports = router;

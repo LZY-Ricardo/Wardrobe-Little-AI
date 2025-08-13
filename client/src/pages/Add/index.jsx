@@ -45,7 +45,7 @@ export default function Add() {
             });
             return;
         }
-        
+
         if (file.size > 10 * 1024 * 1024) {
             Toast.show({
                 icon: 'fail',
@@ -171,6 +171,16 @@ export default function Add() {
                 icon: 'fail',
                 content: '请输入衣物类型',
                 duration: 1000
+            })
+            return
+        }
+        const validTypes = ['上衣', '下衣', '鞋子', '配饰']
+        const hasValidType = validTypes.some(type => typeRef.current.value.includes(type))
+        if (!hasValidType) {
+            Toast.show({
+                icon: 'fail',
+                content: '衣物类型必须包含：上衣、下衣、鞋子或配饰中的一个',
+                duration: 2000
             })
             return
         }

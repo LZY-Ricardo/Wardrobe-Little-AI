@@ -54,14 +54,16 @@ export default function Login() {
       console.log('登录响应:', res);
       
       // 存储token和用户信息
-      localStorage.setItem('access_token', res.access_token)
-      localStorage.setItem('refresh_token', res.refresh_token)
+      localStorage.setItem('access_token', res.data.access_token)
+      localStorage.setItem('refresh_token', res.data.refresh_token)
       
       // 存储用户信息，移除token避免重复存储
       const userInfo = {
-        username: res.username,
-        id: res.id,
-        createTime: res.createTime
+        username: res.data.username,
+        id: res.data.id,
+        createTime: res.data.createTime,
+        sex: res.data.sex,
+        characterModel: res.data.characterModel,
       }
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
       

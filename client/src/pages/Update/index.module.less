@@ -219,6 +219,7 @@
             }
 
             .detailMaterial {
+                margin-bottom: 7px;
                 display: flex;
                 padding: 0 14px;
 
@@ -231,6 +232,52 @@
                 input {
                     flex-grow: 1;
                     margin-left: 20px;
+                }
+            }
+
+            .detailFavorite {
+                display: flex;
+                padding: 0 14px;
+                align-items: center;
+
+                label {
+                    margin: 5px 0;
+                    font-size: 14px;
+                    color: #333;
+                    min-width: 60px;
+                }
+
+                select {
+                    flex-grow: 1;
+                    margin-left: 20px;
+                    padding: 8px 12px;
+                    border: 1px solid #d9d9d9;
+                    border-radius: 6px;
+                    background-color: #fff;
+                    font-size: 14px;
+                    color: #333;
+                    outline: none;
+                    transition: all 0.3s ease;
+                    appearance: none;
+                    background-image: url('data:image/svg+xml;charset=US-ASCII,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 5"><path fill="%23666" d="M2 0L0 2h4zm0 5L0 3h4z"/></svg>');
+                    background-repeat: no-repeat;
+                    background-position: right 12px center;
+                    background-size: 12px;
+                    padding-right: 35px;
+
+                    &:focus {
+                        border-color: #1677ff;
+                        box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1);
+                    }
+
+                    &:hover {
+                        border-color: #4096ff;
+                    }
+
+                    option {
+                        padding: 8px;
+                        font-size: 14px;
+                    }
                 }
             }
         }

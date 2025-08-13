@@ -24,6 +24,7 @@ export default function Update() {
     const styleRef = useRef(null)
     const seasonRef = useRef(null)
     const materialRef = useRef(null)
+    const favoriteRef = useRef(null)
 
 
 
@@ -180,6 +181,16 @@ export default function Update() {
             })
             return
         }
+        const validTypes = ['上衣', '下衣', '鞋子', '配饰']
+        const hasValidType = validTypes.some(type => typeRef.current.value.includes(type))
+        if (!hasValidType) {
+            Toast.show({
+                icon: 'fail',
+                content: '衣物类型必须包含：上衣、下衣、鞋子或配饰中的一个',
+                duration: 2000
+            })
+            return
+        }
         if (!colorRef.current.value) {
             Toast.show({
                 icon: 'fail',
@@ -212,6 +223,7 @@ export default function Update() {
             season: seasonRef.current.value,
             material: materialRef.current.value || '',
             image: imageUrl,
+            favorite: parseInt(favoriteRef.current.value),
         })
         console.log('更新衣物信息成功', res);
 
@@ -236,6 +248,7 @@ export default function Update() {
             styleRef.current.value = selectedItem.style
             seasonRef.current.value = selectedItem.season
             materialRef.current.value = selectedItem.material
+            favoriteRef.current.value = selectedItem.favorite || '0'
             setImageUrl(selectedItem.image)
         }
     }, [selectedItem])
@@ -337,6 +350,13 @@ export default function Update() {
                     <div className={styles.detailMaterial}>
                         <label htmlFor="material">衣物材质</label>
                         <input ref={materialRef} type="text" id="material" placeholder='请输入衣物材质(非必须)' />
+                    </div>
+                    <div className={styles.detailFavorite}>
+                        <label htmlFor="favorite">是否常用</label>
+                        <select ref={favoriteRef} id="favorite">
+                            <option value="1">常用</option>
+                            <option value="0">不常用</option>
+                        </select>
                     </div>
                 </div>
 

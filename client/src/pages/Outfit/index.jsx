@@ -4,7 +4,7 @@ import white from '@/assets/white.jpg'
 import styles from './index.module.less'
 import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
-import { Overlay } from 'react-vant';
+import { Overlay, Dialog } from 'react-vant';
 import { Toast } from 'antd-mobile'
 
 
@@ -27,7 +27,7 @@ export default function outfit() {
   const [visible, setVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null); // 存储当前选中的衣物
   const [itemColors, setItemColors] = useState({}); // 存储每个衣物项目的颜色
-  const [SelectType, setSelectType] = useState(['全部', '上衣', '鞋子', '裤子'])
+  const [SelectType, setSelectType] = useState(['全部', '上衣', '下衣', '鞋子', '配饰'])
   const [SelectColor, setSelectColor] = useState(['全部', '白色', '黑色', '红色'])
   const [SelectSeason, setSelectSeason] = useState(['全部', '春季', '夏季', '秋季', '冬季'])
   const [SelectStyle, setSelectStyle] = useState(['全部', '休闲', '通勤', '运动'])
@@ -293,11 +293,17 @@ export default function outfit() {
                 </div>
                 <div className={styles['detail-row']}>
                   <span className={styles['detail-label']}>常用程度：</span>
-                  <span className={styles['detail-value']}>{selectedItem.frequency || '未知'}</span>
+                  <span className={styles['detail-value']}>{selectedItem.favorite === 1 ? '常用' : '不常用'}</span>
                 </div>
 
                 <div className={styles['delete-button-container']}>
-                  <button className={styles['delete-button']} onClick={handleDelete}>
+                  <button className={styles['delete-button']} onClick={() =>
+                    Dialog.confirm({
+                      message: '确定删除该衣物吗？',
+                      onCancel: () => console.log('cancel'),
+                      onConfirm: () => handleDelete(),
+                    })
+                  }>
                     删除衣物
                   </button>
                   <button
