@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import styles from './index.module.less'
 import { useNavigate } from 'react-router-dom'
-import { Dialog } from 'react-vant'
+import { Dialog, Popup } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
 
@@ -14,6 +14,14 @@ export default function Person() {
   const [userInfo, setUserInfo] = useState({}) // 保存用户信息
   const [isEditingName, setIsEditingName] = useState(false) // 是否正在编辑昵称
   const [editName, setEditName] = useState('') // 编辑中的昵称
+  const [sexVisible, setSexVisible] = useState(false) // 性别弹窗是否显示
+  const [sex, setSex] = useState('') // 性别
+  const [passwordVisible, setPasswordVisible] = useState(false) // 密码弹窗是否显示
+  const [oldPassword, setOldPassword] = useState('') // 旧密码
+  const [newPassword, setNewPassword] = useState('') // 新密码
+  const [confirmPassword, setConfirmPassword] = useState('') // 确认新密码
+  const [avatar, setAvatar] = useState('') // 头像
+
 
   // 获取用户所有信息
   const getUserInfo = async () => {
@@ -217,10 +225,77 @@ export default function Person() {
     }
   }
 
+  // 修改密码
+  const handlePasswordChange = async () => {
+    if (!oldPassword || !newPassword || !confirmPassword) {
+      Toast.show({
+        icon: 'fail',
+        content: '请填写完整信息',
+        duration: 2000,
+      })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      Toast.show({
+        icon: 'fail',
+        content: '两次输入密码不一致',
+        duration: 2000,
+      })
+      return
+    }
+    try {
+      const res = await axios.put('/user/updatePassword', {
+        oldPassword,
+        newPassword,
+      })
+      console.log('修改密码成功:', res);
+      Toast.show({
+        icon: 'success',
+        content: '密码修改成功',
+        duration: 2000,
+      })
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+      setPasswordVisible(false)
+      getUserInfo()
+    } catch (error) {
+      console.error('修改密码失败:', error);
+      Toast.show({
+        icon: 'fail',
+        content: '修改密码失败，请检查您的密码是否正确',
+        duration: 2000,
+      })
+    }
+  }
+
   useEffect(() => {
     getUserInfo()
   }, [])
 
+  // 性别修改
+  useEffect(() => {
+    if (sex) {
+      axios.put('/user/updateSex', {
+        sex
+      }).then((res) => {
+        console.log('修改性别成功:', res);
+        Toast.show({
+          icon: 'success',
+          content: `性别成功修改为${sex === 'man' ? '男' : '女'}`,
+          duration: 2000,
+        })
+        getUserInfo()
+      }).catch((error) => {
+        console.error('修改性别失败:', error);
+        Toast.show({
+          icon: 'error',
+          content: '修改性别失败',
+          duration: 2000,
+        })
+      })
+    }
+  }, [sex])
 
   return (
     <div className={styles.person}>
@@ -294,7 +369,38 @@ export default function Person() {
 
       {/* 功能列表 */}
       <div className={styles.menuList}>
-        <div className={styles.menuItem}>
+        <div className={styles.menuItem} onClick={() => setPasswordVisible(true)}>
+          <Popup
+            visible={passwordVisible}
+            closeable
+            style={{ height: '45%' }}
+            position='bottom'
+            title='修改密码'
+            round
+            onClose={() => setPasswordVisible(false)}
+          >
+            <div className={styles.passwordInput}>
+              <input
+                type="password"
+                placeholder="请输入旧密码"
+                value={oldPassword}
+                onChange={(e) => setOldPassword(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="请输入新密码"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="请确认新密码"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+              <button onClick={handlePasswordChange}>确认修改</button>
+            </div>
+          </Popup>
           <div className={styles.menuLeft}>
             <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
               <path d="M832 464h-68V240c0-70.7-57.3-128-128-128H388c-70.7 0-128 57.3-128 128v224h-68c-17.7 0-32 14.3-32 32v384c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V496c0-17.7-14.3-32-32-32zM332 240c0-30.9 25.1-56 56-56h248c30.9 0 56 25.1 56 56v224H332V240zm496 600H196V536h632v304z" fill="#666" />
@@ -306,7 +412,32 @@ export default function Person() {
           </svg>
         </div>
 
-        <div className={styles.menuItem}>
+        <div className={styles.menuItem} onClick={() => setSexVisible(true)}>
+          <Popup
+            visible={sexVisible}
+            closeable
+            title='请选择您的性别'
+            style={{ height: '30%' }}
+            position='bottom'
+            round
+            onClose={() => setSexVisible(false)}
+          >
+            <div className={styles.genderOptions}>
+              <div 
+                className={`${styles.genderOption} ${sex === 'man' ? styles.active : ''}`} 
+                onClick={() => {setSex('man'); setSexVisible(false)}}
+              >
+                男
+              </div>
+              <div 
+                className={`${styles.genderOption} ${sex === 'woman' ? styles.active : ''}`} 
+                onClick={() => {setSex('woman'); setSexVisible(false)}}
+
+              >
+                女
+              </div>
+            </div>
+          </Popup>
           <div className={styles.menuLeft}>
             <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
               <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" fill="#666" />
@@ -315,7 +446,7 @@ export default function Person() {
             性别
           </div>
           <div className={styles.menuRight}>
-            <span className={styles.genderValue}>女</span>
+            <span className={styles.genderValue}>{sex === 'man' ? '男' : '女'}</span>
             <svg className={styles.arrow} viewBox="0 0 1024 1024" width="16" height="16">
               <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z" fill="#ccc" />
             </svg>

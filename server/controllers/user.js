@@ -126,6 +126,45 @@ const updateUserName = async (id, name) => {
     }
 }
 
+// 修改用户性别
+const updateSex = async (id, sex) => {
+    const sql = 'UPDATE user SET sex = ? WHERE id = ?'
+    const params = [sex, id]
+    const results = await allServices.query(sql, params)
+    if (results.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
+// 修改密码
+const updatePassword = async (id, oldPassword, newPassword) => {
+    const sql = 'SELECT * FROM user WHERE id = ?'
+    const params = [id]
+    const results = await allServices.query(sql, params)
+    if (results.length > 0) {
+        const user = results[0]
+        // 使用bcrypt比较密码
+        const match = await bcrypt.compare(oldPassword, user.password)
+        if (match) {
+            // 使用bcrypt加密新密码
+            const hashedPassword = await bcrypt.hash(newPassword, saltRounds)
+            const sql = 'UPDATE user SET password = ? WHERE id = ?'
+            const params = [hashedPassword, id]
+            const results = await allServices.query(sql, params)
+            if (results.affectedRows > 0) {
+                return true
+            } else {
+                return false
+            }
+        } else {
+            return false
+        }
+    } else {
+        return false
+    }
+}
 
 module.exports = {
     userLogin,
@@ -133,6 +172,8 @@ module.exports = {
     checkUsername,
     uploadPhoto,
     getUserInfoById,
+    updateSex,
     updateUserName,
+    updatePassword,
 }
 

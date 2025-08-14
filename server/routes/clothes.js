@@ -1,8 +1,18 @@
 const Router = require('@koa/router')
 const router = new Router()
-const clothesController = require('../controllers/clothesApi');
+const { analyzeClothes, generatePreview } = require('../controllers/clothesApi');
 const multer = require('@koa/multer');
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB文件大小限制
+        fieldSize: 50 * 1024 * 1024, // 50MB字段值大小限制
+        fields: 20, // 最多20个非文件字段
+        files: 10, // 最多10个文件
+        fieldNameSize: 1000, // 字段名最大长度
+        fieldValueSize: 50 * 1024 * 1024 // 字段值最大长度
+    }
+});
 const { verify } = require('../utils/jwt')
 const { insertClothesData, getAllClothes, deleteClothes, updateClothes, getTopClothes, getBotClothes } = require('../controllers/clothes')
 
@@ -13,7 +23,7 @@ router.prefix('/clothes')
 
 
 // 分析衣物
-router.post('/analyze', upload.single('image'), clothesController.analyzeClothes);
+router.post('/analyze', upload.single('image'), analyzeClothes);
 
 // 上传衣物
 router.post('/uploadCloth', verify(), async (ctx) => {
@@ -203,6 +213,9 @@ router.get('/BotClothes', verify(), async (ctx) => {
         }
     }
 })
+
+// 生成搭配预览图
+router.post('/genPreview', upload.fields([{ name: 'top', maxCount: 1 }, { name: 'bottom', maxCount: 1 },{ name: 'characterModel', maxCount: 1 }]), generatePreview)
 
 
 

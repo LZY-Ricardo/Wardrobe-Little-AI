@@ -1,6 +1,6 @@
 const Router = require('@koa/router')
 const router = new Router()
-const { userLogin, userRegister, checkUsername, uploadPhoto, getUserInfoById, updateUserName } = require('../controllers/user')
+const { userLogin, userRegister, checkUsername, uploadPhoto, getUserInfoById, updateUserName, updateSex, updatePassword } = require('../controllers/user')
 
 
 const { sign, verify, refreshToken } = require('../utils/jwt')
@@ -271,5 +271,62 @@ router.put('/updateUserName', verify(), async (ctx) => {
     }
 })
 
+// 修改用户性别
+router.put('/updateSex', verify(), async (ctx) => {
+    console.log(1);
+    
+    const id = ctx.userId
+    const { sex } = ctx.request.body
+    console.log(ctx.request.body);
+    
+    try {
+        const res = await updateSex(id, sex)
+        if (res) {
+            ctx.body = {
+                code: 1,
+                msg: '修改性别成功',
+                data: res,
+            }
+        } else {
+            ctx.body = {
+                code: 0,
+                msg: '修改性别失败',
+            }
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '修改性别失败',
+            error: error.message,
+        }
+    }
+})
+
+// 修改密码
+router.put('/updatePassword', verify(), async (ctx) => {
+    const id = ctx.userId
+    const { oldPassword, newPassword } = ctx.request.body
+    try {
+        const res = await updatePassword(id, oldPassword, newPassword)
+        if (res) {
+            ctx.body = {
+                code: 1,
+                msg: '修改密码成功',
+                data: res,
+            }
+        } else {
+            ctx.body = {
+                code: 0,
+                msg: '修改密码失败,请检查您的密码是否正确',
+            }
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '修改密码失败',
+            error: error.message,
+        }
+    }
+})
 
 module.exports = router
