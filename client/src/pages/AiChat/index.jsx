@@ -13,65 +13,128 @@ export default function AiChat() {
 
 
     const [disabled, setDisabled] = useState(false);
+    /**
+     * 发送聊天消息并处理流式响应
+     * 实现AI聊天的核心功能，包括流式数据接收和实时显示
+     */
     const send = async () => {
-        const input = inputRef.current.value
+        // 获取并验证用户输入
+        const input = inputRef.current?.value?.trim()
         if (!input) {
             Toast.show({
                 content: '请输入内容'
             })
             return
         }
+        
+        // 禁用发送按钮，防止重复提交
+        console.log('Setting disabled to true');
+        setDisabled(true);
+        
+        // 立即清空输入框，提升用户体验
+        if (inputRef.current) {
+            inputRef.current.value = ''
+        }
+        
         try {
+            // 将用户消息添加到聊天列表
             setList(prev => [...prev, {
                 role: 'user',
                 content: input
             }])
 
+            // 获取认证token和创建请求中断控制器
             const token = localStorage.getItem('access_token');
+            const abortController = new AbortController();
+            
+            console.log('Sending request to server...');
+            
+            // 发送流式请求到后端API
             const response = await fetch(`http://localhost:3000/chat?message=${encodeURIComponent(input)}`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                    'Authorization': `Bearer ${token}` // 添加认证头
+                },
+                signal: abortController.signal // 支持请求中断
             });
             
+            console.log('Response received:', response.status, response.statusText);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
+            console.log('Starting to read stream...');
+            
+            // 创建流式数据读取器和文本解码器
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
-            let botResponse = '';
-            let isFirstChunk = true;
+            let botResponse = ''; // 累积AI回复内容
             
-            // 添加初始的机器人消息
+            // 预先添加空的机器人消息占位符，用于后续更新
             setList(prev => [...prev, {
                 role: 'bot',
                 content: ''
             }]);
             
+            // 流式读取控制变量
+            let shouldBreak = false; // 控制循环退出的标志
+            
+            // 设置2分钟超时机制，防止长时间无响应
+            let timeoutId = setTimeout(() => {
+                console.log('Stream timeout, forcing end');
+                shouldBreak = true;
+                abortController.abort(); // 中断请求
+                console.log('shouldBreak set to:', shouldBreak);
+            }, 120000); // 2分钟超时作为备用方案
+            
+            console.log('Timeout set as backup (2 minutes)');
+            
+            // 主要的流式数据读取循环
             while (true) {
-                const { done, value } = await reader.read();
-                
-                if (done) {
-                    setDisabled(false);
+                // 检查是否需要退出循环
+                if (shouldBreak) {
+                    console.log('Stream ended, exiting loop');
+                    clearTimeout(timeoutId);
                     break;
                 }
                 
+                // 读取流式数据块
+                const { done, value } = await reader.read();
+                
+                // 检查流是否结束
+                if (done) {
+                    console.log('Stream done, breaking');
+                    clearTimeout(timeoutId);
+                    break;
+                }
+                
+                // 解码二进制数据为文本
                 const chunk = decoder.decode(value, { stream: true });
+                // 按行分割数据（SSE格式）
                 const lines = chunk.split('\n');
                 
+                // 处理每一行数据
                 for (const line of lines) {
+                    // 检查是否为有效的SSE数据行
                     if (line.trim() && line.startsWith('data: ')) {
+                        // 提取数据内容（去除"data: "前缀）
                         const data = line.slice(6).trim();
+                        console.log('Received data:', JSON.stringify(data));
+                        
+                        // 检查是否为结束标记
                         if (data === '[DONE]') {
-                            setDisabled(false);
-                            return;
+                            console.log('AI response completed - [DONE] received');
+                            shouldBreak = true;
+                            clearTimeout(timeoutId);
+                            break;
                         }
                         
+                        // 如果有有效数据，累积到回复内容中
                         if (data) {
                             botResponse += data;
+                            // 实时更新UI显示最新的回复内容
                             setList(prev => {
                                 const newList = [...prev];
+                                // 更新最后一条消息（机器人回复）
                                 newList[newList.length - 1] = {
                                     role: 'bot',
                                     content: botResponse
@@ -81,14 +144,28 @@ export default function AiChat() {
                         }
                     }
                 }
+                
+                // 再次检查是否需要退出循环
+                if (shouldBreak) {
+                    break;
+                }
             }
         } catch (error) {
-            Toast.show({
-                content: '网络错误，请稍后重试',
-                duration: 2000
-            })
+            console.error('Chat error:', error);
+            if (error.name === 'AbortError') {
+                console.log('Request was aborted due to timeout');
+                Toast.show({
+                    content: '请求超时，已自动取消',
+                    duration: 2000
+                })
+            } else {
+                Toast.show({
+                    content: '网络错误，请稍后重试',
+                    duration: 2000
+                })
+            }
         } finally {
-            inputRef.current.value = ''
+            console.log('Finally block executed, setting disabled to false');
             setDisabled(false);
         }
     }
@@ -134,10 +211,7 @@ export default function AiChat() {
             <div className={styles['chat-footer']}>
                 <div className={styles['footer-input']}>
                     <input type="text" placeholder='请输入' ref={inputRef} />
-                    <button onClick={() => {
-                        setDisabled(true);
-                        send();
-                    }} disabled={disabled}>发送</button>
+                    <button onClick={send} disabled={disabled}>发送</button>
                 </div>
             </div>
         </div>
