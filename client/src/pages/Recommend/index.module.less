@@ -1,25 +1,76 @@
-.recommend{
+.recommend {
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
     position: relative;
 
-    &-header{
+    .chat {
+        position: fixed;
+        right: 14px;
+        top: 52px;
+        z-index: 999;
+        background: #41a4f5;
+        border-radius: 50%;
+        height: 50px;
+        width: 50px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+
+        &-icon {
+            font-size: 18px;
+            color: #fff;
+        }
+
+        p {
+            color: #fff;
+        }
+    }
+
+    .entrance {
+        position: fixed;
+        right: 14px;
+        bottom: calc(env(safe-area-inset-bottom) + 60px);
+        z-index: 999;
+        background: #41a4f5;
+        border-radius: 50%;
+        height: 50px;
+        width: 50px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+
+        &-icon {
+            font-size: 18px;
+            color: #fff;
+
+        }
+
+        p {
+            color: #fff;
+        }
+    }
+
+    &-header {
         width: 100%;
         height: 50px;
         background: #FFFFFF;
-        box-shadow: 0 1px 2px 0px rgba(0,0,0,0.05);
+        box-shadow: 0 1px 2px 0px rgba(0, 0, 0, 0.05);
         box-sizing: border-box;
         display: flex;
         align-items: center;
-        justify-self: center;
+        justify-content: center;
         gap: 10px;
         padding: 14px;
         position: relative;
 
 
-        .search-icon{
+        .search-icon {
             position: absolute;
             left: 24px;
             z-index: 1;
@@ -34,7 +85,7 @@
             border: 1px solid #D9D9D9;
             border-radius: 4px;
 
-            &:focus{
+            &:focus {
                 border: 2px solid #1890FF;
                 outline: none;
                 border-radius: 4px;
@@ -43,7 +94,7 @@
                 transform: scale(1.01);
             }
 
-            &::placeholder{
+            &::placeholder {
                 color: #BFBFBF;
             }
 
@@ -57,12 +108,142 @@
             border: 1px solid #15e885;
             border-radius: 4px;
 
-            &:active{
+            &:active {
                 background-color: #1890FF;
                 border: 1px solid #1890FF;
                 box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
                 transition: all 0.2s ease;
                 transform: scale(1.01);
+            }
+        }
+    }
+
+    &-body {
+        padding: 14px;
+        background-color: #F9FAFB;
+        height: calc(100vh - 120px);
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        &-history {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 0 0 10px 0;
+
+            .history-item {
+                background-color: #e1dede;
+                padding: 4px 10px;
+                border-radius: 4px 4px 4px 4px;
+                border: 1px solid #D9D9D9;
+                font-size: 12px;
+
+                &:active {
+                    background-color: #1890FF;
+                    color: #fff;
+                    border: 1px solid #1890FF;
+                    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+                    transition: all 0.2s ease;
+                    transform: scale(1.01);
+                }
+            }
+
+
+        }
+
+        &-content {
+            margin-top: 10px;
+
+            .content-item {
+                border-radius: 8px 8px 8px 8px;
+                display: flex;
+                flex-direction: column;
+                background-color: #fff;
+                margin-bottom: 10px;
+                position: relative;
+
+
+                .item-img {
+                    width: 100%;
+                    border-radius: inherit;
+
+                    img {
+                        width: 100%;
+                        object-fit: contain;
+                        border-radius: inherit;
+                    }
+                }
+
+                .item-message {
+                    margin: 14px 14px 0 14px;
+                    font-weight: 400;
+                    font-size: 12px;
+                    color: #4B5563;
+                    line-height: 18px;
+
+                }
+
+                .item-scene {
+                    margin: 8px 14px 14px 14px;
+                    font-weight: 400;
+                    font-size: 11px;
+                    color: #9CA3AF;
+                    line-height: 14px;
+                }
+
+                .item-edit {
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    background-color: #fff;
+                    padding: 4px;
+                    border-radius: 50%;
+                    opacity: 60%;
+                }
+
+                .item-love {
+                    position: absolute;
+                    top: 40px;
+                    right: 10px;
+                    background-color: #fff;
+                    padding: 4px;
+                    border-radius: 50%;
+                    opacity: 60%;
+                }
+
+            }
+        }
+
+        &-footer {
+            margin-top: 14px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+
+            .footer-btn {
+                background-color: #fff;
+                padding: 8px 22px;
+                border-radius: 50px;
+                border: 1px solid #D9D9D9;
+                display: flex;
+                align-items: center;
+
+
+                .btn-icon {
+                    margin-right: 8px;
+                    font-size: 18px;
+                }
+
+                &:active {
+                    background-color: #1890FF;
+                    color: #fff;
+                    border: 1px solid #1890FF;
+                    box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2);
+                    transition: all 0.2s ease;
+                    transform: scale(1.05);
+                }
+
             }
         }
     }

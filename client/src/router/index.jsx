@@ -13,6 +13,7 @@ const Recommend = React.lazy(() => import('../pages/Recommend'))
 const Person = React.lazy(() => import('../pages/Person'))
 const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
+const AiChat = React.lazy(() => import('../pages/AiChat'))
 
 
 
@@ -83,6 +84,14 @@ const routes = [
         element: (
             <Layout>
                 <Update />
+            </Layout>
+        )
+    },
+    {
+        path: '/aichat',
+        element: (
+            <Layout>
+                <AiChat />
             </Layout>
         )
     }

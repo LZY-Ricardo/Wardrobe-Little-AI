@@ -10,7 +10,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5799
+    port: 5799,
+    proxy: {
+      '/chat': {
+        target: 'http://localhost:3000',
+        changeOrigin: true
+      }
+    }
   }
   // PostCSS 配置已移至 postcss.config.js
 })

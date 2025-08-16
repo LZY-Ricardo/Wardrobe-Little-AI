@@ -2,6 +2,8 @@ const Koa = require('koa')
 const app = new Koa()
 const userRouter = require('./routes/user')
 const clothesRouter = require('./routes/clothes')
+const sceneRouter = require('./routes/scene')
+const chatRouter = require('./routes/chat')
 const { bodyParser } = require('@koa/bodyparser');
 const cors = require('@koa/cors')
 
@@ -18,6 +20,11 @@ app.use(userRouter.routes());
 app.use(userRouter.allowedMethods());
 app.use(clothesRouter.routes());
 app.use(clothesRouter.allowedMethods());
+app.use(sceneRouter.routes());
+app.use(sceneRouter.allowedMethods());
+app.use(chatRouter.routes());
+app.use(chatRouter.allowedMethods());
+
 
 
 // 引入配置文件

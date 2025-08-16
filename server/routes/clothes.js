@@ -16,11 +16,7 @@ const upload = multer({
 const { verify } = require('../utils/jwt')
 const { insertClothesData, getAllClothes, deleteClothes, updateClothes, getTopClothes, getBotClothes } = require('../controllers/clothes')
 
-
-
-
 router.prefix('/clothes')
-
 
 // 分析衣物
 router.post('/analyze', upload.single('image'), analyzeClothes);
