@@ -29,6 +29,7 @@ export default function Person() {
       const res = await axios.get('/user/getUserInfo')
       console.log('获取用户信息成功:', res);
       setUserInfo(res.data)
+      setSex(res.data.sex || '') // 设置性别状态
       const data = {
         username: res.data.username,
         id: res.data.id,
@@ -225,6 +226,32 @@ export default function Person() {
     }
   }
 
+  // 修改性别
+  const handleSexChange = async (newSex) => {
+    setSex(newSex)
+    setSexVisible(false)
+    
+    try {
+      const res = await axios.put('/user/updateSex', {
+        sex: newSex
+      })
+      console.log('修改性别成功:', res);
+      Toast.show({
+        icon: 'success',
+        content: `性别成功修改为${newSex === 'man' ? '男' : '女'}`,
+        duration: 2000,
+      })
+      getUserInfo()
+    } catch (error) {
+      console.error('修改性别失败:', error);
+      Toast.show({
+        icon: 'error',
+        content: '修改性别失败',
+        duration: 2000,
+      })
+    }
+  }
+
   // 修改密码
   const handlePasswordChange = async () => {
     if (!oldPassword || !newPassword || !confirmPassword) {
@@ -272,30 +299,6 @@ export default function Person() {
   useEffect(() => {
     getUserInfo()
   }, [])
-
-  // 性别修改
-  useEffect(() => {
-    if (sex) {
-      axios.put('/user/updateSex', {
-        sex
-      }).then((res) => {
-        console.log('修改性别成功:', res);
-        Toast.show({
-          icon: 'success',
-          content: `性别成功修改为${sex === 'man' ? '男' : '女'}`,
-          duration: 2000,
-        })
-        getUserInfo()
-      }).catch((error) => {
-        console.error('修改性别失败:', error);
-        Toast.show({
-          icon: 'error',
-          content: '修改性别失败',
-          duration: 2000,
-        })
-      })
-    }
-  }, [sex])
 
   return (
     <div className={styles.person}>
@@ -425,14 +428,13 @@ export default function Person() {
             <div className={styles.genderOptions}>
               <div 
                 className={`${styles.genderOption} ${sex === 'man' ? styles.active : ''}`} 
-                onClick={() => {setSex('man'); setSexVisible(false)}}
+                onClick={() => handleSexChange('man')}
               >
                 男
               </div>
               <div 
                 className={`${styles.genderOption} ${sex === 'woman' ? styles.active : ''}`} 
-                onClick={() => {setSex('woman'); setSexVisible(false)}}
-
+                onClick={() => handleSexChange('woman')}
               >
                 女
               </div>
@@ -446,7 +448,8 @@ export default function Person() {
             性别
           </div>
           <div className={styles.menuRight}>
-            <span className={styles.genderValue}>{sex === 'man' ? '男' : '女'}</span>
+            <span className={styles.genderValue}>{sex  === 'man' ? '男' : sex === 'woman' ? '女' : ''}</span>
+
             <svg className={styles.arrow} viewBox="0 0 1024 1024" width="16" height="16">
               <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z" fill="#ccc" />
             </svg>
