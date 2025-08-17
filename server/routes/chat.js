@@ -6,18 +6,18 @@ router.prefix('/chat')
 
 /**
  * AI聊天接口 - 处理流式响应
- * 接收用户消息，转发给Ollama API，并将流式响应实时转发给前端
+ * 接收对话历史消息数组，转发给Ollama API，并将流式响应实时转发给前端
  */
-router.get('/', async (ctx) => {
-    console.log('Chat route accessed with message:', ctx.query.message);
+router.post('/', async (ctx) => {
+    console.log('Chat route accessed with messages:', ctx.request.body.messages);
     
-    // 获取用户消息参数
-    const { message } = ctx.query;
+    // 获取对话历史消息数组
+    const { messages } = ctx.request.body;
     
     // 验证必需参数
-    if (!message) {
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
         ctx.status = 400;
-        ctx.body = { error: 'Message parameter is required' };
+        ctx.body = { error: 'Messages array is required and cannot be empty' };
         return;
     }
     
@@ -34,16 +34,10 @@ router.get('/', async (ctx) => {
         'Access-Control-Allow-Headers': 'Authorization, Content-Type' // 允许的请求头
     });
     
-    // 构造发送给Ollama的消息对象
-    const messageObj = {
-        role: 'user',
-        content: message
-    }
-    
-    // 构造Ollama API请求数据
+    // 构造Ollama API请求数据，使用完整的对话历史
     const data = {
         model: 'deepseek-r1:7b',  // 使用的AI模型
-        messages: [messageObj],    // 消息数组
+        messages: messages,        // 完整的对话历史消息数组
         stream: true,             // 启用流式响应
     }
     
@@ -58,7 +52,7 @@ router.get('/', async (ctx) => {
         
         /**
          * 处理从Ollama接收到的流式数据
-         * 每当有新数据到达时触发此事件
+         * 直接转发AI回复内容给前端
          */
         response.data.on('data', (chunk) => {
             // 如果流已结束，忽略后续数据
@@ -66,6 +60,7 @@ router.get('/', async (ctx) => {
             
             // 将二进制数据转换为字符串，并按行分割
             const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
+            console.log(lines);
             
             // 处理每一行JSON数据
             lines.forEach(line => {
@@ -74,18 +69,20 @@ router.get('/', async (ctx) => {
                 try {
                     // 解析JSON数据
                     const jsonData = JSON.parse(line);
-                    console.log('Received from Ollama:', JSON.stringify(jsonData));
                     
-                    // 如果有消息内容且流未结束，转发给前端
+                    // 如果有消息内容且流未结束，直接发送给前端
                     if (jsonData.message && jsonData.message.content && !isEnded) {
-                        // 以SSE格式发送数据给前端
-                        ctx.res.write(`data: ${jsonData.message.content}\n\n`);
+                        const content = jsonData.message.content;
+                        // 确保换行符被正确编码传输
+                        const encodedContent = JSON.stringify(content);
+                        ctx.res.write(`data: ${encodedContent}\n\n`);
                     }
                     
                     // 检查Ollama是否完成响应
                     if (jsonData.done && !isEnded) {
                         console.log('Ollama stream done, sending [DONE]');
                         isEnded = true;
+                        
                         // 发送结束标记给前端
                         ctx.res.write('data: [DONE]\n\n');
                         ctx.res.end(); // 结束响应

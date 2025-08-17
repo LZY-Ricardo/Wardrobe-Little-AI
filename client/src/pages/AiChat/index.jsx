@@ -2,15 +2,16 @@ import SvgIcon from '@/components/SvgIcon'
 import styles from './index.module.less'
 import { useRef, useState } from 'react'
 import { Toast } from 'antd-mobile'
-import axios from '@/api'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
+import { useNavigate } from 'react-router-dom'
 
 export default function AiChat() {
     const inputRef = useRef(null)
+    // 维护完整的对话历史，包含用户和AI的所有消息
     const [list, setList] = useState([])
-
+    const navigate = useNavigate()
 
     const [disabled, setDisabled] = useState(false);
     /**
@@ -49,11 +50,17 @@ export default function AiChat() {
             
             console.log('Sending request to server...');
             
-            // 发送流式请求到后端API
-            const response = await fetch(`http://localhost:3000/chat?message=${encodeURIComponent(input)}`, {
+            // 构建包含历史对话的消息数组
+            const currentMessages = [...list, { role: 'user', content: input }];
+            
+            // 发送流式请求到后端API，包含完整的对话历史
+            const response = await fetch(`http://localhost:3000/chat`, {
+                method: 'POST',
                 headers: {
+                    'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}` // 添加认证头
                 },
+                body: JSON.stringify({ messages: currentMessages }),
                 signal: abortController.signal // 支持请求中断
             });
             
@@ -114,11 +121,14 @@ export default function AiChat() {
                 
                 // 处理每一行数据
                 for (const line of lines) {
+                    // console.log('Raw line:', line);
+
+                    
                     // 检查是否为有效的SSE数据行
                     if (line.trim() && line.startsWith('data: ')) {
                         // 提取数据内容（去除"data: "前缀）
                         const data = line.slice(6).trim();
-                        console.log('Received data:', JSON.stringify(data));
+                        // console.log('Received data:', JSON.stringify(data));
                         
                         // 检查是否为结束标记
                         if (data === '[DONE]') {
@@ -130,14 +140,31 @@ export default function AiChat() {
                         
                         // 如果有有效数据，累积到回复内容中
                         if (data) {
-                            botResponse += data;
+                            // 解析JSON编码的内容以保留换行符
+                            let decodedData;
+                            try {
+                                decodedData = JSON.parse(data);
+                            } catch (e) {
+                                // 如果解析失败，使用原始数据
+                                decodedData = data;
+                            }
+                            botResponse += decodedData;
+                            
+                            // 前端过滤层：移除思考标签
+                            const filteredResponse = botResponse
+                                .replace(/<think>[\s\S]*?<\/think>/gi, '')
+                                .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+                                .replace(/\[THINKING\][\s\S]*?\[\/THINKING\]/gi, '')
+                                .replace(/\[思考\][\s\S]*?\[\/思考\]/gi, '')
+                                .trim();
+                            
                             // 实时更新UI显示最新的回复内容
                             setList(prev => {
                                 const newList = [...prev];
                                 // 更新最后一条消息（机器人回复）
                                 newList[newList.length - 1] = {
                                     role: 'bot',
-                                    content: botResponse
+                                    content: filteredResponse
                                 };
                                 return newList;
                             });
@@ -173,7 +200,8 @@ export default function AiChat() {
     return (
         <div className={styles['chat']}>
             <div className={styles['chat-header']}>
-                <div className={styles['header-back']}>
+                <div className={styles['header-back']} onClick={() => navigate(-1)}>
+
                     <SvgIcon iconName="icon-fanhui" />
                 </div>
                 <div className={styles['header-title']}>
@@ -217,3 +245,4 @@ export default function AiChat() {
         </div>
     )
 }
+
