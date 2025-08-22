@@ -1,4 +1,5 @@
 import SvgIcon from '@/components/SvgIcon'
+import DarkModeToggle from '@/components/DarkModeToggle'
 import styles from './index.module.less'
 import { useRef, useState } from 'react'
 import { Toast } from 'antd-mobile'
@@ -201,16 +202,18 @@ export default function AiChat() {
         <div className={styles['chat']}>
             <div className={styles['chat-header']}>
                 <div className={styles['header-back']} onClick={() => navigate(-1)}>
-
                     <SvgIcon iconName="icon-fanhui" />
                 </div>
                 <div className={styles['header-title']}>
-                    AI小助手
+                    AI衣物小助手
+                </div>
+                <div className={styles['header-actions']}>
+                    <DarkModeToggle />
                 </div>
             </div>
             <div className={styles['chat-container']}>
                 <div className={styles['bot']}>
-                    你好，我是AI小助手，有什么我可以帮助你的吗？
+                    你好，我是AI衣物小助手，有什么我可以帮助你的吗？
                 </div>
 
                 <div className={styles['container-chat']}>

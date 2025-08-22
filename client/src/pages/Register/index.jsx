@@ -4,6 +4,7 @@ import axios from '@/api'
 import styles from './index.module.less'
 import logo from '@/assets/tlogin.png'
 import { Input, Button, Toast } from 'antd-mobile'
+import DarkModeToggle from '@/components/DarkModeToggle'
 
 
 export default function Register() {
@@ -83,6 +84,9 @@ export default function Register() {
 
   return (
     <div className={styles.register}>
+      <div className={styles['dark-mode-container']}>
+        <DarkModeToggle />
+      </div>
       <div className={styles.registerBox}>
         <div className={styles.registerLogo}>
           <img src={logo} alt="" />

@@ -4,6 +4,7 @@ import logo from '@/assets/tlogin.png'
 import { Form, Input, Button, Toast } from 'antd-mobile'
 import { EyeInvisibleOutline, EyeOutline } from 'antd-mobile-icons'
 import { useNavigate, useLocation } from 'react-router-dom'
+import DarkModeToggle from '@/components/DarkModeToggle'
 import axios from '@/api'
 
 
@@ -86,6 +87,9 @@ export default function Login() {
   }
   return (
     <div className={styles.login}>
+      <div className={styles['dark-mode-container']}>
+        <DarkModeToggle />
+      </div>
       <div className={styles.loginLogo}>
         <img src={logo} alt="" />
       </div>

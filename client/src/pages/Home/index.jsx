@@ -1,5 +1,6 @@
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
+import DarkModeToggle from '@/components/DarkModeToggle'
 import { useState, useEffect } from 'react'
 import axios from '@/api'
 
@@ -73,6 +74,9 @@ export default function Home() {
         <div className={styles['header-weather']}>
           <SvgIcon iconName='icon-qingtian' className={styles['weather-icon']} />
           25℃
+        </div>
+        <div className={styles['header-actions']}>
+          <DarkModeToggle />
         </div>
       </div>
 
