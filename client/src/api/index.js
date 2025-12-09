@@ -1,93 +1,150 @@
-import axios from "axios";
+﻿import axios from 'axios'
 import { Toast } from 'antd-mobile'
 
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const DEFAULT_TIMEOUT = 15000
 
-axios.defaults.baseURL = 'http://localhost:3000'
-axios.defaults.headers['Content-Type'] = 'application/json'
+const ERROR_CODE_MESSAGE = {
+  0: '登录已过期，请重新登录',
+  2: '请先登录',
+  3: '登录失效，请重新登录',
+}
 
-// 请求拦截器
-axios.interceptors.request.use(
-    config => {
-        const token = localStorage.getItem('access_token')
-        if (token) {
-            config.headers['Authorization'] = 'Bearer ' + token
-        }
-        return config
-    },
-    error => {
-        return Promise.reject(error)
+const getAccessToken = () => localStorage.getItem('access_token') || ''
+const getRefreshToken = () => localStorage.getItem('refresh_token') || ''
+
+const logoutAndRedirect = (message = '登录失效，请重新登录') => {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  Toast.show({ icon: 'fail', content: message, duration: 1000 })
+  setTimeout(() => {
+    window.location.href = '/login'
+  }, 800)
+}
+
+const refreshClient = axios.create({
+  baseURL: BASE_URL,
+  timeout: DEFAULT_TIMEOUT,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+const api = axios.create({
+  baseURL: BASE_URL,
+  timeout: DEFAULT_TIMEOUT,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+let isRefreshing = false
+let refreshQueue = []
+
+const subscribeRefresh = (resolve, reject) => {
+  refreshQueue.push({ resolve, reject })
+}
+
+const flushQueue = (error, token) => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error)
+    } else {
+      resolve(token)
     }
+  })
+  refreshQueue = []
+}
+
+const refreshToken = async () => {
+  const refreshTokenValue = getRefreshToken()
+  if (!refreshTokenValue) {
+    throw new Error('NO_REFRESH_TOKEN')
+  }
+  const res = await refreshClient.post('/user/refresh_token', {
+    refresh_token: refreshTokenValue,
+  })
+  if (res?.data?.code === 1) {
+    const { access_token, refresh_token } = res.data
+    if (access_token) localStorage.setItem('access_token', access_token)
+    if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
+    return access_token
+  }
+  const msg = res?.data?.msg || '刷新 token 失败'
+  throw new Error(msg)
+}
+
+api.interceptors.request.use(
+  (config) => {
+    const token = getAccessToken()
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+    return config
+  },
+  (error) => Promise.reject(error)
 )
 
-
-
-// 响应拦截器
-axios.interceptors.response.use(
-    response => { // 状态为 200 走进这个回调函数
-        if (response.status === 200) {
-            if (response.data.code !== 1) { // 逻辑性错误
-                Toast.show({
-                    icon: 'fail',
-                    content: response.data.msg,
-                    duration: 1000
-                })
-                return Promise.reject(response)
-            }
-            return Promise.resolve(response.data)
-        }
-    },
-    error => { // 状态码不是 200 走进这个回调函数
-        if (error.response.status === 401) { // 短token已过期
-            // console.log(error);
-            if (error.response.data.code === 2) { // 未登录
-                // console.log('未登录');
-                Toast.show({
-                    icon: 'fail',
-                    content: '请先登录',
-                    duration: 1000
-                })
-                setTimeout(() => {
-                    window.location.href = '/login'
-                }, 1000)
-            }
-            if (error.response.data.code === 0) { // 短token过期
-                // console.log('短token过期');
-                const originalRequest = error.config
-                // 刷新token(长和短)
-                return axios.post('/user/refresh_token', {
-                    refresh_token: localStorage.getItem('refresh_token')
-                }).then(res => {
-                    // console.log('刷新token响应:', res);
-                    if (res.code === 1) {
-                        // console.log('刷新token成功');
-                        localStorage.setItem('access_token', res.access_token)
-                        localStorage.setItem('refresh_token', res.refresh_token)
-                        // 更新原始请求的token头
-                        originalRequest.headers['Authorization'] = 'Bearer ' + res.access_token
-                        // 重新发送原始请求
-                        return axios(originalRequest)
-                    }
-                })
-            }
-            if (error.response.data.code === 3) { // 长token也过期了
-                // console.log('长token已过期');
-                // 清除本地token
-                localStorage.removeItem('access_token')
-                localStorage.removeItem('refresh_token')
-                // 跳转到登录页
-                Toast.show({
-                    icon: 'fail',
-                    content: '登录失效',
-                    duration: 1000
-                })
-                setTimeout(() => {
-                    window.location.href = '/login'
-                }, 1000)
-            }
-        }
-
-        return Promise.reject(error)
+api.interceptors.response.use(
+  (response) => {
+    // 仅处理业务成功，其他交给 error 拦截
+    if (response.status === 200) {
+      const data = response.data
+      if (data?.code === 1) return data
+      const message = data?.msg || '请求失败'
+      Toast.show({ icon: 'fail', content: message, duration: 1200 })
+      return Promise.reject(data)
     }
+    return Promise.reject(response)
+  },
+  async (error) => {
+    const { response, config } = error || {}
+    const originalRequest = config || {}
+
+    if (response?.status === 401) {
+      const errCode = response?.data?.code
+      // access token 过期，尝试刷新
+      if (errCode === 0 && !originalRequest._retry) {
+        originalRequest._retry = true
+
+        if (isRefreshing) {
+          return new Promise((resolve, reject) => {
+            subscribeRefresh(
+              (token) => {
+                originalRequest.headers.Authorization = `Bearer ${token}`
+                resolve(api(originalRequest))
+              },
+              reject
+            )
+          })
+        }
+
+        isRefreshing = true
+        try {
+          const newToken = await refreshToken()
+          flushQueue(null, newToken)
+          originalRequest.headers.Authorization = `Bearer ${newToken}`
+          return api(originalRequest)
+        } catch (refreshError) {
+          flushQueue(refreshError, null)
+          logoutAndRedirect(ERROR_CODE_MESSAGE[errCode] || '登录失效，请重新登录')
+          return Promise.reject(refreshError)
+        } finally {
+          isRefreshing = false
+        }
+      }
+
+      // 无刷新或长 token 也失效
+      logoutAndRedirect(ERROR_CODE_MESSAGE[errCode] || '登录失效，请重新登录')
+      return Promise.reject(error)
+    }
+
+    const statusMessage = response?.data?.msg || ERROR_CODE_MESSAGE[response?.data?.code]
+    if (statusMessage) {
+      Toast.show({ icon: 'fail', content: statusMessage, duration: 1200 })
+    } else {
+      Toast.show({ icon: 'fail', content: '网络异常，请稍后重试', duration: 1200 })
+    }
+
+    return Promise.reject(error)
+  }
 )
 
-export default axios
+export default api
+

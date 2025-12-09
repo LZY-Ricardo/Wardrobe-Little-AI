@@ -124,6 +124,30 @@
         height: calc(100vh - 120px);
         overflow-y: auto;
         overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+
+        .loading,
+        .empty {
+            padding: 12px;
+            border: 1px dashed #d9d9d9;
+            border-radius: 8px;
+            color: #4B5563;
+            background: #fff;
+        }
+
+        .error {
+            padding: 12px;
+            border: 1px solid #fca5a5;
+            border-radius: 8px;
+            background: #fef2f2;
+            color: #b91c1c;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
 
         &-history {
             width: 100%;
@@ -162,16 +186,27 @@
                 background-color: #fff;
                 margin-bottom: 10px;
                 position: relative;
+                padding-bottom: 10px;
 
 
                 .item-img {
                     width: 100%;
                     border-radius: inherit;
+                    min-height: 180px;
+                    background: #f3f4f6;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
 
                     img {
                         width: 100%;
                         object-fit: contain;
                         border-radius: inherit;
+                    }
+
+                    .placeholder {
+                        color: #9CA3AF;
+                        font-size: 12px;
                     }
                 }
 
@@ -192,24 +227,15 @@
                     line-height: 14px;
                 }
 
-                .item-edit {
-                    position: absolute;
-                    top: 10px;
-                    right: 10px;
-                    background-color: #fff;
-                    padding: 4px;
-                    border-radius: 50%;
-                    opacity: 60%;
-                }
+                .item-actions {
+                    display: flex;
+                    gap: 10px;
+                    margin: 0 14px;
 
-                .item-love {
-                    position: absolute;
-                    top: 40px;
-                    right: 10px;
-                    background-color: #fff;
-                    padding: 4px;
-                    border-radius: 50%;
-                    opacity: 60%;
+                    .action-icon {
+                        font-size: 18px;
+                        color: #9CA3AF;
+                    }
                 }
 
             }

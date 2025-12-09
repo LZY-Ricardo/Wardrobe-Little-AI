@@ -1,9 +1,7 @@
-import { BrowserRouter, Navigate, useRoutes } from 'react-router-dom'
-import React, {Suspense} from 'react'
+﻿import React, { Suspense } from 'react'
+import { BrowserRouter, Navigate, useLocation, useRoutes } from 'react-router-dom'
 import Layout from '@/components/Layout'
 
-
-// 路由懒加载
 const Login = React.lazy(() => import('../pages/Login'))
 const Home = React.lazy(() => import('../pages/Home'))
 const Register = React.lazy(() => import('../pages/Register'))
@@ -15,103 +13,115 @@ const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
 const AiChat = React.lazy(() => import('../pages/AiChat'))
 
+const isAuthed = () => Boolean(localStorage.getItem('access_token'))
 
+const ProtectedRoute = ({ children }) => {
+  const location = useLocation()
+  if (!isAuthed()) {
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{ redirect: `${location.pathname}${location.search}` }}
+      />
+    )
+  }
+  return children
+}
+
+const RedirectIfAuthed = ({ children }) => {
+  if (isAuthed()) {
+    return <Navigate to="/home" replace />
+  }
+  return children
+}
+
+const withLayout = (node) => <Layout>{node}</Layout>
 
 const routes = [
-    {
-        path: '/',
-        element: <Navigate to='/home' />
-    },
-    {
-        path: '/login',
-        element: <Login />
-    },
-    {
-        path: '/register',
-        element: <Register />
-
-    },
-    {
-        path: '/home',
-        element: (
-            <Layout>
-                <Home />
-            </Layout>
-        )
-    },
-    {
-        path: '/match',
-        element: (
-            <Layout>
-                <Match />
-            </Layout>
-        )
-    },
-    {
-        path: '/outfit',
-        element: (
-            <Layout>
-                <Outfit />
-            </Layout>
-        )
-    },
-    {
-        path: '/recommend',
-        element: (
-            <Layout>
-                <Recommend />
-            </Layout>
-        )
-    },
-    {
-        path: '/person',
-        element: (
-            <Layout>
-                <Person />
-            </Layout>
-        )
-    },
-    {
-        path: '/add',
-        element: (
-            <Layout>
-                <Add />
-            </Layout>
-        )
-    },
-    {
-        path: '/update',
-        element: (
-            <Layout>
-                <Update />
-            </Layout>
-        )
-    },
-    {
-        path: '/aichat',
-        element: (
-            <Layout>
-                <AiChat />
-            </Layout>
-        )
-    }
+  { path: '/', element: <Navigate to="/home" replace /> },
+  { path: '/login', element: <RedirectIfAuthed><Login /></RedirectIfAuthed> },
+  { path: '/register', element: <RedirectIfAuthed><Register /></RedirectIfAuthed> },
+  {
+    path: '/home',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Home />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/match',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Match />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/outfit',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Outfit />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/recommend',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Recommend />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/person',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Person />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/add',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Add />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/update',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Update />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/aichat',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<AiChat />)}
+      </ProtectedRoute>
+    ),
+  },
 ]
 
 function WrapperRoutes() {
-    let ele = useRoutes(routes) // <Routes>{ele}</Routes>
-    return (
-        <Suspense fallback={<div>loading</div>}>
-            {ele}
-        </Suspense>
-    )
+  const ele = useRoutes(routes)
+  return (
+    <Suspense fallback={<div>加载中...</div>}>
+      {ele}
+    </Suspense>
+  )
 }
 
 export default function WrapperRouter() {
-    return (
-        <BrowserRouter>
-            <WrapperRoutes />   
-        </BrowserRouter>
-    )
+  return (
+    <BrowserRouter>
+      <WrapperRoutes />
+    </BrowserRouter>
+  )
 }
-
 
