@@ -7,6 +7,10 @@ import axios from '@/api'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 
 const VALID_TYPES = ['上衣', '下衣', '鞋子', '配饰']
+const MIN_FILE_SIZE = 5 * 1024
+const MAX_FILE_SIZE = 10 * 1024 * 1024
+const COMPRESS_CONFIG = { quality: 0.8, maxWidth: 600, maxHeight: 600 }
+const UPLOAD_TIMEOUT = 20000
 
 export default function Add() {
   const navigate = useNavigate()
@@ -17,6 +21,8 @@ export default function Add() {
   const [, setCompressedSize] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [analysisUnavailable, setAnalysisUnavailable] = useState(false)
+  const [uploadController, setUploadController] = useState(null)
+  const [analysisController, setAnalysisController] = useState(null)
 
   const nameRef = useRef(null)
   const fileRef = useRef(null)
@@ -35,12 +41,12 @@ export default function Add() {
       return
     }
 
-    if (file.size < 5 * 1024) {
+    if (file.size < MIN_FILE_SIZE) {
       Toast.show({ icon: 'fail', content: '图片大小不能小于 5KB', duration: 1200 })
       return
     }
 
-    if (file.size > 10 * 1024 * 1024) {
+    if (file.size > MAX_FILE_SIZE) {
       Toast.show({ icon: 'fail', content: '图片大小不能超过 10MB', duration: 1200 })
       return
     }
@@ -50,7 +56,12 @@ export default function Add() {
     setAnalysisUnavailable(false)
 
     try {
-      const compressedBlob = await compressImage(file, 0.8, 600, 600)
+      const compressedBlob = await compressImage(
+        file,
+        COMPRESS_CONFIG.quality,
+        COMPRESS_CONFIG.maxWidth,
+        COMPRESS_CONFIG.maxHeight
+      )
       setCompressedSize(compressedBlob.size)
       const base64 = await blobToBase64(compressedBlob)
       setImageUrl(base64)
@@ -78,6 +89,9 @@ export default function Add() {
     setStatus('小助手分析中，请稍候...')
     setAnalysisUnavailable(false)
 
+    const controller = new AbortController()
+    setAnalysisController(controller)
+
     try {
       const response = await fetch(imageUrl)
       const blob = await response.blob()
@@ -87,6 +101,8 @@ export default function Add() {
 
       const res = await axios.post('/clothes/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        signal: controller.signal,
+        timeout: UPLOAD_TIMEOUT,
       })
 
       if (res.code !== 1) {
@@ -102,11 +118,22 @@ export default function Add() {
 
       Toast.show({ icon: 'success', content: '分析完成', duration: 1200 })
     } catch (error) {
-      console.error('分析衣物错误:', error)
-      setAnalysisUnavailable(true)
-      Toast.show({ icon: 'fail', content: '分析不可用，请手动填写', duration: 1500 })
+      if (error.name === 'AbortError') {
+        Toast.show({ icon: 'fail', content: '已取消分析', duration: 1000 })
+      } else {
+        console.error('分析衣物错误:', error)
+        setAnalysisUnavailable(true)
+        Toast.show({ icon: 'fail', content: '分析不可用，请手动填写', duration: 1500 })
+      }
     } finally {
       setStatus('')
+      setAnalysisController(null)
+    }
+  }
+
+  const cancelAnalysis = () => {
+    if (analysisController) {
+      analysisController.abort()
     }
   }
 
@@ -153,16 +180,26 @@ export default function Add() {
   const handleUploadCloth = async () => {
     if (!validateForm()) return
     setUploading(true)
+    const controller = new AbortController()
+    setUploadController(controller)
+
     try {
-      const res = await axios.post('/clothes/uploadCloth', {
-        name: nameRef.current.value,
-        type: typeRef.current.value,
-        color: colorRef.current.value,
-        style: styleRef.current.value,
-        season: seasonRef.current.value,
-        material: materialRef.current.value || '',
-        image: imageUrl,
-      })
+      const res = await axios.post(
+        '/clothes/uploadCloth',
+        {
+          name: nameRef.current.value,
+          type: typeRef.current.value,
+          color: colorRef.current.value,
+          style: styleRef.current.value,
+          season: seasonRef.current.value,
+          material: materialRef.current.value || '',
+          image: imageUrl,
+        },
+        {
+          signal: controller.signal,
+          timeout: UPLOAD_TIMEOUT,
+        }
+      )
 
       if (res.code !== 1) {
         throw new Error(res.msg || '上传失败')
@@ -171,10 +208,21 @@ export default function Add() {
       Toast.show({ icon: 'success', content: '上传成功', duration: 1200 })
       resetForm()
     } catch (error) {
-      console.error('上传衣物失败:', error)
-      Toast.show({ icon: 'fail', content: '上传失败，请重试', duration: 1500 })
+      if (error.name === 'AbortError') {
+        Toast.show({ icon: 'fail', content: '已取消上传', duration: 1200 })
+      } else {
+        console.error('上传衣物失败:', error)
+        Toast.show({ icon: 'fail', content: '上传失败，请重试', duration: 1500 })
+      }
     } finally {
       setUploading(false)
+      setUploadController(null)
+    }
+  }
+
+  const cancelUpload = () => {
+    if (uploadController) {
+      uploadController.abort()
     }
   }
 
@@ -245,6 +293,11 @@ export default function Add() {
           <Button color="success" onClick={analyzeClothes} disabled={!imageUrl || compressing}>
             分析衣物
           </Button>
+          {analysisController ? (
+            <Button color="warning" onClick={cancelAnalysis} style={{ marginLeft: 8 }}>
+              取消分析
+            </Button>
+          ) : null}
         </div>
 
         <div className={styles.detail}>
@@ -274,9 +327,13 @@ export default function Add() {
           <Button color="primary" block onClick={handleUploadCloth} loading={uploading} disabled={uploading}>
             确认添加到衣橱
           </Button>
+          {uploadController ? (
+            <Button color="warning" block onClick={cancelUpload} style={{ marginTop: 8 }}>
+              取消上传
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
   )
 }
-

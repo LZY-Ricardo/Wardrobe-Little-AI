@@ -1,4 +1,4 @@
-html, body, div, span, applet, object, iframe,
+﻿html, body, div, span, applet, object, iframe,
 h1, h2, h3, h4, h5, h6, p, blockquote, pre,
 a, abbr, acronym, address, big, cite, code,
 del, dfn, em, img, ins, kbd, q, s, samp,
@@ -11,75 +11,66 @@ article, aside, canvas, details, embed,
 figure, figcaption, footer, header, hgroup, 
 menu, nav, output, ruby, section, summary,
 time, mark, audio, video {
-	margin: 0;
-	padding: 0;
-	border: 0;
-	font-size: 100%;
-	font: inherit;
-	vertical-align: baseline;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 100%;
+  font: inherit;
+  vertical-align: baseline;
 }
-/* HTML5 display-role reset for older browsers */
 article, aside, details, figcaption, figure, 
 footer, header, hgroup, menu, nav, section {
-	display: block;
+  display: block;
 }
 body {
-	line-height: 1;
+  line-height: 1;
 }
 ol, ul {
-	list-style: none;
+  list-style: none;
 }
 blockquote, q {
-	quotes: none;
+  quotes: none;
 }
 blockquote:before, blockquote:after,
 q:before, q:after {
-	content: '';
-	content: none;
+  content: '';
+  content: none;
 }
 table {
-	border-collapse: collapse;
-	border-spacing: 0;
+  border-collapse: collapse;
+  border-spacing: 0;
 }
 html {
-	overflow: hidden;
-	height: 100%;
-	width: 100%;
-}
-/* 暗黑模式样式 */
-html.dark-mode {
-  filter: invert(1) hue-rotate(180deg);
-  background-color: #1a1a1a;
+  overflow: hidden;
+  height: 100%;
+  width: 100%;
+  transition: filter 0.3s ease, background-color 0.3s ease;
 }
 
-/* 在暗黑模式下，图片、视频等元素需要反转回来保持正常显示 */
-html.dark-mode img, 
-html.dark-mode video,
-html.dark-mode .logo,
-html.dark-mode .icon,
-html.dark-mode canvas,
-html.dark-mode iframe,
-html.dark-mode svg {
+[data-theme='dark'] {
+  background-color: #111;
+  color: #e8e8e8;
+}
+
+[data-theme='dark'] img,
+[data-theme='dark'] video,
+[data-theme='dark'] .logo,
+[data-theme='dark'] .icon,
+[data-theme='dark'] canvas,
+[data-theme='dark'] iframe,
+[data-theme='dark'] svg {
   filter: invert(1) hue-rotate(180deg);
 }
 
-/* 暗黑模式下的特殊元素处理 */
-html.dark-mode .dark-mode-toggle {
+[data-theme='dark'] .dark-mode-toggle {
   filter: none !important;
 }
 
-/* 明亮模式的默认样式 */
-html:not(.dark-mode) {
+[data-theme='light'] {
   background-color: #ffffff;
   color: #333333;
 }
 
-/* 平滑过渡效果 */
-html {
-  transition: filter 0.3s ease, background-color 0.3s ease;
-}
-
-/* 确保body继承html的背景色 */
 body {
   background-color: inherit;
   color: inherit;

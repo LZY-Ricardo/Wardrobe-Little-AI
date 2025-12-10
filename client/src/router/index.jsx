@@ -1,6 +1,8 @@
 ﻿import React, { Suspense } from 'react'
 import { BrowserRouter, Navigate, useLocation, useRoutes } from 'react-router-dom'
 import Layout from '@/components/Layout'
+import { Skeleton } from '@/components/Feedback'
+import { useAuthStore } from '@/store'
 
 const Login = React.lazy(() => import('../pages/Login'))
 const Home = React.lazy(() => import('../pages/Home'))
@@ -13,7 +15,10 @@ const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
 const AiChat = React.lazy(() => import('../pages/AiChat'))
 
-const isAuthed = () => Boolean(localStorage.getItem('access_token'))
+const isAuthed = () => {
+  const token = useAuthStore.getState().accessToken || localStorage.getItem('access_token')
+  return Boolean(token)
+}
 
 const ProtectedRoute = ({ children }) => {
   const location = useLocation()
@@ -111,7 +116,7 @@ const routes = [
 function WrapperRoutes() {
   const ele = useRoutes(routes)
   return (
-    <Suspense fallback={<div>加载中...</div>}>
+    <Suspense fallback={<Skeleton rows={3} />}>
       {ele}
     </Suspense>
   )
@@ -124,4 +129,3 @@ export default function WrapperRouter() {
     </BrowserRouter>
   )
 }
-

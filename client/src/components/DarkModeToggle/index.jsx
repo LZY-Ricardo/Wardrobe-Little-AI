@@ -1,51 +1,53 @@
-import React, { useState, useEffect } from 'react';
-import styles from './index.module.less';
-import SvgIcon from '../SvgIcon';
+﻿import React, { useEffect } from 'react'
+import styles from './index.module.less'
+import SvgIcon from '../SvgIcon'
+import { useUiStore } from '@/store'
 
 const DarkModeToggle = () => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const theme = useUiStore((state) => state.theme)
+  const setTheme = useUiStore((state) => state.setTheme)
 
-  // 初始化暗黑模式状态
+  const applyTheme = (mode) => {
+    const htmlElement = document.documentElement
+    htmlElement.setAttribute('data-theme', mode)
+  }
+
   useEffect(() => {
-    const savedMode = localStorage.getItem('darkMode');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldUseDark = savedMode ? JSON.parse(savedMode) : prefersDark;
-    
-    setIsDarkMode(shouldUseDark);
-    applyDarkMode(shouldUseDark);
-  }, []);
-
-  // 应用暗黑模式样式
-  const applyDarkMode = (isDark) => {
-    const htmlElement = document.documentElement;
-    if (isDark) {
-      htmlElement.classList.add('dark-mode');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    if (!theme) {
+      setTheme(prefersDark ? 'dark' : 'light')
+      applyTheme(prefersDark ? 'dark' : 'light')
     } else {
-      htmlElement.classList.remove('dark-mode');
+      applyTheme(theme)
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
-  // 切换暗黑模式
+  useEffect(() => {
+    if (theme) {
+      applyTheme(theme)
+    }
+  }, [theme])
+
   const toggleDarkMode = () => {
-    const newMode = !isDarkMode;
-    setIsDarkMode(newMode);
-    applyDarkMode(newMode);
-    localStorage.setItem('darkMode', JSON.stringify(newMode));
-  };
+    const next = theme === 'dark' ? 'light' : 'dark'
+    setTheme(next)
+    applyTheme(next)
+  }
 
   return (
     <div className={styles['dark-mode-toggle']} onClick={toggleDarkMode}>
-      <div className={`${styles['toggle-container']} ${isDarkMode ? styles['dark'] : ''}`}>
+      <div className={`${styles['toggle-container']} ${theme === 'dark' ? styles['dark'] : ''}`}>
         <div className={styles['toggle-slider']}>
-          {isDarkMode ? (
-            <span className={styles['icon']}>🌙</span>
+          {theme === 'dark' ? (
+            <SvgIcon iconName="icon-yueliang" />
           ) : (
-            <span className={styles['icon']}>☀️</span>
+            <SvgIcon iconName="icon-taiyang" />
           )}
         </div>
       </div>
     </div>
-  );
-};
+  )
+}
 
-export default DarkModeToggle;
+export default DarkModeToggle

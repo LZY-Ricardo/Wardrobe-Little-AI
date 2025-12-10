@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import styles from './index.module.less'
 import test from '@/assets/test.jpg'
 import SvgIcon from '@/components/SvgIcon'
@@ -6,26 +6,78 @@ import { Overlay, Loading } from 'react-vant';
 import axios from '@/api'
 import { useNavigate } from 'react-router-dom'
 import { Toast } from 'antd-mobile';
+import { useAuthStore } from '@/store'
 
 
-
+const safeParseUserInfo = () => {
+  const raw = localStorage.getItem('userInfo')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch (err) {
+    console.error('解析用户信息失败:', err)
+    return null
+  }
+}
 
 export default function Match() {
   const navigate = useNavigate()
+  const authUserInfo = useAuthStore((s) => s.userInfo)
+  const accessToken = useAuthStore((s) => s.accessToken)
+  const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
   const [activeTab, setActiveTab] = useState('top') // 'top' 为上衣，'bottom' 为下衣
   const [showPreview, setShowPreview] = useState(false) // 是否展示预览图
   const [visible, setVisible] = useState(false); // 是否显示遮罩层
-  const [topClothes, setTopClothes] = useState([]); // 上衣
-  const [bottomClothes, setBottomClothes] = useState([]); // 下衣
+  const [topClothes, setTopClothes] = useState(null); // 上衣
+  const [bottomClothes, setBottomClothes] = useState(null); // 下衣
   const [topClothesData, setTopClothesData] = useState([]); // 上衣数据
   const [bottomClothesData, setBottomClothesData] = useState([]); // 下衣数据
   const [selectedShow, setSelectedShow] = useState('上衣')
   const [previewImageUrl, setPreviewImageUrl] = useState(''); // 预览图URL
-  const localData = localStorage.getItem('userInfo')
-  const userInfo = JSON.parse(localData)
-  const [sex, setSex] = useState(userInfo.sex) // 性别
-  const [characterModel, setCharacterModel] = useState(userInfo.characterModel) // 人物模特图
+  const [userInfo, setUserInfo] = useState(() => authUserInfo || safeParseUserInfo())
+  const [userLoading, setUserLoading] = useState(false)
   const [loading, setLoading] = useState(false) // 加载中
+  const sex = userInfo?.sex || ''
+  const characterModel = userInfo?.characterModel || ''
+
+  const fetchUserInfo = useCallback(async () => {
+    setUserLoading(true)
+    try {
+      const res = await axios.get('/user/getUserInfo')
+      const nextUser = res?.data || null
+      if (nextUser) {
+        setUserInfo(nextUser)
+        setAuthUserInfo(nextUser)
+        localStorage.setItem('userInfo', JSON.stringify({
+          username: nextUser.username,
+          id: nextUser.id,
+          createTime: nextUser.createTime,
+          sex: nextUser.sex,
+          characterModel: nextUser.characterModel,
+        }))
+      }
+    } catch (error) {
+      console.error('获取用户信息失败:', error);
+      Toast.show({
+        content: '获取用户信息失败，请重新登录',
+        duration: 1200,
+      })
+    } finally {
+      setUserLoading(false)
+    }
+  }, [setAuthUserInfo, setUserInfo])
+
+  useEffect(() => {
+    if (!userInfo && accessToken) {
+      fetchUserInfo()
+    }
+  }, [userInfo, accessToken, fetchUserInfo])
+
+  useEffect(() => {
+    if (authUserInfo) {
+      setUserInfo(authUserInfo)
+    }
+  }, [authUserInfo])
 
 
   // 获取衣服数据
@@ -40,7 +92,7 @@ export default function Match() {
 
   // 生成预览图
   const handleGenerate = async () => {
-    if (!topClothes || !bottomClothes) {
+    if (!topClothes?.image || !bottomClothes?.image) {
       Toast.show({
         content: '请选择上衣和下衣',
         duration: 1000,
@@ -132,8 +184,8 @@ export default function Match() {
 
     <div className={styles.match}>
 
-      <div className={styles['match-loading']} style={{ display: loading ? 'flex' : 'none' }}>
-        <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>正在生成中...</Loading>
+      <div className={styles['match-loading']} style={{ display: (loading || userLoading) ? 'flex' : 'none' }}>
+        <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>{userLoading ? '正在获取用户信息...' : '正在生成中...'}</Loading>
       </div>
 
       <div className={styles['match-header']}>
@@ -228,8 +280,8 @@ export default function Match() {
             <button className={styles['delete-btn']} onClick={() => {
               setShowPreview(false);
               setPreviewImageUrl('');
-              setTopClothes([]);
-              setBottomClothes([]);
+              setTopClothes(null);
+              setBottomClothes(null);
               Toast.show({
                 content: '已清空选择',
                 duration: 1000,

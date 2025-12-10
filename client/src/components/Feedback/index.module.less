@@ -1,0 +1,106 @@
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  color: #333;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid #e0e0e0;
+  border-top-color: #1677ff;
+  animation: spin 0.8s linear infinite;
+}
+
+.text {
+  font-size: 14px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 12px;
+  color: #666;
+}
+
+.emptyIcon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.emptyText {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.actionBtn {
+  margin-top: 4px;
+  padding: 6px 12px;
+  border: 1px solid #1677ff;
+  border-radius: 6px;
+  background: #1677ff;
+  color: #fff;
+  font-size: 13px;
+}
+
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border-radius: 8px;
+  background: #fff1f0;
+  color: #a8071a;
+}
+
+.errorIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #a8071a;
+  color: #fff;
+  font-weight: 700;
+}
+
+.errorText {
+  flex: 1;
+  font-size: 13px;
+}
+
+.skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 0;
+}
+
+.skeletonRow {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f2f2f2 25%, #e6e6e6 37%, #f2f2f2 63%);
+  animation: shimmer 1.2s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200px 0;
+  }
+  100% {
+    background-position: 200px 0;
+  }
+}

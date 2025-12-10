@@ -1,5 +1,6 @@
 ﻿import axios from 'axios'
 import { Toast } from 'antd-mobile'
+import { useAuthStore } from '@/store'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 const DEFAULT_TIMEOUT = 15000
@@ -10,10 +11,13 @@ const ERROR_CODE_MESSAGE = {
   3: '登录失效，请重新登录',
 }
 
-const getAccessToken = () => localStorage.getItem('access_token') || ''
-const getRefreshToken = () => localStorage.getItem('refresh_token') || ''
+const getAccessToken = () =>
+  useAuthStore.getState().accessToken || localStorage.getItem('access_token') || ''
+const getRefreshToken = () =>
+  useAuthStore.getState().refreshToken || localStorage.getItem('refresh_token') || ''
 
 const logoutAndRedirect = (message = '登录失效，请重新登录') => {
+  useAuthStore.getState().clearTokens()
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
   Toast.show({ icon: 'fail', content: message, duration: 1000 })
@@ -64,6 +68,7 @@ const refreshToken = async () => {
     const { access_token, refresh_token } = res.data
     if (access_token) localStorage.setItem('access_token', access_token)
     if (refresh_token) localStorage.setItem('refresh_token', refresh_token)
+    useAuthStore.getState().setTokens({ accessToken: access_token, refreshToken: refresh_token })
     return access_token
   }
   const msg = res?.data?.msg || '刷新 token 失败'
@@ -83,7 +88,6 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => {
-    // 仅处理业务成功，其他交给 error 拦截
     if (response.status === 200) {
       const data = response.data
       if (data?.code === 1) return data
@@ -99,7 +103,6 @@ api.interceptors.response.use(
 
     if (response?.status === 401) {
       const errCode = response?.data?.code
-      // access token 过期，尝试刷新
       if (errCode === 0 && !originalRequest._retry) {
         originalRequest._retry = true
 
@@ -130,7 +133,6 @@ api.interceptors.response.use(
         }
       }
 
-      // 无刷新或长 token 也失效
       logoutAndRedirect(ERROR_CODE_MESSAGE[errCode] || '登录失效，请重新登录')
       return Promise.reject(error)
     }
@@ -147,4 +149,3 @@ api.interceptors.response.use(
 )
 
 export default api
-
