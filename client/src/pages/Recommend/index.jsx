@@ -5,14 +5,41 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
 
-const normalizeSuits = (data = [], fallbackScene = '') => {
-  if (!Array.isArray(data)) return []
-  return data.map((item, index) => ({
+const normalizeSuits = (raw = [], fallbackScene = '') => {
+  const sceneName = fallbackScene || '通用场景'
+  let data = raw
+
+  if (typeof raw === 'string') {
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      data = raw
+    }
+  }
+
+  const list = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.output)
+        ? data.output
+        : Array.isArray(data?.suits)
+          ? data.suits
+          : Array.isArray(data?.recommendations)
+            ? data.recommendations
+            : typeof data === 'string'
+              ? data
+                .split(/\n+/)
+                .map((line) => ({ description: line.trim(), scene: sceneName }))
+                .filter((item) => item.description)
+              : []
+
+  return list.map((item, index) => ({
     id: item.id ?? index,
-    scene: item.scene || item.sceneName || fallbackScene || '通用场景',
-    description: item.message || item.description || item.desc || 'AI 推荐搭配',
+    scene: item.scene || item.sceneName || sceneName,
+    description: item.message || item.description || item.desc || `AI 推荐搭配 ${index + 1}`,
     items: item.items || item.suits || item.clothes || [],
-    cover: item.image || item.cover || '',
+    cover: item.image || item.cover || item.img || '',
   }))
 }
 
@@ -39,16 +66,26 @@ export default function Recommend() {
     setServiceUnavailable(false)
     try {
       const res = await axios.post('/scene/generateSceneSuits', { scene: value })
-      const list = normalizeSuits(res?.data, value)
-      setSceneSuits(list)
+      const list = normalizeSuits(res?.data ?? res, value)
       if (!list.length) {
+        setSceneSuits([])
         setError('暂无推荐结果，换个场景试试')
+        return
       }
+      setSceneSuits(list)
     } catch (err) {
-      const message = err?.data?.msg || err?.response?.data?.msg || '推荐服务不可用，请稍后重试'
+      const status = err?.response?.status
+      const message =
+        err?.msg ||
+        err?.message ||
+        err?.response?.data?.msg ||
+        err?.data?.msg ||
+        '推荐服务不可用，请稍后重试'
       setError(message)
       setSceneSuits([])
-      setServiceUnavailable(true)
+      if (!status || status >= 500 || status === 503) {
+        setServiceUnavailable(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -132,4 +169,3 @@ export default function Recommend() {
     </div>
   )
 }
-
