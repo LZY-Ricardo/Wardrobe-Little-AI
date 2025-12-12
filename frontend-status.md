@@ -15,7 +15,7 @@
 - /match：加载 /clothes/TopClothes、/clothes/BotClothes；需先在 /person 设置 sex 与 characterModel；POST /clothes/genPreview 上传 top/bottom/model 生成预览，失败用占位图。
 - /recommend：输入场景→POST /scene/generateSceneSuits，但结果未渲染；页面展示 3 张静态示例卡片，历史标签静态；AI 助手入口跳 /aichat。
 - /person：/user/getUserInfo 拉取；更新昵称 /user/updateUserName、性别 /user/updateSex、密码 /user/updatePassword；上传全身照 /user/uploadPhoto（base64）；退出清空本地存储。
-- /aichat：fetch http://localhost:3000/chat（SSE），携带 access_token 但后端未鉴权；无加载/错误回退。
+- /aichat：fetch `${VITE_API_BASE_URL||http://localhost:3000}/chat`（SSE）；支持停止生成/失败重试/快捷问题按钮；可输入 /help；后端已鉴权（需 access_token）。
 
 ## 静态或未完成功能
 - 场景推荐列表完全静态，/scene/generateSceneSuits 的结果未展示。

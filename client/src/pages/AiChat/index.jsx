@@ -7,9 +7,34 @@ import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '@/store'
 
 const STREAM_TIMEOUT = 120000
 const MAX_RETRY = 3
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+
+const QUICK_PROMPTS = [
+  {
+    label: '功能总览',
+    value: '请介绍一下这个智能穿搭项目有哪些功能，并告诉我每个页面怎么使用。',
+  },
+  {
+    label: '上传衣物',
+    value: '我想添加一件衣物（上传/分析/保存），应该怎么操作？',
+  },
+  {
+    label: '场景推荐',
+    value: '如何在推荐页生成场景推荐？比如“商务/通勤/约会/运动”。',
+  },
+  {
+    label: '搭配预览',
+    value: '如何在搭配中心生成预览图？如果提示缺少人物模特应该怎么做？',
+  },
+  {
+    label: '穿搭建议',
+    value: '我想要一些穿搭建议：请先问我必要的问题，再给出 2-3 套可执行的方案。',
+  },
+]
 
 export default function AiChat() {
   const inputRef = useRef(null)
@@ -22,6 +47,37 @@ export default function AiChat() {
   const [connectionState, setConnectionState] = useState('idle') // idle|connecting|streaming|error
   const [errorMessage, setErrorMessage] = useState('')
   const navigate = useNavigate()
+
+  const refreshAccessToken = async () => {
+    const refreshToken = localStorage.getItem('refresh_token')
+    if (!refreshToken) return false
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/user/refresh_token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refresh_token: refreshToken }),
+      })
+
+      if (!res.ok) return false
+      const data = await res.json()
+      if (data?.code === 1 && data?.access_token) {
+        localStorage.setItem('access_token', data.access_token)
+        if (data.refresh_token) {
+          localStorage.setItem('refresh_token', data.refresh_token)
+        }
+        useAuthStore.getState().setTokens({
+          accessToken: data.access_token,
+          refreshToken: data.refresh_token,
+        })
+        return true
+      }
+    } catch (error) {
+      console.error('刷新 token 失败:', error)
+    }
+
+    return false
+  }
 
   useEffect(() => {
     messagesRef.current = list
@@ -67,21 +123,47 @@ export default function AiChat() {
       setList((prev) => [...prev, { role: 'user', content: input }])
     }
 
-    const history = [...messagesRef.current, { role: 'user', content: input }]
-    const token = localStorage.getItem('access_token')
+    const historyBase = [...messagesRef.current]
+    if (isRetry && historyBase.length && historyBase[historyBase.length - 1].role !== 'user') {
+      historyBase.pop()
+    }
+    const history = isRetry ? historyBase : [...historyBase, { role: 'user', content: input }]
+    const buildHeaders = () => {
+      const token = localStorage.getItem('access_token') || ''
+      return {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      }
+    }
     const controller = new AbortController()
     controllerRef.current = controller
 
     try {
-      const response = await fetch(`http://localhost:3000/chat`, {
+      let response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: buildHeaders(),
         body: JSON.stringify({ messages: history }),
         signal: controller.signal,
       })
+
+      if (response.status === 401) {
+        const refreshed = await refreshAccessToken()
+        if (!refreshed) {
+          useAuthStore.getState().clearTokens()
+          localStorage.removeItem('access_token')
+          localStorage.removeItem('refresh_token')
+          localStorage.removeItem('userInfo')
+          Toast.show({ content: '登录已过期，请重新登录', duration: 1200 })
+          navigate('/login', { replace: true })
+          throw new Error('UNAUTHORIZED')
+        }
+        response = await fetch(`${API_BASE_URL}/chat`, {
+          method: 'POST',
+          headers: buildHeaders(),
+          body: JSON.stringify({ messages: history }),
+          signal: controller.signal,
+        })
+      }
 
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}`)
@@ -92,7 +174,16 @@ export default function AiChat() {
       const decoder = new TextDecoder()
       let botResponse = ''
 
-      setList((prev) => [...prev, { role: 'bot', content: '' }])
+      setList((prev) => {
+        if (!isRetry) return [...prev, { role: 'assistant', content: '' }]
+        const next = [...prev]
+        const last = next[next.length - 1]
+        if (last && last.role !== 'user') {
+          next[next.length - 1] = { ...last, role: 'assistant', content: '' }
+          return next
+        }
+        return [...next, { role: 'assistant', content: '' }]
+      })
 
       let shouldBreak = false
       const timeoutId = setTimeout(() => {
@@ -118,7 +209,7 @@ export default function AiChat() {
             let decodedData
             try {
               decodedData = JSON.parse(data)
-            } catch (e) {
+            } catch {
               decodedData = data
             }
             botResponse += decodedData
@@ -130,7 +221,7 @@ export default function AiChat() {
 
             setList((prev) => {
               const newList = [...prev]
-              newList[newList.length - 1] = { role: 'bot', content: filteredResponse }
+              newList[newList.length - 1] = { role: 'assistant', content: filteredResponse }
               return newList
             })
           }
@@ -169,6 +260,19 @@ export default function AiChat() {
         <div className={styles['bot']}>
           你好，我是AI衣物小助手，有什么我可以帮忙的吗？
         </div>
+        <div className={styles['quick-prompts']}>
+          {QUICK_PROMPTS.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => send(item.value)}
+              disabled={connectionState === 'connecting' || connectionState === 'streaming'}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className={styles['hint']}>提示：输入 /help 可查看示例问题</div>
 
         <div className={styles['container-chat']}>
           {list.map((item, index) => {
@@ -193,7 +297,7 @@ export default function AiChat() {
       </div>
       <div className={styles['chat-footer']}>
         <div className={styles['footer-input']}>
-          <input type="text" placeholder="请输入问题" ref={inputRef} />
+          <input type="text" placeholder="请输入问题（/help）" ref={inputRef} />
           <button onClick={() => send()} disabled={disabled}>
             发送
           </button>

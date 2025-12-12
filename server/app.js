@@ -1,3 +1,6 @@
+// 引入配置文件（会加载 .env）
+const config = require('./config')
+
 const Koa = require('koa')
 const app = new Koa()
 const userRouter = require('./routes/user')
@@ -24,12 +27,6 @@ app.use(sceneRouter.routes());
 app.use(sceneRouter.allowedMethods());
 app.use(chatRouter.routes());
 app.use(chatRouter.allowedMethods());
-
-
-
-// 引入配置文件
-const config = require('./config')
-
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`)
 })

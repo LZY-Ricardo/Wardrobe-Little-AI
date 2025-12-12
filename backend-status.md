@@ -21,17 +21,17 @@
 - /scene（需 token）
   - POST /generateSceneSuits：将前端 body 透传给 Coze workflow3_id，不落库、不校验。
 - /chat
-  - 无鉴权；将 messages 流式转发到本地 Ollama http://localhost:11434/api/chat（模型 deepseek-r1:7b），SSE 转发；无超时/限流。
+  - 需鉴权；注入 system prompt（项目使用指导 + 穿搭知识），规范化 role（bot→assistant），并将 messages 流式转发到本地 Ollama（默认 http://localhost:11434/api/chat；模型默认 deepseek-r1:7b）；支持 /help；支持超时与历史裁剪。
 
 ## 外部依赖与前置条件
 - MySQL 数据库（未提供建表 SQL，需自建 user/clothes 等表）。
 - Coze PAT 与 workflow_id/workflow2_id/workflow3_id 环境变量必填，否则 analyze/genPreview/generateSceneSuits 失败。
-- 本地 Ollama 服务(11434) 与 deepseek-r1:7b 模型需预先加载，否则 /chat 失败。
+- 本地 Ollama 服务与模型需预先加载，否则 /chat 失败；可用 `OLLAMA_BASE_URL`/`OLLAMA_MODEL` 覆盖默认值。
 
 ## 已知缺口与风险
 - 衣物删除/更新缺少 user_id 归属校验，存在越权删除/修改风险。
 - Top/Bot 接口匹配字符串乱码，功能可能不可用。
-- /chat 未鉴权且无限制；body/multer 限制 50MB，仍可能被滥用。
+- /chat 现已鉴权；仍建议补充限流/并发控制与更细粒度的输入大小限制，防止被滥用。
 - 缺少统一错误/日志处理，中间件无异常兜底；返回码简单。
 - 图片、全身照采用 base64 入库，数据量大时影响性能/存储。
 - 场景/搭配/分析强依赖外部服务，无降级逻辑。

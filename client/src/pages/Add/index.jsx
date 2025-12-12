@@ -10,7 +10,7 @@ const VALID_TYPES = ['上衣', '下衣', '鞋子', '配饰']
 const MIN_FILE_SIZE = 5 * 1024
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 const COMPRESS_CONFIG = { quality: 0.8, maxWidth: 600, maxHeight: 600 }
-const UPLOAD_TIMEOUT = 20000
+const UPLOAD_TIMEOUT = 60000
 
 export default function Add() {
   const navigate = useNavigate()

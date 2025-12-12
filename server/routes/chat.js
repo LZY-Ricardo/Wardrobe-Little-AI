@@ -1,14 +1,44 @@
 const Router = require('@koa/router')
 const router = new Router()
 const axios = require('axios')
+const { verify } = require('../utils/jwt')
+const { buildHelpMessage, buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
 
 router.prefix('/chat')
+
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b'
+const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120000
+const MAX_HISTORY_MESSAGES = Number(process.env.OLLAMA_MAX_HISTORY_MESSAGES) || 20
+
+const normalizeRole = (role = '') => {
+  if (role === 'bot') return 'assistant'
+  if (role === 'assistant') return 'assistant'
+  if (role === 'user') return 'user'
+  return null
+}
+
+const normalizeMessages = (messages = []) =>
+  messages
+    .filter(Boolean)
+    .map((item) => ({
+      role: normalizeRole(item.role),
+      content: typeof item.content === 'string' ? item.content : String(item.content ?? ''),
+    }))
+    .filter((item) => item.role && item.content && item.content.trim())
+
+const trimHistory = (messages = [], max = MAX_HISTORY_MESSAGES) => {
+  if (!Array.isArray(messages)) return []
+  const safeMax = Number.isFinite(max) ? Math.max(2, max) : 20
+  if (messages.length <= safeMax) return messages
+  return messages.slice(-safeMax)
+}
 
 /**
  * AI聊天接口 - 处理流式响应
  * 接收对话历史消息数组，转发给Ollama API，并将流式响应实时转发给前端
  */
-router.post('/', async (ctx) => {
+router.post('/', verify(), async (ctx) => {
     console.log('Chat route accessed with messages:', ctx.request.body.messages);
     
     // 获取对话历史消息数组
@@ -34,11 +64,33 @@ router.post('/', async (ctx) => {
         'Access-Control-Allow-Headers': 'Authorization, Content-Type' // 允许的请求头
     });
     
-    // 构造Ollama API请求数据，使用完整的对话历史
+    const safeMessages = normalizeMessages(messages).filter((item) => item.role !== 'system')
+    const lastUserText = [...safeMessages].reverse().find((m) => m.role === 'user')?.content || ''
+    const command = String(lastUserText || '').trim()
+
+    if (command === '/help') {
+        const help = buildHelpMessage()
+        ctx.res.write(`data: ${JSON.stringify(help)}\n\n`)
+        ctx.res.write('data: [DONE]\n\n')
+        ctx.res.end()
+        return
+    }
+
+    const intent = isProjectIntent(lastUserText) ? 'project' : 'clothing'
+    const systemPrompt = buildSystemPrompt({ intent })
+    const url = `${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`
+
+    // 构造Ollama API请求数据，注入 system prompt + 裁剪后的对话历史
     const data = {
-        model: 'deepseek-r1:7b',  // 使用的AI模型
-        messages: messages,        // 完整的对话历史消息数组
-        stream: true,             // 启用流式响应
+        model: OLLAMA_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...trimHistory(safeMessages),
+        ],
+        stream: true,
+        options: {
+          temperature: 0.4,
+        },
     }
     
     // 流式响应状态控制变量
@@ -46,8 +98,9 @@ router.post('/', async (ctx) => {
     
     try {
         // 向Ollama API发送流式请求
-        const response = await axios.post('http://localhost:11434/api/chat', data, {
-            responseType: 'stream'  // 设置响应类型为流
+        const response = await axios.post(url, data, {
+            responseType: 'stream',  // 设置响应类型为流
+            timeout: OLLAMA_TIMEOUT_MS,
         });
         
         /**
@@ -59,8 +112,10 @@ router.post('/', async (ctx) => {
             if (isEnded) return;
             
             // 将二进制数据转换为字符串，并按行分割
-            const lines = chunk.toString().split('\n').filter(line => line.trim() !== '');
-            console.log(lines);
+            const lines = chunk
+              .toString()
+              .split(/\r?\n/)
+              .filter((line) => line.trim() !== '');
             
             // 处理每一行JSON数据
             lines.forEach(line => {
@@ -100,8 +155,8 @@ router.post('/', async (ctx) => {
          */
         response.data.on('end', () => {
             console.log('Ollama stream ended, isEnded:', isEnded, 'headersSent:', ctx.res.headersSent);
-            // 如果流未正常结束且响应头未发送，发送结束标记
-            if (!isEnded && !ctx.res.headersSent) {
+            // 如果流未正常结束，发送结束标记
+            if (!isEnded) {
                 console.log('Sending [DONE] from end event');
                 isEnded = true;
                 ctx.res.write('data: [DONE]\n\n');

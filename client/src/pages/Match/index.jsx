@@ -143,7 +143,8 @@ export default function Match() {
       const res = await axios.post('/clothes/genPreview', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
-        }
+        },
+        timeout: 60000,
       })
 
       console.log('生成预览图响应:', res.data);

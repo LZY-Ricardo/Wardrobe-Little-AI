@@ -44,22 +44,12 @@ html {
   overflow: hidden;
   height: 100%;
   width: 100%;
-  transition: filter 0.3s ease, background-color 0.3s ease;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 [data-theme='dark'] {
   background-color: #111;
   color: #e8e8e8;
-}
-
-[data-theme='dark'] img,
-[data-theme='dark'] video,
-[data-theme='dark'] .logo,
-[data-theme='dark'] .icon,
-[data-theme='dark'] canvas,
-[data-theme='dark'] iframe,
-[data-theme='dark'] svg {
-  filter: invert(1) hue-rotate(180deg);
 }
 
 [data-theme='dark'] .dark-mode-toggle {

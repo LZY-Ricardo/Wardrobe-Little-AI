@@ -37,9 +37,14 @@ const normalizeSuits = (raw = [], fallbackScene = '') => {
   return list.map((item, index) => ({
     id: item.id ?? index,
     scene: item.scene || item.sceneName || sceneName,
-    description: item.message || item.description || item.desc || `AI 推荐搭配 ${index + 1}`,
+    source: item.source || 'llm',
+    description: item.reason || item.message || item.description || item.desc || `AI 推荐搭配 ${index + 1}`,
     items: item.items || item.suits || item.clothes || [],
-    cover: item.image || item.cover || item.img || '',
+    cover: item.image
+      || item.cover
+      || item.img
+      || (Array.isArray(item.items) ? item.items.find((cloth) => cloth?.image)?.image : '')
+      || '',
   }))
 }
 
@@ -117,8 +122,23 @@ export default function Recommend() {
             <div className={styles['item-img']}>
               {item.cover ? <img src={item.cover} alt={item.scene} /> : <div className={styles['placeholder']}>No Image</div>}
             </div>
+            <div className={styles['item-header']}>
+              <div className={styles['item-scene']}>{item.scene}</div>
+              <div className={`${styles['item-source']} ${styles[`item-source-${item.source}`]}`}>
+                {item.source === 'rule' ? '规则推荐' : '模型推荐'}
+              </div>
+            </div>
             <div className={styles['item-message']}>{item.description}</div>
-            <div className={styles['item-scene']}>{item.scene}</div>
+            {Boolean(item.items?.length) && (
+              <div className={styles['item-list']}>
+                {item.items.map((cloth, idx) => (
+                  <div className={styles['item-chip']} key={`${item.id}-${cloth.cloth_id || idx}`}>
+                    {cloth.name || cloth.type || '搭配单品'}
+                    {cloth.color ? ` · ${cloth.color}` : ''}
+                  </div>
+                ))}
+              </div>
+            )}
             <div className={styles['item-actions']}>
               <SvgIcon iconName="icon-icon-test" className={styles['action-icon']} />
               <SvgIcon iconName="icon-aixin" className={styles['action-icon']} />
