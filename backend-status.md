@@ -22,11 +22,13 @@
   - POST /generateSceneSuits：将前端 body 透传给 Coze workflow3_id，不落库、不校验。
 - /chat
   - 需鉴权；注入 system prompt（项目使用指导 + 穿搭知识），规范化 role（bot→assistant），并将 messages 流式转发到本地 Ollama（默认 http://localhost:11434/api/chat；模型默认 deepseek-r1:7b）；支持 /help；支持超时与历史裁剪。
+  - 已支持工具调用 MVP：当问题涉及“我的衣橱/我的性别/人物模特”等需要读取真实数据时，后端会先规划并调用工具（当前：`list_clothes`、`get_user_profile`），再基于工具结果生成回答。
 
 ## 外部依赖与前置条件
 - MySQL 数据库（未提供建表 SQL，需自建 user/clothes 等表）。
 - Coze PAT 与 workflow_id/workflow2_id/workflow3_id 环境变量必填，否则 analyze/genPreview/generateSceneSuits 失败。
 - 本地 Ollama 服务与模型需预先加载，否则 /chat 失败；可用 `OLLAMA_BASE_URL`/`OLLAMA_MODEL` 覆盖默认值。
+  - 可选配置：`OLLAMA_PLANNER_MODEL`（planner 使用的模型，默认同 `OLLAMA_MODEL`）、`CHAT_TOOL_CALLING_ENABLED`（默认启用）、`CHAT_TOOL_PLANNER_TIMEOUT_MS`、`CHAT_TOOL_EXEC_TIMEOUT_MS`。
 
 ## 已知缺口与风险
 - 衣物删除/更新缺少 user_id 归属校验，存在越权删除/修改风险。

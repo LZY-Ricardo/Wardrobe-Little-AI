@@ -3,13 +3,46 @@ const router = new Router()
 const axios = require('axios')
 const { verify } = require('../utils/jwt')
 const { buildHelpMessage, buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
+const { TOOL_DEFINITIONS, executeTool } = require('../utils/toolRegistry')
 
 router.prefix('/chat')
 
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b'
+const OLLAMA_PLANNER_MODEL = process.env.OLLAMA_PLANNER_MODEL || OLLAMA_MODEL
 const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120000
 const MAX_HISTORY_MESSAGES = Number(process.env.OLLAMA_MAX_HISTORY_MESSAGES) || 20
+const CHAT_TOOL_CALLING_ENABLED = String(process.env.CHAT_TOOL_CALLING_ENABLED || '1') !== '0'
+const CHAT_TOOL_PLANNER_TIMEOUT_MS = Number(process.env.CHAT_TOOL_PLANNER_TIMEOUT_MS) || 15000
+const CHAT_TOOL_EXEC_TIMEOUT_MS = Number(process.env.CHAT_TOOL_EXEC_TIMEOUT_MS) || 5000
+
+const TOOL_NAME_SET = new Set(TOOL_DEFINITIONS.map((tool) => tool.name))
+
+const TOOL_TRIGGER_KEYWORDS = [
+  '我的衣橱',
+  '衣橱',
+  '衣柜',
+  '衣橱里有什么',
+  '衣柜里有什么',
+  '有哪些衣服',
+  '有哪些衣物',
+  '衣服列表',
+  '衣物列表',
+  '我的衣服',
+  '收藏',
+  '喜欢',
+  'favorite',
+  '上衣',
+  '下衣',
+  '性别',
+  'sex',
+  '模特',
+  '人物模特',
+  '全身照',
+  'characterModel',
+  '/person',
+  '/match',
+]
 
 const normalizeRole = (role = '') => {
   if (role === 'bot') return 'assistant'
@@ -33,6 +66,93 @@ const trimHistory = (messages = [], max = MAX_HISTORY_MESSAGES) => {
   if (messages.length <= safeMax) return messages
   return messages.slice(-safeMax)
 }
+
+const shouldAttemptToolCalling = (text = '') => {
+  const input = String(text || '').trim()
+  if (!input) return false
+  return TOOL_TRIGGER_KEYWORDS.some((keyword) => input.includes(keyword))
+}
+
+const extractJsonObject = (text) => {
+  if (!text) return null
+  if (typeof text === 'object') return text
+  const raw = String(text)
+  try {
+    return JSON.parse(raw)
+  } catch {
+    const start = raw.indexOf('{')
+    const end = raw.lastIndexOf('}')
+    if (start !== -1 && end !== -1 && end > start) {
+      try {
+        return JSON.parse(raw.slice(start, end + 1))
+      } catch {
+        return null
+      }
+    }
+  }
+  return null
+}
+
+const withTimeout = (promise, timeoutMs) =>
+  new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => reject(new Error('TIMEOUT')), timeoutMs)
+    promise
+      .then((value) => {
+        clearTimeout(timeoutId)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId)
+        reject(error)
+      })
+  })
+
+const buildToolsForPlannerPrompt = () =>
+  TOOL_DEFINITIONS.map((tool) => {
+    const schema = JSON.stringify(tool.parameters || {})
+    return `- ${tool.name}: ${tool.description}\n  parameters: ${schema}`
+  }).join('\n')
+
+const buildPlannerSystemPrompt = () => `你是一个“工具调用规划器”。你只能输出 JSON，禁止输出任何额外文本。\n\n可用工具：\n${buildToolsForPlannerPrompt()}\n\n规则：\n- 仅当需要“读取当前登录用户的真实数据”（衣橱/用户画像）时，才选择 action=tool。\n- 只能选择一个工具；arguments 必须是对象且尽量最小化。\n- tool 必须是可用工具之一。\n\n输出（二选一）：\n1) {\"action\":\"tool\",\"tool\":\"...\",\"arguments\":{...},\"reason\":\"...\"}\n2) {\"action\":\"none\",\"reason\":\"...\"}`
+
+const planToolCall = async (url, userText) => {
+  const plannerMessages = [
+    { role: 'system', content: buildPlannerSystemPrompt() },
+    { role: 'user', content: String(userText || '').slice(0, 2000) },
+  ]
+
+  const res = await axios.post(
+    url,
+    {
+      model: OLLAMA_PLANNER_MODEL,
+      messages: plannerMessages,
+      stream: false,
+      options: { temperature: 0 },
+    },
+    { timeout: CHAT_TOOL_PLANNER_TIMEOUT_MS }
+  )
+
+  const content = res?.data?.message?.content || ''
+  const parsed = extractJsonObject(content)
+  if (!parsed || typeof parsed !== 'object') return { action: 'none', reason: 'planner_parse_failed' }
+
+  const action = parsed.action
+  if (action !== 'tool') return { action: 'none', reason: parsed.reason || 'no_tool' }
+
+  const tool = parsed.tool
+  const args = parsed.arguments
+  if (!tool || typeof tool !== 'string' || !TOOL_NAME_SET.has(tool)) {
+    return { action: 'none', reason: 'unknown_tool' }
+  }
+  if (args != null && typeof args !== 'object') {
+    return { action: 'none', reason: 'invalid_arguments' }
+  }
+
+  return { action: 'tool', tool, arguments: args || {}, reason: parsed.reason || '' }
+}
+
+const buildToolResultBlock = (toolName, result) =>
+  `【TOOL_RESULT name=${toolName}】\n${JSON.stringify(result)}\n【/TOOL_RESULT】`
 
 /**
  * AI聊天接口 - 处理流式响应
@@ -80,17 +200,40 @@ router.post('/', verify(), async (ctx) => {
     const systemPrompt = buildSystemPrompt({ intent })
     const url = `${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`
 
-    // 构造Ollama API请求数据，注入 system prompt + 裁剪后的对话历史
+    let toolPlan = null
+    let toolResult = null
+
+    if (CHAT_TOOL_CALLING_ENABLED && shouldAttemptToolCalling(lastUserText)) {
+        try {
+            toolPlan = await planToolCall(url, lastUserText)
+        } catch (error) {
+            toolPlan = null
+        }
+
+        if (toolPlan?.action === 'tool') {
+            try {
+                toolResult = await withTimeout(executeTool(toolPlan.tool, toolPlan.arguments, ctx), CHAT_TOOL_EXEC_TIMEOUT_MS)
+            } catch (error) {
+                toolResult = { error: 'TOOL_EXEC_FAILED', message: error?.message || String(error) }
+            }
+        }
+    }
+
+    const finalMessages = [
+      { role: 'system', content: systemPrompt },
+      ...trimHistory(safeMessages),
+    ]
+
+    if (toolPlan?.action === 'tool') {
+        finalMessages.push({ role: 'user', content: buildToolResultBlock(toolPlan.tool, toolResult) })
+    }
+
+    // 构造Ollama API请求数据：system prompt + 对话历史 +（可选）工具结果
     const data = {
         model: OLLAMA_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...trimHistory(safeMessages),
-        ],
+        messages: finalMessages,
         stream: true,
-        options: {
-          temperature: 0.4,
-        },
+        options: { temperature: 0.4 },
     }
     
     // 流式响应状态控制变量

@@ -5,6 +5,73 @@ import { useNavigate } from 'react-router-dom'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
 
+const loadImage = (src) => new Promise((resolve, reject) => {
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.onload = () => resolve(img)
+  img.onerror = reject
+  img.src = src
+})
+
+const drawContain = (ctx, img, x, y, w, h) => {
+  const scale = Math.min(w / img.width, h / img.height)
+  const dw = img.width * scale
+  const dh = img.height * scale
+  const dx = x + (w - dw) / 2
+  const dy = y + (h - dh) / 2
+  ctx.drawImage(img, dx, dy, dw, dh)
+}
+
+const createComposite = async (images) => {
+  if (!images.length) return ''
+  const canvas = document.createElement('canvas')
+  const width = 900
+  const height = 900
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  ctx.fillStyle = '#f5f5f5'
+  ctx.fillRect(0, 0, width, height)
+
+  const layout = [
+    { x: 0, y: 0, w: width, h: Math.floor(height * 0.65) },
+    { x: 0, y: Math.floor(height * 0.65), w: Math.floor(width / 2), h: height - Math.floor(height * 0.65) },
+    { x: Math.floor(width / 2), y: Math.floor(height * 0.65), w: Math.floor(width / 2), h: height - Math.floor(height * 0.65) },
+  ]
+
+  const imgs = await Promise.all(images.map((url) => loadImage(url)))
+  imgs.slice(0, 3).forEach((img, idx) => {
+    const cell = layout[idx] || layout[layout.length - 1]
+    drawContain(ctx, img, cell.x, cell.y, cell.w, cell.h)
+  })
+
+  return canvas.toDataURL('image/png')
+}
+
+const attachCompositeCover = async (suits = []) => {
+  const uniq = (arr) => Array.from(new Set(arr))
+  const withCovers = await Promise.all(
+    suits.map(async (suit) => {
+      const images = uniq(
+        (suit.items || [])
+          .map((cloth) => cloth?.image)
+          .filter(Boolean)
+      ).slice(0, 3)
+      if (!images.length) return suit
+      try {
+        const composite = await createComposite(images)
+        if (composite) {
+          return { ...suit, cover: composite }
+        }
+      } catch (err) {
+        console.error('生成套装拼贴失败:', err)
+      }
+      return suit
+    })
+  )
+  return withCovers
+}
+
 const normalizeSuits = (raw = [], fallbackScene = '') => {
   const sceneName = fallbackScene || '通用场景'
   let data = raw
@@ -77,7 +144,8 @@ export default function Recommend() {
         setError('暂无推荐结果，换个场景试试')
         return
       }
-      setSceneSuits(list)
+      const withCovers = await attachCompositeCover(list)
+      setSceneSuits(withCovers)
     } catch (err) {
       const status = err?.response?.status
       const message =

@@ -7,6 +7,7 @@ const userRouter = require('./routes/user')
 const clothesRouter = require('./routes/clothes')
 const sceneRouter = require('./routes/scene')
 const chatRouter = require('./routes/chat')
+const weatherRouter = require('./routes/weather')
 const { bodyParser } = require('@koa/bodyparser');
 const cors = require('@koa/cors')
 
@@ -27,6 +28,8 @@ app.use(sceneRouter.routes());
 app.use(sceneRouter.allowedMethods());
 app.use(chatRouter.routes());
 app.use(chatRouter.allowedMethods());
+app.use(weatherRouter.routes());
+app.use(weatherRouter.allowedMethods());
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`)
 })

@@ -254,9 +254,10 @@ const callLlm = async (scene, clothes, options = {}) => {
 const sanitizeSuits = (rawSuits, closetMap, scene, source) => {
   if (!Array.isArray(rawSuits)) return []
   const safeScene = scene || '通用场景'
-  return rawSuits
-    .slice(0, MAX_SUITS)
-    .map((suit, index) => {
+  const seenSignatures = new Set()
+
+  const normalized = rawSuits
+    .map((suit) => {
       const items = Array.isArray(suit.items) ? suit.items : []
       const normalizedItems = items
         .map((it) => {
@@ -271,15 +272,25 @@ const sanitizeSuits = (rawSuits, closetMap, scene, source) => {
 
       if (!normalizedItems.length) return null
 
+      // 组合签名用于去重（按 cloth_id 排序）
+      const signature = normalizedItems
+        .map((c) => c.cloth_id)
+        .filter(Boolean)
+        .sort()
+        .join('-')
+      if (seenSignatures.has(signature)) return null
+      seenSignatures.add(signature)
+
       const reason = suit.reason || suit.description || suit.desc || suit.message || `${source === 'rule' ? '规则' : '模型'}推荐`
       const cover =
         suit.cover ||
         suit.image ||
+        (Array.isArray(suit.items) ? suit.items.find((c) => c?.image)?.image : '') ||
         normalizedItems.find((c) => c.image)?.image ||
         ''
 
       return {
-        id: suit.id ?? index,
+        id: suit.id ?? signature,
         scene: suit.scene || suit.sceneName || safeScene,
         source,
         reason,
@@ -289,6 +300,8 @@ const sanitizeSuits = (rawSuits, closetMap, scene, source) => {
       }
     })
     .filter(Boolean)
+
+  return normalized.slice(0, MAX_SUITS)
 }
 
 // 生成场景套装
