@@ -146,8 +146,6 @@ export default function Match() {
         }
       })
 
-      setLoading(false)
-
       console.log('生成预览图响应:', res.data);
 
       // 检查响应是否成功
@@ -171,6 +169,8 @@ export default function Match() {
         content: '预览图生成失败，请重试',
         duration: 1000,
       });
+    } finally {
+      setLoading(false)
     }
   }
 
