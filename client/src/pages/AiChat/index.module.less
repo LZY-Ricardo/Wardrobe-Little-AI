@@ -485,7 +485,7 @@
 
   .chat-header {
     background: var(--nav-bg);
-    box-shadow: var(--shadow-header);
+    box-shadow: var(--shadow-header, 0 12px 28px -18px rgba(0,0,0,0.6));
     transition: background-color 0.3s ease, box-shadow 0.3s ease;
   }
 
@@ -494,25 +494,25 @@
   }
 
   .chat-container {
-    background-color: var(--bg-body);
+    background: var(--bg-body);
     color: var(--text-primary);
-  }
-
-  .chat-container .quick-prompts button {
-    background: var(--chip-bg);
-    border-color: var(--chip-border);
-    color: var(--text-secondary);
-    box-shadow: var(--shadow-elevated, 0 6px 16px rgba(0, 0, 0, 0.35));
-  }
-
-  .chat-container .hint {
-    color: var(--muted);
   }
 
   .chat-container .welcome-bot {
     background: var(--bg-surface);
-    box-shadow: var(--shadow-elevated, 0 8px 24px rgba(0, 0, 0, 0.35));
+    box-shadow: var(--shadow-elevated, 0 8px 24px rgba(0,0,0,0.45));
     color: var(--text-primary);
+  }
+
+  .chat-container .quick-prompts button {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-elevated, 0 6px 16px rgba(0,0,0,0.35));
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .chat-container .hint {
+    color: var(--muted);
   }
 
   .chat-container .bubble {
@@ -521,30 +521,27 @@
   }
 
   .chat-container .from-user .bubble {
-    background: linear-gradient(135deg, #7c8cff 0%, #5b87ff 100%);
+    background: linear-gradient(135deg, #7390ff 0%, #5c7dff 100%);
     color: #ffffff;
   }
 
   .chat-container .avatar {
-    background: var(--chip-bg);
-    color: var(--text-secondary);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
   }
 
   .chat-container .from-user .avatar {
-    background: linear-gradient(135deg, #7c8cff 0%, #5b87ff 100%);
+    background: linear-gradient(135deg, #7390ff 0%, #5c7dff 100%);
     color: #ffffff;
   }
 
   .chat-footer .footer-input {
     background-color: var(--nav-bg);
-    border-color: var(--border-subtle);
-    transition: background-color 0.3s ease, border-color 0.3s ease;
-    box-shadow: var(--shadow-elevated, 0 15px 40px rgba(0, 0, 0, 0.35));
+    box-shadow: var(--shadow-elevated, 0 15px 40px rgba(0, 0, 0, 0.55));
   }
 
   .chat-footer .footer-input input {
     background: transparent;
-    border-color: var(--chip-border);
     color: var(--text-primary);
   }
 
@@ -553,12 +550,12 @@
   }
 
   .chat-footer .footer-input .send-btn {
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
   }
 
   .chat-footer .stop-pill {
-    background: rgba(251, 191, 36, 0.14);
-    border: 1px solid rgba(251, 191, 36, 0.28);
+    background: rgba(251, 191, 36, 0.16);
+    border: 1px solid rgba(251, 191, 36, 0.32);
     color: var(--accent-strong);
   }
 }
