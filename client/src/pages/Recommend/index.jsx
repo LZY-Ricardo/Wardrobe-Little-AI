@@ -12,16 +12,32 @@ const loadImage = (src) => new Promise((resolve, reject) => {
   img.src = src
 })
 
-const drawContain = (ctx, img, x, y, w, h) => {
-  const scale = Math.min(w / img.width, h / img.height)
-  const dw = img.width * scale
-  const dh = img.height * scale
-  const dx = x + (w - dw) / 2
-  const dy = y + (h - dh) / 2
-  ctx.drawImage(img, dx, dy, dw, dh)
+const roundRect = (ctx, x, y, w, h, r) => {
+  const radius = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + radius, y)
+  ctx.lineTo(x + w - radius, y)
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius)
+  ctx.lineTo(x + w, y + h - radius)
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h)
+  ctx.lineTo(x + radius, y + h)
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius)
+  ctx.lineTo(x, y + radius)
+  ctx.quadraticCurveTo(x, y, x + radius, y)
+  ctx.closePath()
 }
 
-const createComposite = async (images) => {
+const pickPalette = (scene = '') => {
+  const hit = [
+    { key: ['约会', '恋爱'], bgFrom: '#ffe7f2', bgTo: '#ffd7ec', card: '#fff8fb', accent: '#ff8fb1' },
+    { key: ['商务', '通勤'], bgFrom: '#e7eeff', bgTo: '#dfe8ff', card: '#f7f9ff', accent: '#4f81ff' },
+    { key: ['运动', '健身'], bgFrom: '#e8fff4', bgTo: '#d1f7e6', card: '#f7fffb', accent: '#22c55e' },
+    { key: ['旅行', '度假'], bgFrom: '#e8f7ff', bgTo: '#d9f0ff', card: '#f7fcff', accent: '#38bdf8' },
+  ].find((p) => p.key.some((k) => scene.includes(k)))
+  return hit || { bgFrom: '#f5f5f5', bgTo: '#ededed', card: '#ffffff', accent: '#9ca3af' }
+}
+
+const createComposite = async (images, scene = '') => {
   if (!images.length) return ''
   const canvas = document.createElement('canvas')
   const width = 900
@@ -29,20 +45,60 @@ const createComposite = async (images) => {
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext('2d')
-  ctx.fillStyle = '#f5f5f5'
-  ctx.fillRect(0, 0, width, height)
 
+  const palette = pickPalette(scene)
+  const gradient = ctx.createLinearGradient(0, 0, width, height)
+  gradient.addColorStop(0, palette.bgFrom)
+  gradient.addColorStop(1, palette.bgTo)
+  ctx.fillStyle = gradient
+  roundRect(ctx, 0, 0, width, height, 36)
+  ctx.fill()
+
+  // 主卡片区域
   const layout = [
-    { x: 0, y: 0, w: width, h: Math.floor(height * 0.65) },
-    { x: 0, y: Math.floor(height * 0.65), w: Math.floor(width / 2), h: height - Math.floor(height * 0.65) },
-    { x: Math.floor(width / 2), y: Math.floor(height * 0.65), w: Math.floor(width / 2), h: height - Math.floor(height * 0.65) },
+    { x: 70, y: 50, w: 760, h: 520, rotate: 0 },
+    { x: 70, y: 600, w: 360, h: 240, rotate: -4 },
+    { x: 470, y: 600, w: 360, h: 240, rotate: 4 },
   ]
 
   const imgs = await Promise.all(images.map((url) => loadImage(url)))
   imgs.slice(0, 3).forEach((img, idx) => {
     const cell = layout[idx] || layout[layout.length - 1]
-    drawContain(ctx, img, cell.x, cell.y, cell.w, cell.h)
+    ctx.save()
+    ctx.translate(cell.x + cell.w / 2, cell.y + cell.h / 2)
+    ctx.rotate((cell.rotate * Math.PI) / 180)
+    ctx.translate(-(cell.x + cell.w / 2), -(cell.y + cell.h / 2))
+
+    // 卡片底
+    ctx.fillStyle = palette.card
+    ctx.shadowColor = 'rgba(0,0,0,0.12)'
+    ctx.shadowBlur = 18
+    ctx.shadowOffsetY = 8
+    roundRect(ctx, cell.x, cell.y, cell.w, cell.h, 24)
+    ctx.fill()
+
+    // 图片
+    const scale = Math.min((cell.w - 30) / img.width, (cell.h - 30) / img.height)
+    const dw = img.width * scale
+    const dh = img.height * scale
+    const dx = cell.x + (cell.w - dw) / 2
+    const dy = cell.y + (cell.h - dh) / 2
+    ctx.shadowColor = 'rgba(0,0,0,0.08)'
+    ctx.shadowBlur = 10
+    ctx.shadowOffsetY = 6
+    roundRect(ctx, dx, dy, dw, dh, 18)
+    ctx.clip()
+    ctx.drawImage(img, dx, dy, dw, dh)
+    ctx.restore()
   })
+
+  // 底部装饰条
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0)'
+  ctx.fillStyle = palette.accent
+  roundRect(ctx, width - 170, height - 70, 120, 20, 10)
+  ctx.fill()
+  ctx.restore()
 
   return canvas.toDataURL('image/png')
 }
@@ -58,7 +114,7 @@ const attachCompositeCover = async (suits = []) => {
       ).slice(0, 3)
       if (!images.length) return suit
       try {
-        const composite = await createComposite(images)
+        const composite = await createComposite(images, suit.scene)
         if (composite) {
           return { ...suit, cover: composite }
         }
