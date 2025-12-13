@@ -1,7 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Overlay, Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
-import { HeartFill, HeartOutline } from 'antd-mobile-icons'
+import { HeartFill, HeartOutline, FilterOutline } from 'antd-mobile-icons'
 import { useNavigate } from 'react-router-dom'
 import SvgIcon from '@/components/SvgIcon'
 import white from '@/assets/white.jpg'
@@ -20,28 +20,16 @@ const FILTER_OPTIONS = {
 
 const PAGE_SIZE = 12
 
-const generateRandomColor = () => {
-  const colors = [
-    { bg: '#FFE4E1', text: '#8B0000' },
-    { bg: '#E6F3FF', text: '#0066CC' },
-    { bg: '#F0FFF0', text: '#006400' },
-    { bg: '#FFF8DC', text: '#B8860B' },
-    { bg: '#F5F0FF', text: '#6A0DAD' },
-    { bg: '#FFE4B5', text: '#FF8C00' },
-  ]
-  return colors[Math.floor(Math.random() * colors.length)]
-}
-
 const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
 
 export default function Outfit() {
   const navigate = useNavigate()
   const [selectedItem, setSelectedItem] = useState(null)
   const [visible, setVisible] = useState(false)
-  const [itemColors, setItemColors] = useState({})
   const [searchKeyword, setSearchKeyword] = useState('')
   const debouncedSearch = useDebouncedValue(searchKeyword, 300)
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   const {
     items,
@@ -96,17 +84,6 @@ export default function Outfit() {
   const pagedList = useMemo(() => filteredClothes.slice(0, page * PAGE_SIZE), [filteredClothes, page])
 
   useEffect(() => {
-    if (filteredClothes.length > 0) {
-      const colors = {}
-      filteredClothes.forEach((_, index) => {
-        colors[index] = {
-          name: generateRandomColor(),
-          style: generateRandomColor(),
-          season: generateRandomColor(),
-        }
-      })
-      setItemColors(colors)
-    }
     setHasMore(filteredClothes.length > page * PAGE_SIZE)
   }, [filteredClothes, page, setHasMore])
 
@@ -180,66 +157,60 @@ export default function Outfit() {
     if (pagedList.length === 0) return <Empty description="暂无符合条件的衣物" />
 
     return (
-      <div className={styles.clothes}>
-        {pagedList.map((item, index) => (
-          <div
-            key={`${item.cloth_id || index}`}
-            className={styles['clothes-item']}
-            onClick={() => {
-              setSelectedItem(item)
-              setVisible(true)
-            }}
-          >
-            <button
-              type="button"
-              className={styles['favorite-btn']}
-              disabled={Boolean(favoriteUpdating[item.cloth_id])}
-              aria-label={isFavorited(item.favorite) ? '取消收藏' : '收藏'}
-              onClick={(e) => {
-                e.stopPropagation()
-                void toggleFavorite(item)
-              }}
-            >
-              {isFavorited(item.favorite) ? (
-                <HeartFill className={`${styles['favorite-icon']} ${styles['favorite-icon-active']}`} />
-              ) : (
-                <HeartOutline className={styles['favorite-icon']} />
-              )}
-            </button>
-            <div className={styles['clothes-img']}>
-              <img src={item.image || white} alt={item.name} />
-            </div>
-            <div className={styles.label}>
+      <div className={styles['clothes-wrap']}>
+        <div className={styles.clothes}>
+          {pagedList.map((item, index) => {
+            const tags = []
+            if (item.type) tags.push(item.type)
+            if (item.style) tags.push(item.style)
+            if (item.season) tags.push(item.season)
+            if (tags.length < 3 && item.color) tags.push(item.color)
+            const displayTags = tags.filter(Boolean).slice(0, 3)
+
+            return (
               <div
-                className={styles['label-item']}
-                style={{
-                  backgroundColor: itemColors[index]?.name?.bg || '#f5f5f5',
-                  color: itemColors[index]?.name?.text || '#333',
+                key={`${item.cloth_id || index}`}
+                className={styles['clothes-item']}
+                onClick={() => {
+                  setSelectedItem(item)
+                  setVisible(true)
                 }}
               >
-                {item.name}
+                <button
+                  type="button"
+                  className={styles['favorite-btn']}
+                  disabled={Boolean(favoriteUpdating[item.cloth_id])}
+                  aria-label={isFavorited(item.favorite) ? '取消收藏' : '收藏'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    void toggleFavorite(item)
+                  }}
+                >
+                  {isFavorited(item.favorite) ? (
+                    <HeartFill className={`${styles['favorite-icon']} ${styles['favorite-icon-active']}`} />
+                  ) : (
+                    <HeartOutline className={styles['favorite-icon']} />
+                  )}
+                </button>
+                <div className={styles['clothes-img']}>
+                  <img src={item.image || white} alt={item.name} />
+                </div>
+                <div className={styles.label}>
+                  <div className={styles['label-title']} title={item.name || ''}>
+                    {item.name || '未命名'}
+                  </div>
+                  <div className={styles['label-tags']}>
+                    {displayTags.map((tag, tagIndex) => (
+                      <span key={`${tag}-${tagIndex}`} className={styles['label-item']}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div
-                className={styles['label-item']}
-                style={{
-                  backgroundColor: itemColors[index]?.style?.bg || '#f5f5f5',
-                  color: itemColors[index]?.style?.text || '#333',
-                }}
-              >
-                {item.style}
-              </div>
-              <div
-                className={styles['label-item']}
-                style={{
-                  backgroundColor: itemColors[index]?.season?.bg || '#f5f5f5',
-                  color: itemColors[index]?.season?.text || '#333',
-                }}
-              >
-                {item.season}
-              </div>
-            </div>
-          </div>
-        ))}
+            )
+          })}
+        </div>
 
         {hasMore ? (
           <button type="button" className={styles['load-more']} onClick={handleLoadMore}>
@@ -272,50 +243,86 @@ export default function Outfit() {
 
       <div className={styles.container}>
         <div className={styles.select}>
-          <div className={styles['select-type']}>
-            {FILTER_OPTIONS.type.map((type) => (
-              <div
-                key={type}
-                className={`${styles['type-item']} ${type === filters.type ? styles['type-item-active'] : ''}`}
-                onClick={() => handleFilterClick('type', type)}
-              >
-                {type}
-              </div>
-            ))}
+          <div className={styles['select-top']}>
+            <div className={styles['select-type']}>
+              {FILTER_OPTIONS.type.map((type) => (
+                <div
+                  key={type}
+                  className={`${styles['type-item']} ${type === filters.type ? styles['type-item-active'] : ''}`}
+                  onClick={() => handleFilterClick('type', type)}
+                >
+                  {type}
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className={`${styles['filters-toggle']} ${
+                filtersExpanded || filters.color !== '全部' || filters.season !== '全部' || filters.style !== '全部'
+                  ? styles['filters-toggle-active']
+                  : ''
+              }`}
+              aria-label="筛选"
+              onClick={() => setFiltersExpanded((prev) => !prev)}
+            >
+              <FilterOutline className={styles['filters-toggle-icon']} />
+              {filters.color !== '全部' || filters.season !== '全部' || filters.style !== '全部' ? (
+                <span className={styles['filters-dot']} />
+              ) : null}
+            </button>
           </div>
-          <div className={styles['select-color']}>
-            {FILTER_OPTIONS.color.map((color) => (
-              <div
-                key={color}
-                className={`${styles['color-item']} ${color === filters.color ? styles['color-item-active'] : ''}`}
-                onClick={() => handleFilterClick('color', color)}
-              >
-                {color}
+
+          {filtersExpanded ? (
+            <div className={styles['select-more']}>
+              <div className={styles['select-row']}>
+                <div className={styles['select-row-label']}>颜色</div>
+                <div className={styles['select-color']}>
+                  {FILTER_OPTIONS.color.map((color) => (
+                    <div
+                      key={color}
+                      className={`${styles['color-item']} ${color === filters.color ? styles['color-item-active'] : ''}`}
+                      onClick={() => handleFilterClick('color', color)}
+                    >
+                      {color}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-          <div className={styles['select-season']}>
-            {FILTER_OPTIONS.season.map((season) => (
-              <div
-                key={season}
-                className={`${styles['season-item']} ${season === filters.season ? styles['season-item-active'] : ''}`}
-                onClick={() => handleFilterClick('season', season)}
-              >
-                {season}
+
+              <div className={styles['select-row']}>
+                <div className={styles['select-row-label']}>季节</div>
+                <div className={styles['select-season']}>
+                  {FILTER_OPTIONS.season.map((season) => (
+                    <div
+                      key={season}
+                      className={`${styles['season-item']} ${
+                        season === filters.season ? styles['season-item-active'] : ''
+                      }`}
+                      onClick={() => handleFilterClick('season', season)}
+                    >
+                      {season}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
-          <div className={styles['select-style']}>
-            {FILTER_OPTIONS.style.map((style) => (
-              <div
-                key={style}
-                className={`${styles['style-item']} ${style === filters.style ? styles['style-item-active'] : ''}`}
-                onClick={() => handleFilterClick('style', style)}
-              >
-                {style}
+
+              <div className={styles['select-row']}>
+                <div className={styles['select-row-label']}>场景</div>
+                <div className={styles['select-style']}>
+                  {FILTER_OPTIONS.style.map((style) => (
+                    <div
+                      key={style}
+                      className={`${styles['style-item']} ${style === filters.style ? styles['style-item-active'] : ''}`}
+                      onClick={() => handleFilterClick('style', style)}
+                    >
+                      {style}
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ) : null}
         </div>
 
         {renderContent()}

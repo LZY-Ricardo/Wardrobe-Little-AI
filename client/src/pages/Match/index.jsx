@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import styles from './index.module.less'
 import test from '@/assets/test.jpg'
-import SvgIcon from '@/components/SvgIcon'
 import { Overlay, Loading } from 'react-vant';
 import axios from '@/api'
 import { useNavigate } from 'react-router-dom'
@@ -39,6 +38,15 @@ export default function Match() {
   const [loading, setLoading] = useState(false) // 加载中
   const sex = userInfo?.sex || ''
   const characterModel = userInfo?.characterModel || ''
+  const hasInstantLook = Boolean(topClothes?.image) && Boolean(bottomClothes?.image)
+  const stageHint =
+    !topClothes && !bottomClothes
+      ? '点击上方衣物，即刻预览搭配效果'
+      : topClothes && !bottomClothes
+        ? '已选上衣，再点选一件下衣，即刻预览搭配效果'
+        : !topClothes && bottomClothes
+          ? '已选下衣，再点选一件上衣，即刻预览搭配效果'
+          : '搭配已就绪，点击下方按钮生成预览图'
 
   const fetchUserInfo = useCallback(async () => {
     setUserLoading(true)
@@ -208,6 +216,9 @@ export default function Match() {
       <div className={styles['match-content']}>
         <div className={styles['match-content-title']}>
           <div
+            className={`${styles['match-content-title-indicator']} ${activeTab === 'bottom' ? styles['match-content-title-indicator-bottom'] : ''}`}
+          />
+          <div
             className={`${styles['match-content-title-left']} ${activeTab === 'top' ? styles['active'] : styles['inactive']}`}
             onClick={() => { setActiveTab('top'), setSelectedShow('上衣') }}
           >
@@ -228,7 +239,11 @@ export default function Match() {
                   <div
                     className={`${styles['match-content-material-display-item']} ${topClothes === item ? styles['active'] : ''}`}
                     key={index}
-                    onClick={() => setTopClothes(item)}
+                    onClick={() => {
+                      setTopClothes(item)
+                      setShowPreview(false)
+                      setPreviewImageUrl('')
+                    }}
                   >
                     <div className={styles['match-content-material-display-item-img']}>
                       <img src={item.image} alt='' />
@@ -243,7 +258,11 @@ export default function Match() {
                   <div
                     className={`${styles['match-content-material-display-item']} ${bottomClothes === item ? styles['active'] : ''}`}
                     key={index}
-                    onClick={() => setBottomClothes(item)}
+                    onClick={() => {
+                      setBottomClothes(item)
+                      setShowPreview(false)
+                      setPreviewImageUrl('')
+                    }}
                   >
                     <div className={styles['match-content-material-display-item-img']}>
                       <img src={item.image} alt='' />
@@ -256,10 +275,6 @@ export default function Match() {
                 )
               )
             }
-          </div>
-          <div className={styles['match-content-material-prompt']}>
-            <span className={styles['prompt-icon']}>→</span>
-            <span>向右滑动查看更多</span>
           </div>
         </div>
         <div className={styles['match-content-show']}>
@@ -274,13 +289,153 @@ export default function Match() {
                 </div>
               </div>
             ) : (
-              <div className={styles['empty-state']}>
-                <div className={styles['empty-icon']}>
-                  <SvgIcon iconName='icon-tubiao-' />
+              <div className={styles['stage']}>
+                <div className={styles['stage-header']}>
+                  <div className={styles['stage-title']}>搭配预览</div>
+                  <div className={styles['stage-subtitle']}>{stageHint}</div>
                 </div>
-                <div className={styles['empty-text']}>
-                  选中上方衣物开始搭配
+
+                {hasInstantLook ? (
+                  <div className={styles['stage-look']}>
+                    <div className={styles['stage-look-canvas']}>
+                      <div className={styles['stage-look-badge']}>实时拼贴</div>
+                      <div className={styles['stage-look-top']}>
+                        <img
+                          src={topClothes.image}
+                          alt={topClothes.name || '上衣'}
+                          onError={(e) => {
+                            e.target.src = test
+                          }}
+                        />
+                      </div>
+                      <div className={styles['stage-look-divider']} />
+                      <div className={styles['stage-look-bottom']}>
+                        <img
+                          src={bottomClothes.image}
+                          alt={bottomClothes.name || '下衣'}
+                          onError={(e) => {
+                            e.target.src = test
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className={styles['stage-look-names']}>
+                      <span className={styles['stage-look-chip']}>{topClothes.name || '上衣'}</span>
+                      <span className={styles['stage-look-plus']}>+</span>
+                      <span className={styles['stage-look-chip']}>{bottomClothes.name || '下衣'}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles['stage-slots']}>
+                  <div className={`${styles['stage-slot']} ${topClothes ? styles['stage-slot-active'] : ''}`}>
+                    <div className={styles['stage-slot-image']}>
+                      {topClothes?.image ? (
+                        <img
+                          src={topClothes.image}
+                          alt={topClothes.name || '上衣'}
+                          onError={(e) => {
+                            e.target.src = test
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className={styles['stage-slot-placeholder']}
+                        >
+                          <svg
+                            className={styles['stage-slot-placeholder-icon']}
+                            viewBox="0 0 64 64"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M32 14c4 0 7 3 7 7 0 2-1 4-3 6l-4 4"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M14 44l18-12 18 12"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M14 44h36"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className={`${styles['stage-slot-title']} ${topClothes ? '' : styles['stage-slot-title-muted']}`}
+                    >
+                      {topClothes?.name || '上衣'}
+                    </div>
+                  </div>
+
+                  <div className={`${styles['stage-slot']} ${bottomClothes ? styles['stage-slot-active'] : ''}`}>
+                    <div className={styles['stage-slot-image']}>
+                      {bottomClothes?.image ? (
+                        <img
+                          src={bottomClothes.image}
+                          alt={bottomClothes.name || '下衣'}
+                          onError={(e) => {
+                            e.target.src = test
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className={styles['stage-slot-placeholder']}
+                        >
+                          <svg
+                            className={styles['stage-slot-placeholder-icon']}
+                            viewBox="0 0 64 64"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                            aria-hidden="true"
+                          >
+                            <path
+                              d="M18 20h28"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M24 20v26c0 2 2 4 4 4h8c2 0 4-2 4-4V20"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <path
+                              d="M32 20v30"
+                              stroke="currentColor"
+                              strokeWidth="2.6"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    <div
+                      className={`${styles['stage-slot-title']} ${
+                        bottomClothes ? '' : styles['stage-slot-title-muted']
+                      }`}
+                    >
+                      {bottomClothes?.name || '下衣'}
+                    </div>
+                  </div>
                 </div>
+                )}
               </div>
             )
           }

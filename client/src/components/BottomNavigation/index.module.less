@@ -8,6 +8,18 @@
     box-shadow: var(--nav-shadow);
     transition: background-color 0.3s ease, box-shadow 0.3s ease;
 
+    &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: -24px;
+        height: 24px;
+        background: var(--nav-bg);
+        pointer-events: none;
+        z-index: 0;
+    }
+
     :global(.adm-tab-bar) {
         position: relative;
         z-index: 2;

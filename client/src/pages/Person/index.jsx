@@ -1,14 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react'
+﻿import React, { useCallback, useEffect, useRef, useState } from 'react'
 import styles from './index.module.less'
 import { useNavigate } from 'react-router-dom'
 import { Dialog, Popup } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
+import { useAuthStore } from '@/store'
+import { Loading, ErrorBanner } from '@/components/Feedback'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 export default function Person() {
   const navigate = useNavigate()
+  const clearTokens = useAuthStore((s) => s.clearTokens)
+  const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
   const avatarInputRef = useRef(null)
   const fileInputRef = useRef(null) // 图片上传input
   const [uploadedImage, setUploadedImage] = useState(null) // 展示预览图片
@@ -23,24 +27,33 @@ export default function Person() {
   const [newPassword, setNewPassword] = useState('') // 新密码
   const [confirmPassword, setConfirmPassword] = useState('') // 确认新密码
   const [avatar, setAvatar] = useState('') // 头像
+  const [userLoading, setUserLoading] = useState(true)
+  const [userError, setUserError] = useState('')
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const [nameSaving, setNameSaving] = useState(false)
+  const [sexSaving, setSexSaving] = useState(false)
+  const [passwordSaving, setPasswordSaving] = useState(false)
 
 
   // 获取用户所有信息
-  const getUserInfo = async () => {
+  const getUserInfo = useCallback(async () => {
+    setUserError('')
+    setUserLoading(true)
     try {
       const res = await axios.get('/user/getUserInfo')
-      console.log('获取用户信息成功:', res);
-      setUserInfo(res.data)
-      setAvatar(res.data?.avatar ? `${API_BASE_URL}${res.data.avatar}` : '')
-      setSex(res.data.sex || '') // 设置性别状态
+      const data = res?.data || {}
+      setUserInfo(data)
+      setAvatar(data?.avatar ? `${API_BASE_URL}${data.avatar}` : '')
+      setSex(data.sex || '') // 设置性别状态
       const persistedUserInfo = {
-        username: res.data.username,
-        id: res.data.id,
-        createTime: res.data.createTime || res.data.create_time,
-        sex: res.data.sex,
-        avatar: res.data.avatar,
-        hasCharacterModel: Boolean(res.data.characterModel),
+        username: data.username,
+        id: data.id,
+        createTime: data.createTime || data.create_time,
+        sex: data.sex,
+        avatar: data.avatar,
+        hasCharacterModel: Boolean(data.characterModel),
       }
+      setAuthUserInfo(persistedUserInfo)
       const value = JSON.stringify(persistedUserInfo)
       try {
         localStorage.setItem('userInfo', value)
@@ -53,33 +66,37 @@ export default function Person() {
         }
       }
     } catch (error) {
-      console.error('获取用户信息失败:', error);
+      console.error('获取用户信息失败:', error)
+      setUserError(error?.msg || '获取用户信息失败，请重试')
+    } finally {
+      setUserLoading(false)
     }
-  }
+  }, [setAuthUserInfo])
 
   // 退出登录
   const handleLogout = () => {
-    // 清除本地存储的用户信息
+    clearTokens()
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('userInfo')
-    // 跳转到登录页面
-    navigate('/login')
+    navigate('/login', { replace: true })
   }
 
   // 上传图片Input框的触发点击函数
   const handleAvatarClick = () => {
+    if (userLoading || avatarUploading) return
     avatarInputRef.current?.click()
   }
 
   const handleAvatarChange = async (event) => {
+    if (avatarUploading) return
     const file = event.target.files?.[0]
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
       Toast.show({
         icon: 'fail',
-        content: '\u8bf7\u9009\u62e9\u56fe\u7247\u6587\u4ef6',
+        content: '请选择图片文件',
         duration: 1000,
       })
       if (avatarInputRef.current) avatarInputRef.current.value = ''
@@ -89,12 +106,14 @@ export default function Person() {
     if (file.size > 2 * 1024 * 1024) {
       Toast.show({
         icon: 'fail',
-        content: '\u5934\u50cf\u56fe\u7247\u4e0d\u80fd\u8d85\u8fc72MB',
+        content: '头像图片不能超过2MB',
         duration: 1200,
       })
       if (avatarInputRef.current) avatarInputRef.current.value = ''
       return
     }
+
+    setAvatarUploading(true)
 
     const reader = new FileReader()
     reader.onload = async (e) => {
@@ -112,7 +131,7 @@ export default function Person() {
 
         Toast.show({
           icon: 'success',
-          content: '\u5934\u50cf\u4e0a\u4f20\u6210\u529f',
+          content: '头像上传成功',
           duration: 1200,
         })
         getUserInfo()
@@ -120,10 +139,11 @@ export default function Person() {
         console.error('upload avatar failed:', error)
         Toast.show({
           icon: 'fail',
-          content: '\u5934\u50cf\u4e0a\u4f20\u5931\u8d25',
+          content: '头像上传失败',
           duration: 1200,
         })
       } finally {
+        setAvatarUploading(false)
         if (avatarInputRef.current) avatarInputRef.current.value = ''
       }
     }
@@ -131,9 +151,10 @@ export default function Person() {
     reader.onerror = () => {
       Toast.show({
         icon: 'fail',
-        content: '\u6587\u4ef6\u8bfb\u53d6\u5931\u8d25',
+        content: '文件读取失败',
         duration: 1200,
       })
+      setAvatarUploading(false)
       if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
 
@@ -141,6 +162,7 @@ export default function Person() {
   }
 
   const handleUploadClick = () => {
+    if (userLoading || uploading) return
     fileInputRef.current?.click()
   }
 
@@ -155,12 +177,14 @@ export default function Person() {
 
   // 开始编辑昵称
   const handleEditName = () => {
+    if (userLoading) return
     setEditName(userInfo.name || '')
     setIsEditingName(true)
   }
 
   // 保存昵称
   const handleSaveName = async () => {
+    if (nameSaving) return
     if (!editName.trim()) {
       Toast.show({
         icon: 'error',
@@ -170,11 +194,11 @@ export default function Person() {
       return
     }
 
+    setNameSaving(true)
     try {
-      const res = await axios.put('/user/updateUserName', {
-        name: editName.trim()
+      await axios.put('/user/updateUserName', {
+        name: editName.trim(),
       })
-      console.log('修改昵称成功:', res);
       setUserInfo({ ...userInfo, name: editName.trim() })
       setIsEditingName(false)
       Toast.show({
@@ -190,11 +214,14 @@ export default function Person() {
         content: '修改失败，请重试',
         duration: 2000,
       })
+    } finally {
+      setNameSaving(false)
     }
   }
 
   // 取消编辑昵称
   const handleCancelEdit = () => {
+    if (nameSaving) return
     setIsEditingName(false)
     setEditName('')
   }
@@ -209,9 +236,12 @@ export default function Person() {
       Toast.show({
         icon: 'fail',
         content: '请选择图片文件',
-        duration: 1000
-      });
-      return;
+        duration: 1000,
+      })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
     }
 
     // 验证文件大小（限制为5MB）
@@ -221,6 +251,9 @@ export default function Person() {
         content: '图片大小不能超过5MB',
         duration: 2000,
       })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
       return
     }
 
@@ -230,6 +263,9 @@ export default function Person() {
         content: '图片大小不能小于100KB',
         duration: 2000,
       })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
       return
     }
 
@@ -257,6 +293,7 @@ export default function Person() {
             content: '上传成功',
             duration: 2000,
           })
+          getUserInfo()
 
           // 清空文件input的值，允许重复上传
           if (fileInputRef.current) {
@@ -314,14 +351,17 @@ export default function Person() {
 
   // 修改性别
   const handleSexChange = async (newSex) => {
+    if (sexSaving) return
+    const prevSex = sex
     setSex(newSex)
     setSexVisible(false)
-    
+    setSexSaving(true)
+
     try {
       const res = await axios.put('/user/updateSex', {
-        sex: newSex
+        sex: newSex,
       })
-      console.log('修改性别成功:', res);
+      console.log('修改性别成功:', res)
       Toast.show({
         icon: 'success',
         content: `性别成功修改为${newSex === 'man' ? '男' : '女'}`,
@@ -329,17 +369,28 @@ export default function Person() {
       })
       getUserInfo()
     } catch (error) {
-      console.error('修改性别失败:', error);
+      console.error('修改性别失败:', error)
+      setSex(prevSex)
       Toast.show({
         icon: 'error',
         content: '修改性别失败',
         duration: 2000,
       })
+    } finally {
+      setSexSaving(false)
     }
+  }
+
+  const closePasswordPopup = () => {
+    setPasswordVisible(false)
+    setOldPassword('')
+    setNewPassword('')
+    setConfirmPassword('')
   }
 
   // 修改密码
   const handlePasswordChange = async () => {
+    if (passwordSaving) return
     if (!oldPassword || !newPassword || !confirmPassword) {
       Toast.show({
         icon: 'fail',
@@ -356,38 +407,51 @@ export default function Person() {
       })
       return
     }
+
+    setPasswordSaving(true)
     try {
       const res = await axios.put('/user/updatePassword', {
         oldPassword,
         newPassword,
       })
-      console.log('修改密码成功:', res);
+      console.log('修改密码成功:', res)
       Toast.show({
         icon: 'success',
         content: '密码修改成功',
         duration: 2000,
       })
-      setOldPassword('')
-      setNewPassword('')
-      setConfirmPassword('')
-      setPasswordVisible(false)
+      closePasswordPopup()
       getUserInfo()
     } catch (error) {
-      console.error('修改密码失败:', error);
+      console.error('修改密码失败:', error)
       Toast.show({
         icon: 'fail',
         content: '修改密码失败，请检查您的密码是否正确',
         duration: 2000,
       })
+    } finally {
+      setPasswordSaving(false)
     }
   }
 
   useEffect(() => {
+    return () => {
+      if (uploadedImage && uploadedImage.startsWith('blob:')) {
+        URL.revokeObjectURL(uploadedImage)
+      }
+    }
+  }, [uploadedImage])
+
+  useEffect(() => {
     getUserInfo()
-  }, [])
+  }, [getUserInfo])
 
   return (
     <div className={styles.person}>
+      {userError ? (
+        <ErrorBanner message={userError} actionText="重试" onAction={getUserInfo} />
+      ) : null}
+      {userLoading && !userInfo?.id ? <Loading text="正在获取用户信息..." /> : null}
       {/* 用户信息区域 */}
       <div className={styles.userInfo}>
         <div className={styles.avatar} onClick={handleAvatarClick}>
@@ -477,7 +541,7 @@ export default function Person() {
             position='bottom'
             title='修改密码'
             round
-            onClose={() => setPasswordVisible(false)}
+            onClose={() => { if (passwordSaving) return; closePasswordPopup() }}
           >
             <div className={styles.passwordInput}>
               <input
@@ -498,7 +562,7 @@ export default function Person() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
               />
-              <button onClick={handlePasswordChange}>确认修改</button>
+              <button onClick={handlePasswordChange} disabled={passwordSaving}>{passwordSaving ? '修改中...' : '确认修改'}</button>
             </div>
           </Popup>
           <div className={styles.menuLeft}>
@@ -575,3 +639,11 @@ export default function Person() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
