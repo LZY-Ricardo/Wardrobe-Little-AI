@@ -1,12 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import styles from './index.module.less'
-import test from '@/assets/test.jpg'
-import { Overlay, Loading } from 'react-vant';
-import axios from '@/api'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { Loading } from 'react-vant'
+import { Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
-import { Toast } from 'antd-mobile';
+
+import axios from '@/api'
+import test from '@/assets/test.jpg'
 import { useAuthStore } from '@/store'
 
+import styles from './index.module.less'
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 const safeParseUserInfo = () => {
   const raw = localStorage.getItem('userInfo')
@@ -26,19 +29,38 @@ export default function Match() {
   const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
   const [activeTab, setActiveTab] = useState('top') // 'top' 为上衣，'bottom' 为下衣
   const [showPreview, setShowPreview] = useState(false) // 是否展示预览图
-  const [visible, setVisible] = useState(false); // 是否显示遮罩层
-  const [topClothes, setTopClothes] = useState(null); // 上衣
-  const [bottomClothes, setBottomClothes] = useState(null); // 下衣
-  const [topClothesData, setTopClothesData] = useState([]); // 上衣数据
-  const [bottomClothesData, setBottomClothesData] = useState([]); // 下衣数据
-  const [selectedShow, setSelectedShow] = useState('上衣')
-  const [previewImageUrl, setPreviewImageUrl] = useState(''); // 预览图URL
+  const [topClothes, setTopClothes] = useState(null) // 上衣
+  const [bottomClothes, setBottomClothes] = useState(null) // 下衣
+  const [topClothesData, setTopClothesData] = useState([]) // 上衣数据
+  const [bottomClothesData, setBottomClothesData] = useState([]) // 下衣数据
+  const [previewImageUrl, setPreviewImageUrl] = useState('') // 预览图URL
   const [userInfo, setUserInfo] = useState(() => authUserInfo || safeParseUserInfo())
   const [userLoading, setUserLoading] = useState(false)
   const [loading, setLoading] = useState(false) // 加载中
   const sex = userInfo?.sex || ''
-  const characterModel = userInfo?.characterModel || ''
+  const characterModelRaw = userInfo?.characterModel || ''
+  const characterModel =
+    typeof characterModelRaw === 'string' && characterModelRaw.startsWith('/')
+      ? `${API_BASE_URL}${characterModelRaw}`
+      : characterModelRaw
   const hasInstantLook = Boolean(topClothes?.image) && Boolean(bottomClothes?.image)
+  const materialScrollRef = useRef(null)
+
+  const clearPreview = () => {
+    setShowPreview(false)
+    setPreviewImageUrl('')
+  }
+
+  const handleTabChange = (nextTab) => {
+    if (nextTab === activeTab) return
+    if (materialScrollRef.current) materialScrollRef.current.scrollLeft = 0
+    setActiveTab(nextTab)
+  }
+
+  useEffect(() => {
+    if (!materialScrollRef.current) return
+    materialScrollRef.current.scrollLeft = 0
+  }, [activeTab])
   const stageHint =
     !topClothes && !bottomClothes
       ? '点击上方衣物，即刻预览搭配效果'
@@ -99,14 +121,19 @@ export default function Match() {
 
 
   // 获取衣服数据
-  const getClothesData = async () => {
-    const resTop = await axios.get('/clothes/TopClothes')
-    console.log(resTop.data);
-    setTopClothesData(resTop.data)
-    const resBot = await axios.get('/clothes/BotClothes')
-    console.log(resBot.data);
-    setBottomClothesData(resBot.data)
-  }
+  const getClothesData = useCallback(async () => {
+    try {
+      const [resTop, resBot] = await Promise.all([
+        axios.get('/clothes/TopClothes'),
+        axios.get('/clothes/BotClothes'),
+      ])
+      setTopClothesData(resTop?.data || [])
+      setBottomClothesData(resBot?.data || [])
+    } catch (err) {
+      console.error('获取衣物失败:', err)
+      Toast.show({ content: '获取衣物失败，请稍后重试', duration: 1200 })
+    }
+  }, [])
 
   // 生成预览图
   const handleGenerate = async () => {
@@ -195,8 +222,8 @@ export default function Match() {
 
 
   useEffect(() => {
-    getClothesData()
-  }, [])
+    void getClothesData()
+  }, [getClothesData])
 
 
   return (
@@ -219,34 +246,43 @@ export default function Match() {
             className={`${styles['match-content-title-indicator']} ${activeTab === 'bottom' ? styles['match-content-title-indicator-bottom'] : ''}`}
           />
           <div
-            className={`${styles['match-content-title-left']} ${activeTab === 'top' ? styles['active'] : styles['inactive']}`}
-            onClick={() => { setActiveTab('top'), setSelectedShow('上衣') }}
+            className={`${styles['match-content-title-left']} ${
+              activeTab === 'top' ? styles.active : styles.inactive
+            }`}
+            onClick={() => handleTabChange('top')}
           >
             上衣
           </div>
           <div
-            className={`${styles['match-content-title-right']} ${activeTab === 'bottom' ? styles['active'] : styles['inactive']}`}
-            onClick={() => { setActiveTab('bottom'), setSelectedShow('下衣') }}
+            className={`${styles['match-content-title-right']} ${
+              activeTab === 'bottom' ? styles.active : styles.inactive
+            }`}
+            onClick={() => handleTabChange('bottom')}
           >
             下衣
           </div>
         </div>
         <div className={styles['match-content-material']}>
-          <div className={styles['match-content-material-display']}>
+          <div className={styles['match-content-material-display']} ref={materialScrollRef}>
             {
-              selectedShow === '上衣' ? (
+              activeTab === 'top' ? (
                 topClothesData.map((item, index) => (
                   <div
                     className={`${styles['match-content-material-display-item']} ${topClothes === item ? styles['active'] : ''}`}
                     key={index}
                     onClick={() => {
                       setTopClothes(item)
-                      setShowPreview(false)
-                      setPreviewImageUrl('')
+                      clearPreview()
                     }}
                   >
                     <div className={styles['match-content-material-display-item-img']}>
-                      <img src={item.image} alt='' />
+                      <img
+                        src={item?.image || test}
+                        alt={item?.name || '上衣'}
+                        onError={(e) => {
+                          e.currentTarget.src = test
+                        }}
+                      />
                     </div>
                     <div className={styles['match-content-material-display-item-name']}>
                       {item.name}
@@ -260,12 +296,17 @@ export default function Match() {
                     key={index}
                     onClick={() => {
                       setBottomClothes(item)
-                      setShowPreview(false)
-                      setPreviewImageUrl('')
+                      clearPreview()
                     }}
                   >
                     <div className={styles['match-content-material-display-item-img']}>
-                      <img src={item.image} alt='' />
+                      <img
+                        src={item?.image || test}
+                        alt={item?.name || '下衣'}
+                        onError={(e) => {
+                          e.currentTarget.src = test
+                        }}
+                      />
                     </div>
                     <div className={styles['match-content-material-display-item-name']}>
                       {item.name}
@@ -282,10 +323,14 @@ export default function Match() {
             showPreview && previewImageUrl ? (
               <div className={styles['preview']}>
                 <div className={styles['preview-img']}>
-                  <img src={previewImageUrl} alt='预览图' onError={(e) => {
-                    console.error('图片加载失败:', previewImageUrl);
-                    e.target.src = test; // 加载失败时使用默认图片
-                  }} />
+                  <img
+                    src={previewImageUrl}
+                    alt="预览图"
+                    onError={(e) => {
+                      console.error('图片加载失败:', previewImageUrl)
+                      e.currentTarget.src = test
+                    }}
+                  />
                 </div>
               </div>
             ) : (
@@ -443,32 +488,30 @@ export default function Match() {
 
         <div className={styles['match-content-actions']}>
           <div className={styles['match-content-delete']}>
-            <button className={styles['delete-btn']} onClick={() => {
-              setShowPreview(false);
-              setPreviewImageUrl('');
-              setTopClothes(null);
-              setBottomClothes(null);
-              Toast.show({
-                content: '已清空选择',
-                duration: 1000,
-              });
-            }}>清空</button>
+            <button
+              type="button"
+              className={styles['delete-btn']}
+              onClick={() => {
+                clearPreview()
+                setTopClothes(null)
+                setBottomClothes(null)
+                if (materialScrollRef.current) materialScrollRef.current.scrollLeft = 0
+                Toast.show({
+                  content: '已清空选择',
+                  duration: 1000,
+                })
+              }}
+            >
+              清空
+            </button>
           </div>
-          <div className={styles['match-content-generate']} onClick={handleGenerate}>
-            <button className={styles['save-btn']}>生成预览图</button>
+          <div className={styles['match-content-generate']}>
+            <button type="button" className={styles['save-btn']} onClick={handleGenerate}>
+              生成预览图
+            </button>
           </div>
         </div>
       </div>
-
-      <Overlay visible={visible} onClick={() => setVisible(false)}
-        style={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-        <div style={{ width: 120, height: 120, backgroundColor: '#fff', borderRadius: 4 }} />
-      </Overlay>
     </div>
   )
 }

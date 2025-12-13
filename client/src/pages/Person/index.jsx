@@ -1,18 +1,114 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from 'react'
 import styles from './index.module.less'
 import { useNavigate } from 'react-router-dom'
-import { Dialog, Popup } from 'react-vant'
+import { Dialog, Popup, Picker, Selector } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useUiStore } from '@/store'
 import { Loading, ErrorBanner } from '@/components/Feedback'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const PROFILE_STORAGE_KEY = 'outfit-profile-v1'
+
+const emptyProfile = {
+  heightCm: '',
+  weightKg: '',
+  topSize: '',
+  bottomSize: '',
+  shoeSize: '',
+  style: '',
+  colors: '',
+  scenes: '',
+}
+
+const readLocalProfile = () => {
+  try {
+    const raw = localStorage.getItem(PROFILE_STORAGE_KEY)
+    if (!raw) return { ...emptyProfile }
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return { ...emptyProfile }
+    return { ...emptyProfile, ...parsed }
+  } catch (error) {
+    console.warn('read profile failed:', error)
+    return { ...emptyProfile }
+  }
+}
+
+const persistLocalProfile = (profile) => {
+  const value = JSON.stringify(profile)
+  try {
+    localStorage.setItem(PROFILE_STORAGE_KEY, value)
+  } catch {
+    try {
+      localStorage.removeItem(PROFILE_STORAGE_KEY)
+      localStorage.setItem(PROFILE_STORAGE_KEY, value)
+    } catch (retryError) {
+      console.warn('persist profile failed:', retryError)
+    }
+  }
+}
+
+const splitPreference = (value) => {
+  if (!value || typeof value !== 'string') return []
+  return value
+    .split(/[/、,，|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const joinPreference = (values) => {
+  if (!Array.isArray(values)) return ''
+  return values.map((item) => String(item).trim()).filter(Boolean).join(' / ')
+}
+
+const uniqStrings = (values) => {
+  const seen = new Set()
+  const result = []
+  values.forEach((value) => {
+    const key = String(value).trim()
+    if (!key) return
+    if (seen.has(key)) return
+    seen.add(key)
+    result.push(key)
+  })
+  return result
+}
+
+const SIZE_PICKER_META = {
+  topSize: { title: '选择上装尺码', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
+  bottomSize: {
+    title: '选择下装尺码',
+    options: ['26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'],
+  },
+  shoeSize: {
+    title: '选择鞋码',
+    options: ['35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47'],
+  },
+}
+
+const PREF_PICKER_META = {
+  style: {
+    title: '选择风格',
+    options: ['通勤', '休闲', '运动', '简约', '街头', '复古', '学院', '韩系', '日系', '甜酷'],
+    columns: 4,
+  },
+  colors: {
+    title: '选择偏好颜色',
+    options: ['黑白', '大地色', '蓝色', '灰色', '米色', '棕色', '绿色', '红色', '粉色', '紫色'],
+    columns: 4,
+  },
+  scenes: {
+    title: '选择常用场景',
+    options: ['通勤', '上班', '约会', '旅行', '运动', '居家', '聚会', '面试', '上学'],
+    columns: 3,
+  },
+}
 
 export default function Person() {
   const navigate = useNavigate()
   const clearTokens = useAuthStore((s) => s.clearTokens)
   const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
+  const setAiEntranceHidden = useUiStore((s) => s.setAiEntranceHidden)
   const avatarInputRef = useRef(null)
   const fileInputRef = useRef(null) // 图片上传input
   const [uploadedImage, setUploadedImage] = useState(null) // 展示预览图片
@@ -33,7 +129,51 @@ export default function Person() {
   const [nameSaving, setNameSaving] = useState(false)
   const [sexSaving, setSexSaving] = useState(false)
   const [passwordSaving, setPasswordSaving] = useState(false)
+  const [modelDeleting, setModelDeleting] = useState(false)
+  const [modelPreviewVisible, setModelPreviewVisible] = useState(false)
+  const [assetLoading, setAssetLoading] = useState(false)
+  const [assetError, setAssetError] = useState('')
+  const [assetStats, setAssetStats] = useState({ clothesCount: 0, favoriteCount: 0 })
+  const [profile, setProfile] = useState(() => readLocalProfile())
+  const [profileDraft, setProfileDraft] = useState(() => readLocalProfile())
+  const [profileVisible, setProfileVisible] = useState(false)
+  const [sizePickerVisible, setSizePickerVisible] = useState(false)
+  const [activeSizeField, setActiveSizeField] = useState('')
+  const [sizePickerValue, setSizePickerValue] = useState('')
+  const [prefPickerVisible, setPrefPickerVisible] = useState(false)
+  const [activePrefField, setActivePrefField] = useState('')
+  const [prefSelected, setPrefSelected] = useState([])
+  const [confirmDialogVisible, setConfirmDialogVisible] = useState(false)
 
+  const hasCharacterModel = Boolean(userInfo?.characterModel || uploadedImage)
+
+  useEffect(() => {
+    const shouldHide =
+      profileVisible ||
+      sizePickerVisible ||
+      prefPickerVisible ||
+      modelPreviewVisible ||
+      passwordVisible ||
+      sexVisible ||
+      confirmDialogVisible
+
+    setAiEntranceHidden(shouldHide)
+  }, [
+    profileVisible,
+    sizePickerVisible,
+    prefPickerVisible,
+    modelPreviewVisible,
+    passwordVisible,
+    sexVisible,
+    confirmDialogVisible,
+    setAiEntranceHidden,
+  ])
+
+  useEffect(() => {
+    return () => {
+      setAiEntranceHidden(false)
+    }
+  }, [setAiEntranceHidden])
 
   // 获取用户所有信息
   const getUserInfo = useCallback(async () => {
@@ -45,6 +185,16 @@ export default function Person() {
       setUserInfo(data)
       setAvatar(data?.avatar ? `${API_BASE_URL}${data.avatar}` : '')
       setSex(data.sex || '') // 设置性别状态
+      const characterModel = data?.characterModel || ''
+      if (characterModel) {
+        if (typeof characterModel === 'string' && characterModel.startsWith('/')) {
+          setUploadedImage(`${API_BASE_URL}${characterModel}?t=${Date.now()}`)
+        } else {
+          setUploadedImage(characterModel)
+        }
+      } else {
+        setUploadedImage(null)
+      }
       const persistedUserInfo = {
         username: data.username,
         id: data.id,
@@ -72,6 +222,25 @@ export default function Person() {
       setUserLoading(false)
     }
   }, [setAuthUserInfo])
+
+  const fetchAssetStats = useCallback(async () => {
+    setAssetError('')
+    setAssetLoading(true)
+    try {
+      const res = await axios.get('/clothes/all')
+      const list = Array.isArray(res?.data) ? res.data : []
+      const clothesCount = list.length
+      const favoriteCount = list.reduce((count, item) => {
+        return count + (item?.favorite ? 1 : 0)
+      }, 0)
+      setAssetStats({ clothesCount, favoriteCount })
+    } catch (error) {
+      console.error('获取资产统计失败:', error)
+      setAssetError('获取资产统计失败，请稍后重试')
+    } finally {
+      setAssetLoading(false)
+    }
+  }, [])
 
   // 退出登录
   const handleLogout = () => {
@@ -162,17 +331,45 @@ export default function Person() {
   }
 
   const handleUploadClick = () => {
-    if (userLoading || uploading) return
+    if (userLoading || uploading || modelDeleting) return
     fileInputRef.current?.click()
   }
 
-  // 移除上传的图片
-  const handleRemoveImage = () => {
-    setUploadedImage(null)
-    // 清空文件input的值
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
+  // 删除人物模特（后端清理 + 本地清理）
+  const handleDeleteCharacterModel = () => {
+    if (modelDeleting) return
+
+    if (!userInfo?.characterModel) {
+      setModelPreviewVisible(false)
+      setUploadedImage(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
     }
+
+    setConfirmDialogVisible(true)
+    Dialog.confirm({
+      message: '确定删除当前人物模特吗？删除后将无法生成搭配预览图。',
+      onCancel: () => {
+        setConfirmDialogVisible(false)
+      },
+      onConfirm: async () => {
+        setConfirmDialogVisible(false)
+        setModelDeleting(true)
+        try {
+          await axios.delete('/user/characterModel')
+          Toast.show({ icon: 'success', content: '人物模特已删除', duration: 1200 })
+          setModelPreviewVisible(false)
+          setUploadedImage(null)
+          getUserInfo()
+        } catch (error) {
+          console.error('删除人物模特失败:', error)
+          Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })
+        } finally {
+          setModelDeleting(false)
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        }
+      },
+    })
   }
 
   // 开始编辑昵称
@@ -228,6 +425,7 @@ export default function Person() {
 
   // 上传图片
   const handleFileChange = async (event) => {
+    if (uploading || modelDeleting) return
     const file = event.target.files[0]
     if (!file) return
 
@@ -388,6 +586,94 @@ export default function Person() {
     setConfirmPassword('')
   }
 
+  const openProfilePopup = () => {
+    setProfileDraft(profile)
+    setProfileVisible(true)
+  }
+
+  const closeProfilePopup = () => {
+    setSizePickerVisible(false)
+    setPrefPickerVisible(false)
+    setActiveSizeField('')
+    setActivePrefField('')
+    setProfileVisible(false)
+    setProfileDraft(profile)
+  }
+
+  const openSizePicker = (field) => {
+    const meta = SIZE_PICKER_META[field]
+    if (!meta) return
+    const current = String(profileDraft?.[field] || '').trim()
+    const options = uniqStrings([current, ...meta.options]).filter(Boolean)
+    const nextValue = current || options[0] || ''
+    setActiveSizeField(field)
+    setSizePickerValue(nextValue)
+    setSizePickerVisible(true)
+  }
+
+  const closeSizePicker = () => {
+    setSizePickerVisible(false)
+    setActiveSizeField('')
+  }
+
+  const confirmSizePicker = (value) => {
+    const field = activeSizeField
+    if (!field) return
+    setProfileDraft((prev) => ({ ...prev, [field]: String(value || '').trim() }))
+    closeSizePicker()
+  }
+
+  const openPrefPicker = (field) => {
+    const meta = PREF_PICKER_META[field]
+    if (!meta) return
+    const current = String(profileDraft?.[field] || '').trim()
+    setActivePrefField(field)
+    setPrefSelected(splitPreference(current))
+    setPrefPickerVisible(true)
+  }
+
+  const closePrefPicker = () => {
+    setPrefPickerVisible(false)
+    setActivePrefField('')
+    setPrefSelected([])
+  }
+
+  const confirmPrefPicker = () => {
+    const field = activePrefField
+    if (!field) return
+    setProfileDraft((prev) => ({ ...prev, [field]: joinPreference(prefSelected) }))
+    closePrefPicker()
+  }
+
+  const handleSaveProfile = () => {
+    const next = {
+      ...emptyProfile,
+      ...profileDraft,
+    }
+
+    // 轻量校验：只做基本范围控制，避免异常值污染
+    const height = Number(next.heightCm)
+    if (next.heightCm !== '' && (!Number.isFinite(height) || height < 50 || height > 260)) {
+      Toast.show({ icon: 'fail', content: '身高请填写 50~260 之间的数字', duration: 1200 })
+      return
+    }
+
+    const weight = Number(next.weightKg)
+    if (next.weightKg !== '' && (!Number.isFinite(weight) || weight < 20 || weight > 300)) {
+      Toast.show({ icon: 'fail', content: '体重请填写 20~300 之间的数字', duration: 1200 })
+      return
+    }
+
+    ;['topSize', 'bottomSize', 'shoeSize', 'style', 'colors', 'scenes'].forEach((key) => {
+      if (typeof next[key] === 'string') next[key] = next[key].trim()
+    })
+
+    setProfile(next)
+    persistLocalProfile(next)
+    Toast.show({ icon: 'success', content: '穿搭档案已保存', duration: 1200 })
+    setProfileVisible(false)
+  }
+
   // 修改密码
   const handlePasswordChange = async () => {
     if (passwordSaving) return
@@ -445,6 +731,11 @@ export default function Person() {
   useEffect(() => {
     getUserInfo()
   }, [getUserInfo])
+
+  useEffect(() => {
+    if (!userInfo?.id) return
+    fetchAssetStats()
+  }, [userInfo?.id, fetchAssetStats])
 
   return (
     <div className={styles.person}>
@@ -505,11 +796,30 @@ export default function Person() {
             )}
           </div>
           <div className={styles.userAccount}>账号：{userInfo.username ? `${userInfo.username.slice(0, 3)}×××${userInfo.username.slice(-3)}` : ''}</div>
-          <div className={styles.uploadPhoto} onClick={handleUploadClick}>
-            <svg viewBox="0 0 1024 1024" width="16" height="16">
-              <path d="M864 248H728l-32.4-90.8a32.07 32.07 0 0 0-30.2-21.2H358.6c-13.5 0-25.6 8.5-30.1 21.2L296 248H160c-44.2 0-80 35.8-80 80v456c0 44.2 35.8 80 80 80h704c44.2 0 80-35.8 80-80V328c0-44.2-35.8-80-80-80zM512 716c-88.4 0-160-71.6-160-160s71.6-160 160-160 160 71.6 160 160-71.6 160-160 160z" fill="#999" />
-            </svg>
-            {uploading ? '上传中...' : '上传全身照'}
+          <div className={styles.modelUploadRow}>
+            <button
+              type="button"
+              className={styles.uploadPhoto}
+              onClick={handleUploadClick}
+              disabled={uploading || modelDeleting}
+            >
+              <svg viewBox="0 0 1024 1024" width="16" height="16">
+                <path d="M864 248H728l-32.4-90.8a32.07 32.07 0 0 0-30.2-21.2H358.6c-13.5 0-25.6 8.5-30.1 21.2L296 248H160c-44.2 0-80 35.8-80 80v456c0 44.2 35.8 80 80 80h704c44.2 0 80-35.8 80-80V328c0-44.2-35.8-80-80-80zM512 716c-88.4 0-160-71.6-160-160s71.6-160 160-160 160 71.6 160 160-71.6 160-160 160z" fill="#999" />
+              </svg>
+              {uploading ? '上传中...' : hasCharacterModel ? '重新上传人物模特' : '上传人物模特'}
+            </button>
+            {hasCharacterModel ? (
+              <button
+                type="button"
+                className={styles.modelInlineAction}
+                onClick={() => setModelPreviewVisible(true)}
+                disabled={uploading || modelDeleting}
+              >
+                管理
+              </button>
+            ) : (
+              <span className={styles.modelInlineHint}>用于搭配预览</span>
+            )}
           </div>
           <input
             ref={fileInputRef}
@@ -518,18 +828,344 @@ export default function Person() {
             onChange={handleFileChange}
             style={{ display: 'none' }}
           />
-          {uploadedImage && (
-            <div className={styles.imagePreview}>
-              <img src={uploadedImage} alt="上传的全身照" />
-              <button className={styles.removeButton} onClick={handleRemoveImage}>
-                <svg viewBox="0 0 1024 1024" width="16" height="16">
-                  <path d="M563.8 512l262.5-312.9c4.4-5.2.7-13.1-6.1-13.1h-79.8c-4.7 0-9.2 2.1-12.3 5.7L511.6 449.8 295.1 191.7c-3-3.6-7.5-5.7-12.3-5.7H203c-6.8 0-10.5 7.9-6.1 13.1L459.4 512 196.9 824.9A7.95 7.95 0 0 0 203 838h79.8c4.7 0 9.2-2.1 12.3-5.7l216.5-258.1 216.5 258.1c3 3.6 7.5 5.7 12.3 5.7h79.8c6.8 0 10.5-7.9 6.1-13.1L563.8 512z" fill="#fff" />
-                </svg>
-              </button>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* 资产概览 */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardTitle}>我的资产</div>
+          <button
+            type="button"
+            className={styles.cardAction}
+            onClick={fetchAssetStats}
+            disabled={assetLoading || userLoading}
+          >
+            {assetLoading ? '刷新中...' : '刷新'}
+          </button>
+        </div>
+        {assetError ? <div className={styles.cardError}>{assetError}</div> : null}
+        <div className={styles.statsGrid}>
+          <div className={styles.statItem} onClick={() => navigate('/outfit')} role="button" tabIndex={0}>
+            <div className={styles.statValue}>{assetLoading ? '--' : assetStats.clothesCount}</div>
+            <div className={styles.statLabel}>衣物总数</div>
+          </div>
+          <div className={styles.statItem} onClick={() => navigate('/outfit')} role="button" tabIndex={0}>
+            <div className={styles.statValue}>{assetLoading ? '--' : assetStats.favoriteCount}</div>
+            <div className={styles.statLabel}>收藏</div>
+          </div>
+        </div>
+
+        <div className={styles.quickGrid}>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/outfit')}>
+            去衣橱
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/add')}>
+            新增衣物
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/match')}>
+            搭配预览
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/recommend')}>
+            推荐
+          </button>
+        </div>
+      </div>
+
+      {/* 穿搭档案（本地持久化） */}
+      <div className={styles.card}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardTitle}>穿搭档案</div>
+          <button type="button" className={styles.cardAction} onClick={openProfilePopup} disabled={userLoading}>
+            编辑
+          </button>
+        </div>
+        <div className={styles.profileGrid}>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>身高</span>
+            <span className={styles.profileValue}>{profile.heightCm ? `${profile.heightCm}cm` : '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>体重</span>
+            <span className={styles.profileValue}>{profile.weightKg ? `${profile.weightKg}kg` : '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>上装尺码</span>
+            <span className={styles.profileValue}>{profile.topSize || '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>下装尺码</span>
+            <span className={styles.profileValue}>{profile.bottomSize || '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>鞋码</span>
+            <span className={styles.profileValue}>{profile.shoeSize || '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>风格</span>
+            <span className={styles.profileValue}>{profile.style || '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>偏好颜色</span>
+            <span className={styles.profileValue}>{profile.colors || '-'}</span>
+          </div>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>常用场景</span>
+            <span className={styles.profileValue}>{profile.scenes || '-'}</span>
+          </div>
+        </div>
+        <div className={styles.profileHint}>仅保存在本机，用于后续推荐更贴合你。</div>
+      </div>
+
+      <Popup
+        visible={profileVisible}
+        closeable
+        title="编辑穿搭档案"
+        style={{ height: '70%' }}
+        position="bottom"
+        round
+        onClose={closeProfilePopup}
+      >
+        <div className={styles.profileEditor}>
+          <div className={styles.profileEditorScroll}>
+            <div className={styles.profileSection}>
+              <div className={styles.profileSectionHeader}>
+                <div className={styles.profileSectionTitle}>身体数据</div>
+                <div className={styles.profileSectionDesc}>用于更贴合的尺码与推荐</div>
+              </div>
+              <div className={styles.profileGrid2}>
+                <div className={styles.profileTile}>
+                  <div className={styles.profileTileLabel}>身高(cm)</div>
+                  <input
+                    className={styles.profileTileInput}
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="例如 170"
+                    value={profileDraft.heightCm}
+                    onChange={(e) => setProfileDraft((prev) => ({ ...prev, heightCm: e.target.value }))}
+                  />
+                </div>
+                <div className={styles.profileTile}>
+                  <div className={styles.profileTileLabel}>体重(kg)</div>
+                  <input
+                    className={styles.profileTileInput}
+                    type="number"
+                    inputMode="numeric"
+                    placeholder="例如 60"
+                    value={profileDraft.weightKg}
+                    onChange={(e) => setProfileDraft((prev) => ({ ...prev, weightKg: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.profileSection}>
+              <div className={styles.profileSectionHeader}>
+                <div className={styles.profileSectionTitle}>尺码</div>
+                <div className={styles.profileSectionDesc}>可填常用尺码或国标</div>
+              </div>
+              <div className={styles.profileGrid3}>
+                <button
+                  type="button"
+                  className={styles.profileTileButton}
+                  onClick={() => openSizePicker('topSize')}
+                >
+                  <div className={styles.profileTileLabel}>上装</div>
+                  <div className={styles.profileTileValue}>
+                    {profileDraft.topSize ? (
+                      profileDraft.topSize
+                    ) : (
+                      <span className={styles.profileTilePlaceholder}>请选择</span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={styles.profileTileButton}
+                  onClick={() => openSizePicker('bottomSize')}
+                >
+                  <div className={styles.profileTileLabel}>下装</div>
+                  <div className={styles.profileTileValue}>
+                    {profileDraft.bottomSize ? (
+                      profileDraft.bottomSize
+                    ) : (
+                      <span className={styles.profileTilePlaceholder}>请选择</span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className={styles.profileTileButton}
+                  onClick={() => openSizePicker('shoeSize')}
+                >
+                  <div className={styles.profileTileLabel}>鞋码</div>
+                  <div className={styles.profileTileValue}>
+                    {profileDraft.shoeSize ? (
+                      profileDraft.shoeSize
+                    ) : (
+                      <span className={styles.profileTilePlaceholder}>请选择</span>
+                    )}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.profileSection}>
+              <div className={styles.profileSectionHeader}>
+                <div className={styles.profileSectionTitle}>偏好设置</div>
+                <div className={styles.profileSectionDesc}>用于解释推荐与搭配思路</div>
+              </div>
+              <div className={styles.profileStack}>
+                <div className={styles.profileTile}>
+                  <div className={styles.profileTileLabel}>风格（可多选）</div>
+                  <Selector
+                    multiple
+                    showCheckMark={false}
+                    className={styles.chipSelector}
+                    columns={PREF_PICKER_META.style.columns}
+                    value={splitPreference(profileDraft.style)}
+                    options={PREF_PICKER_META.style.options.map((value) => ({ label: value, value }))}
+                    onChange={(values) =>
+                      setProfileDraft((prev) => ({
+                        ...prev,
+                        style: joinPreference(values),
+                      }))
+                    }
+                  />
+                </div>
+                <button
+                  type="button"
+                  className={styles.profileTileButton}
+                  onClick={() => openPrefPicker('colors')}
+                >
+                  <div className={styles.profileTileLabel}>偏好颜色</div>
+                  <div className={styles.profileTileValue}>
+                    {profileDraft.colors ? (
+                      profileDraft.colors
+                    ) : (
+                      <span className={styles.profileTilePlaceholder}>请选择</span>
+                    )}
+                  </div>
+                </button>
+                <div className={styles.profileTile}>
+                  <div className={styles.profileTileLabel}>常用场景（可多选）</div>
+                  <Selector
+                    multiple
+                    showCheckMark={false}
+                    className={styles.chipSelector}
+                    columns={PREF_PICKER_META.scenes.columns}
+                    value={splitPreference(profileDraft.scenes)}
+                    options={PREF_PICKER_META.scenes.options.map((value) => ({ label: value, value }))}
+                    onChange={(values) =>
+                      setProfileDraft((prev) => ({
+                        ...prev,
+                        scenes: joinPreference(values),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.profileEditorFooter}>
+            <button type="button" className={styles.profileSaveBtn} onClick={handleSaveProfile}>
+              保存
+            </button>
+          </div>
+        </div>
+      </Popup>
+
+      <Popup
+        visible={sizePickerVisible}
+        closeable
+        title={SIZE_PICKER_META[activeSizeField]?.title || '选择'}
+        position="bottom"
+        round
+        style={{ height: '45%' }}
+        onClose={closeSizePicker}
+      >
+        <div className={styles.profilePickerBody}>
+          <Picker
+            value={sizePickerValue}
+            columns={uniqStrings([
+              String(profileDraft?.[activeSizeField] || '').trim(),
+              ...(SIZE_PICKER_META[activeSizeField]?.options || []),
+            ]).filter(Boolean)}
+            onChange={(value) => setSizePickerValue(value)}
+            onCancel={closeSizePicker}
+            onConfirm={(value) => confirmSizePicker(value)}
+          />
+        </div>
+      </Popup>
+
+      <Popup
+        visible={prefPickerVisible}
+        closeable
+        title={PREF_PICKER_META[activePrefField]?.title || '选择'}
+        position="bottom"
+        round
+        style={{ height: '55%' }}
+        onClose={closePrefPicker}
+      >
+        <div className={styles.profilePickerBody}>
+          <div className={styles.profilePickerHint}>可多选，点击切换</div>
+          <Selector
+            multiple
+            showCheckMark={false}
+            className={styles.chipSelector}
+            columns={PREF_PICKER_META[activePrefField]?.columns || 3}
+            value={prefSelected}
+            options={uniqStrings([
+              ...splitPreference(String(profileDraft?.[activePrefField] || '').trim()),
+              ...(PREF_PICKER_META[activePrefField]?.options || []),
+            ]).map((value) => ({ label: value, value }))}
+            onChange={(value) => setPrefSelected(value)}
+          />
+          <div className={styles.profilePickerFooter}>
+            <button type="button" className={styles.profilePickerCancel} onClick={closePrefPicker}>
+              取消
+            </button>
+            <button type="button" className={styles.profilePickerConfirm} onClick={confirmPrefPicker}>
+              确定
+            </button>
+          </div>
+        </div>
+      </Popup>
+
+      <Popup
+        visible={modelPreviewVisible}
+        closeable
+        title="人物模特预览"
+        style={{ height: '75%' }}
+        position="bottom"
+        round
+        onClose={() => setModelPreviewVisible(false)}
+      >
+        <div className={styles.modelPreviewBody}>
+          <div className={styles.modelPreviewImage}>
+            {uploadedImage ? <img src={uploadedImage} alt="人物模特预览" /> : null}
+          </div>
+          <div className={styles.modelPreviewActions}>
+            <button
+              type="button"
+              className={styles.modelActionBtn}
+              onClick={handleUploadClick}
+              disabled={uploading || modelDeleting}
+            >
+              {uploading ? '上传中...' : '重新上传'}
+            </button>
+            <button
+              type="button"
+              className={styles.modelDeleteBtn}
+              onClick={handleDeleteCharacterModel}
+              disabled={uploading || modelDeleting}
+            >
+              删除
+            </button>
+          </div>
+        </div>
+      </Popup>
 
       {/* 功能列表 */}
       <div className={styles.menuList}>
@@ -617,13 +1253,22 @@ export default function Person() {
           </div>
         </div>
 
-        <div className={styles.menuItem} onClick={() =>
-          Dialog.confirm({
-            message: '确定退出登录吗？',
-            onCancel: () => console.log('cancel'),
-            onConfirm: () => handleLogout(),
-          })
-        }>
+        <div
+          className={styles.menuItem}
+          onClick={() => {
+            setConfirmDialogVisible(true)
+            Dialog.confirm({
+              message: '确定退出登录吗？',
+              onCancel: () => {
+                setConfirmDialogVisible(false)
+              },
+              onConfirm: () => {
+                setConfirmDialogVisible(false)
+                handleLogout()
+              },
+            })
+          }}
+        >
           <div className={styles.menuLeft}>
             <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
               <path d="M868 732h-70.3c-4.8 0-9.3 2.1-12.3 5.8-7 8.5-14.5 16.7-22.4 24.5a353.84 353.84 0 0 1-112.7 75.9A352.8 352.8 0 0 1 512.4 866c-47.9 0-94.3-9.4-137.9-27.8a353.84 353.84 0 0 1-112.7-75.9 353.28 353.28 0 0 1-76-112.5C167.3 606.2 158 559.9 158 512s9.4-94.2 27.8-137.8c17.8-42.1 43.4-80 76-112.5s70.5-58.1 112.7-75.9c43.6-18.4 90-27.8 137.9-27.8 47.9 0 94.3 9.3 137.9 27.8 42.2 17.8 80.1 43.4 112.7 75.9 7.9 7.9 15.3 16.1 22.4 24.5 3 3.7 7.6 5.8 12.3 5.8H868c6.3 0 10.2-7 6.7-12.3C836 274.2 704.5 158 512.4 158 283.9 158 96 345.8 96 574.3s187.9 416.3 416.4 416.3c192.2 0 323.6-116.2 361.9-279.4 3.4-5.3-.4-12.3-6.3-12.3z" fill="#ff4d4f" />

@@ -50,9 +50,11 @@ export const useUiStore = create(
       theme: 'light',
       globalLoading: false,
       globalLoadingText: '',
+      aiEntranceHidden: false,
       setTheme: (theme) => set({ theme }),
       setGlobalLoading: (loading, text = '') =>
         set({ globalLoading: loading, globalLoadingText: text }),
+      setAiEntranceHidden: (hidden) => set({ aiEntranceHidden: Boolean(hidden) }),
     }),
     {
       name: 'ui-store',

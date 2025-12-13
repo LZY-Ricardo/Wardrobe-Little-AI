@@ -147,87 +147,198 @@ router.post('/refresh_token', async (ctx) => {
     }
 })
 
-// 上传全身照
+// upload character model (base64 data url -> save file -> store relative url in DB)
 router.post('/uploadPhoto', verify(), async (ctx) => {
   try {
-    // 检查是否有图片数据
     if (!ctx.request.body || !ctx.request.body.image) {
-      ctx.status = 400;
+      ctx.status = 400
       ctx.body = {
         code: 0,
-        msg: '请提供图片数据'
-      };
-      return;
+        msg: '\u8bf7\u63d0\u4f9b\u56fe\u7247\u6570\u636e',
+      }
+      return
     }
 
-    const imageData = ctx.request.body.image;
-    const id = ctx.userId;
-    
-    // 验证是否为base64格式的图片数据
+    const imageData = ctx.request.body.image
+    const id = ctx.userId
+
+    let prevModelUrl = ''
+    try {
+      const user = await getUserInfoById(id)
+      prevModelUrl = user?.characterModel || ''
+    } catch (e) {
+      prevModelUrl = ''
+    }
+
     if (!imageData.startsWith('data:image/')) {
-      ctx.status = 400;
+      ctx.status = 400
       ctx.body = {
         code: 0,
-        msg: '无效的图片数据格式'
-      };
-      return;
+        msg: '\u65e0\u6548\u7684\u56fe\u7247\u6570\u636e\u683c\u5f0f',
+      }
+      return
     }
 
-    // 提取文件类型和base64数据
-    const matches = imageData.match(/^data:image\/(\w+);base64,(.+)$/);
+    const matches = imageData.match(/^data:image\/(\w+);base64,(.+)$/)
     if (!matches) {
-      ctx.status = 400;
+      ctx.status = 400
       ctx.body = {
         code: 0,
-        msg: '无效的base64图片格式'
-      };
-      return;
+        msg: '\u65e0\u6548\u7684base64\u56fe\u7247\u683c\u5f0f',
+      }
+      return
     }
 
-    const fileType = matches[1];
-    const base64Data = matches[2];
-    
-    // 验证文件类型
-    const allowedTypes = ['jpeg', 'jpg', 'png', 'gif', 'webp'];
-    if (!allowedTypes.includes(fileType.toLowerCase())) {
-      ctx.status = 400;
+    const fileType = (matches[1] || '').toLowerCase()
+    const base64Data = matches[2] || ''
+
+    const allowedTypes = ['jpeg', 'jpg', 'png', 'webp']
+    if (!allowedTypes.includes(fileType)) {
+      ctx.status = 400
       ctx.body = {
         code: 0,
-        msg: '不支持的文件类型，请上传图片文件'
-      };
-      return;
+        msg: '\u4e0d\u652f\u6301\u7684\u56fe\u7247\u7c7b\u578b',
+      }
+      return
     }
 
-    // 计算文件大小（base64解码后的大小）
-    const fileSize = Math.round((base64Data.length * 3) / 4);
-    
-    // 验证文件大小（最大5MB）
-    if (fileSize > 5 * 1024 * 1024) {
-      ctx.status = 400;
+    const buffer = Buffer.from(base64Data, 'base64')
+    if (buffer.length > 5 * 1024 * 1024) {
+      ctx.status = 400
       ctx.body = {
         code: 0,
-        msg: '文件大小不能超过5MB'
-      };
-      return;
+        msg: '\u56fe\u7247\u5927\u5c0f\u4e0d\u80fd\u8d85\u8fc75MB',
+      }
+      return
     }
 
-    console.log('准备上传全身照，大小:', fileSize, '类型:', fileType);
-    
-    const result = await uploadPhoto(imageData, id);
-    
+    const modelDir = path.join(__dirname, '..', 'public', 'uploads', 'models', String(id))
+    await fs.promises.mkdir(modelDir, { recursive: true })
+
+    const ext = fileType === 'jpeg' ? 'jpg' : fileType
+    const fileName = `model-${Date.now()}.${ext}`
+    const filePath = path.join(modelDir, fileName)
+    await fs.promises.writeFile(filePath, buffer)
+
+    const modelUrl = `/uploads/models/${id}/${fileName}`
+
+    let result = false
+    try {
+      result = await uploadPhoto(modelUrl, id)
+    } catch (error) {
+      await fs.promises.unlink(filePath).catch(() => {})
+      throw error
+    }
+
+    if (result) {
+      if (
+        prevModelUrl &&
+        prevModelUrl !== modelUrl &&
+        typeof prevModelUrl === 'string' &&
+        prevModelUrl.startsWith(`/uploads/models/${id}/`)
+      ) {
+        const publicRoot = path.resolve(__dirname, '..', 'public')
+        const prevFilePath = path.resolve(publicRoot, prevModelUrl.replace(/^\//, ''))
+        if (prevFilePath.startsWith(publicRoot + path.sep)) {
+          await fs.promises.unlink(prevFilePath).catch(() => {})
+        }
+      }
+      ctx.body = {
+        code: 1,
+        msg: '\u4eba\u7269\u6a21\u7279\u4e0a\u4f20\u6210\u529f',
+        data: { characterModel: modelUrl },
+      }
+      return
+    }
+
+    await fs.promises.unlink(filePath).catch(() => {})
+    ctx.status = 500
     ctx.body = {
-      code: 1,
-      msg: '全身照上传成功',
-      data: result
-    };
+      code: 0,
+      msg: '\u4eba\u7269\u6a21\u7279\u4e0a\u4f20\u5931\u8d25',
+    }
   } catch (error) {
-    console.error('上传全身照失败:', error);
-    ctx.status = 500;
+    if (error?.code === 'ER_BAD_FIELD_ERROR') {
+      ctx.status = 500
+      ctx.body = {
+        code: 0,
+        msg:
+          '\u6570\u636e\u5e93\u7f3a\u5c11 characterModel \u5b57\u6bb5\uff0c\u8bf7\u5148\u6267\u884c: ALTER TABLE user ADD COLUMN characterModel TEXT NULL;',
+      }
+      return
+    }
+
+    console.error('upload character model error:', error)
+    ctx.status = 500
     ctx.body = {
       code: -1,
-      msg: '上传全身照失败，请重试',
-      error: error.message
-    };
+      msg: '\u4eba\u7269\u6a21\u7279\u4e0a\u4f20\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5',
+      error: error.message,
+    }
+  }
+})
+
+router.delete('/characterModel', verify(), async (ctx) => {
+  const id = ctx.userId
+  try {
+    let prevModelUrl = ''
+    try {
+      const user = await getUserInfoById(id)
+      prevModelUrl = user?.characterModel || ''
+    } catch (e) {
+      prevModelUrl = ''
+    }
+
+    if (!prevModelUrl) {
+      ctx.body = {
+        code: 1,
+        msg: '\u5f53\u524d\u65e0\u4eba\u7269\u6a21\u7279',
+        data: { deleted: false },
+      }
+      return
+    }
+
+    if (typeof prevModelUrl === 'string' && prevModelUrl.startsWith(`/uploads/models/${id}/`)) {
+      const publicRoot = path.resolve(__dirname, '..', 'public')
+      const prevFilePath = path.resolve(publicRoot, prevModelUrl.replace(/^\//, ''))
+      if (prevFilePath.startsWith(publicRoot + path.sep)) {
+        await fs.promises.unlink(prevFilePath).catch(() => {})
+      }
+    }
+
+    const result = await uploadPhoto(null, id)
+    if (result) {
+      ctx.body = {
+        code: 1,
+        msg: '\u4eba\u7269\u6a21\u7279\u5df2\u5220\u9664',
+        data: { deleted: true },
+      }
+      return
+    }
+
+    ctx.status = 500
+    ctx.body = {
+      code: 0,
+      msg: '\u4eba\u7269\u6a21\u7279\u5220\u9664\u5931\u8d25',
+    }
+  } catch (error) {
+    if (error?.code === 'ER_BAD_FIELD_ERROR') {
+      ctx.status = 500
+      ctx.body = {
+        code: 0,
+        msg:
+          '\u6570\u636e\u5e93\u7f3a\u5c11 characterModel \u5b57\u6bb5\uff0c\u8bf7\u5148\u6267\u884c: ALTER TABLE user ADD COLUMN characterModel TEXT NULL;',
+      }
+      return
+    }
+
+    console.error('delete character model error:', error)
+    ctx.status = 500
+    ctx.body = {
+      code: -1,
+      msg: '\u5220\u9664\u4eba\u7269\u6a21\u7279\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5',
+      error: error.message,
+    }
   }
 })
 

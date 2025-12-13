@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import SvgIcon from '@/components/SvgIcon'
+import { useUiStore } from '@/store'
 import styles from './index.module.less'
 
 const HIDDEN_PATH_PREFIXES = ['/aichat']
@@ -9,6 +10,7 @@ const AUTO_COLLAPSE_MS = 5000
 export default function AiChatEntrance() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const aiEntranceHidden = useUiStore((s) => s.aiEntranceHidden)
   const [isExpanded, setIsExpanded] = useState(false)
   const autoCollapseTimerRef = useRef(null)
 
@@ -44,7 +46,15 @@ export default function AiChatEntrance() {
     setIsExpanded(false)
   }, [isHidden])
 
-  if (isHidden) return null
+  useEffect(() => {
+    if (!aiEntranceHidden) return
+
+    if (autoCollapseTimerRef.current) window.clearTimeout(autoCollapseTimerRef.current)
+    autoCollapseTimerRef.current = null
+    setIsExpanded(false)
+  }, [aiEntranceHidden])
+
+  if (isHidden || aiEntranceHidden) return null
 
   const handleClick = () => {
     if (!isExpanded) {
