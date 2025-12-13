@@ -1,4 +1,5 @@
 ﻿import React, { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
@@ -28,13 +29,41 @@ const roundRect = (ctx, x, y, w, h, r) => {
 }
 
 const pickPalette = (scene = '') => {
-  const hit = [
-    { key: ['约会', '恋爱'], bgFrom: '#ffe7f2', bgTo: '#ffd7ec', card: '#fff8fb', accent: '#ff8fb1' },
-    { key: ['商务', '通勤'], bgFrom: '#e7eeff', bgTo: '#dfe8ff', card: '#f7f9ff', accent: '#4f81ff' },
-    { key: ['运动', '健身'], bgFrom: '#e8fff4', bgTo: '#d1f7e6', card: '#f7fffb', accent: '#22c55e' },
-    { key: ['旅行', '度假'], bgFrom: '#e8f7ff', bgTo: '#d9f0ff', card: '#f7fcff', accent: '#38bdf8' },
-  ].find((p) => p.key.some((k) => scene.includes(k)))
-  return hit || { bgFrom: '#f5f5f5', bgTo: '#ededed', card: '#ffffff', accent: '#9ca3af' }
+  const name = scene || ''
+  const map = [
+    {
+      keys: ['约会', '恋爱'],
+      bgFrom: '#fdf2f8',
+      bgTo: '#f3e8ff',
+      card: '#ffffff',
+      accent: '#f9a8d4',
+      blur: [
+        { x: 200, y: 180, r: 200, color: 'rgba(249,168,212,0.22)' },
+        { x: 700, y: 220, r: 180, color: 'rgba(196,181,253,0.18)' },
+      ],
+    },
+    {
+      keys: ['运动', '健身'],
+      bgFrom: '#f7fdf9',
+      bgTo: '#eef7ff',
+      card: '#ffffff',
+      accent: '#34d399',
+      blur: [
+        { x: 160, y: 140, r: 180, color: 'rgba(52,211,153,0.16)' },
+        { x: 720, y: 160, r: 160, color: 'rgba(96,165,250,0.14)' },
+      ],
+    },
+    {
+      keys: ['商务', '通勤'],
+      bgFrom: '#f8fafc',
+      bgTo: '#f1f5f9',
+      card: '#ffffff',
+      accent: '#cbd5e1',
+      blur: [],
+    },
+  ]
+  const hit = map.find((p) => p.keys.some((k) => name.includes(k)))
+  return hit || { bgFrom: '#f9fafb', bgTo: '#f3f4f6', card: '#ffffff', accent: '#d1d5db', blur: [] }
 }
 
 const createComposite = async (images, scene = '') => {
@@ -54,51 +83,56 @@ const createComposite = async (images, scene = '') => {
   roundRect(ctx, 0, 0, width, height, 36)
   ctx.fill()
 
-  // 主卡片区域
-  const layout = [
-    { x: 70, y: 50, w: 760, h: 520, rotate: 0 },
-    { x: 70, y: 600, w: 360, h: 240, rotate: -4 },
-    { x: 470, y: 600, w: 360, h: 240, rotate: 4 },
-  ]
+  if (Array.isArray(palette.blur)) {
+    palette.blur.forEach(({ x, y, r, color }) => {
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+      g.addColorStop(0, color)
+      g.addColorStop(1, 'rgba(255,255,255,0)')
+      ctx.fillStyle = g
+      ctx.beginPath()
+      ctx.arc(x, y, r, 0, Math.PI * 2)
+      ctx.fill()
+    })
+  }
 
+  // grid layout: main on top, two subs bottom, unified 4:5 ratio
   const imgs = await Promise.all(images.map((url) => loadImage(url)))
-  imgs.slice(0, 3).forEach((img, idx) => {
-    const cell = layout[idx] || layout[layout.length - 1]
-    ctx.save()
-    ctx.translate(cell.x + cell.w / 2, cell.y + cell.h / 2)
-    ctx.rotate((cell.rotate * Math.PI) / 180)
-    ctx.translate(-(cell.x + cell.w / 2), -(cell.y + cell.h / 2))
+  const [main, left, right] = imgs
 
-    // 卡片底
+  const gap = 28
+  const mainWidth = width - gap * 2
+  const mainHeight = Math.floor(height * 0.6)
+  const subWidth = Math.floor((width - gap * 3) / 2)
+  const subHeight = height - mainHeight - gap * 3
+  const subY = mainHeight + gap * 2
+
+  const drawCard = (img, x, y, w, h) => {
+    if (!img) return
+    ctx.save()
     ctx.fillStyle = palette.card
-    ctx.shadowColor = 'rgba(0,0,0,0.12)'
-    ctx.shadowBlur = 18
+    ctx.shadowColor = 'rgba(0,0,0,0.10)'
+    ctx.shadowBlur = 14
     ctx.shadowOffsetY = 8
-    roundRect(ctx, cell.x, cell.y, cell.w, cell.h, 24)
+    roundRect(ctx, x, y, w, h, 24)
     ctx.fill()
 
-    // 图片
-    const scale = Math.min((cell.w - 30) / img.width, (cell.h - 30) / img.height)
+    const scale = Math.min((w - 40) / img.width, (h - 40) / img.height)
     const dw = img.width * scale
     const dh = img.height * scale
-    const dx = cell.x + (cell.w - dw) / 2
-    const dy = cell.y + (cell.h - dh) / 2
-    ctx.shadowColor = 'rgba(0,0,0,0.08)'
-    ctx.shadowBlur = 10
-    ctx.shadowOffsetY = 6
+    const dx = x + (w - dw) / 2
+    const dy = y + (h - dh) / 2
+    ctx.shadowColor = 'rgba(0,0,0,0.05)'
+    ctx.shadowBlur = 8
+    ctx.shadowOffsetY = 4
     roundRect(ctx, dx, dy, dw, dh, 18)
     ctx.clip()
     ctx.drawImage(img, dx, dy, dw, dh)
     ctx.restore()
-  })
+  }
 
-  // 底部装饰条
-  ctx.save()
-  ctx.shadowColor = 'rgba(0,0,0,0)'
-  ctx.fillStyle = palette.accent
-  roundRect(ctx, width - 170, height - 70, 120, 20, 10)
-  ctx.fill()
-  ctx.restore()
+  drawCard(main, gap, gap, mainWidth, mainHeight)
+  drawCard(left, gap, subY, subWidth, subHeight)
+  drawCard(right, gap * 2 + subWidth, subY, subWidth, subHeight)
 
   return canvas.toDataURL('image/png')
 }
@@ -171,6 +205,11 @@ const normalizeSuits = (raw = [], fallbackScene = '') => {
 }
 
 export default function Recommend() {
+  const location = useLocation()
+  const lastPresetKeyRef = React.useRef('')
+  const presetScene =
+    typeof location?.state?.presetScene === 'string' ? location.state.presetScene.trim() : ''
+
   const [scene, setScene] = useState('')
   const [sceneSuits, setSceneSuits] = useState([])
   const [loading, setLoading] = useState(false)
@@ -218,6 +257,14 @@ export default function Recommend() {
     }
   }
 
+  React.useEffect(() => {
+    if (!presetScene) return
+    if (lastPresetKeyRef.current === location.key) return
+    lastPresetKeyRef.current = location.key
+    setScene(presetScene)
+    void generateSceneSuits(presetScene)
+  }, [location.key, presetScene])
+
   const renderContent = () => {
     if (loading) {
       return (
@@ -243,6 +290,9 @@ export default function Recommend() {
           <div className={styles['content-item']} key={item.id}>
             <div className={styles['item-img']}>
               {item.cover ? <img src={item.cover} alt={item.scene} /> : <div className={styles['placeholder']}>No Image</div>}
+              <div className={styles['item-actions-overlay']}>
+                <SvgIcon iconName="icon-aixin" className={styles['action-icon']} />
+              </div>
             </div>
             <div className={styles['item-header']}>
               <div className={styles['item-scene']}>{item.scene}</div>
@@ -254,17 +304,23 @@ export default function Recommend() {
             {Boolean(item.items?.length) && (
               <div className={styles['item-list']}>
                 {item.items.map((cloth, idx) => (
-                  <div className={styles['item-chip']} key={`${item.id}-${cloth.cloth_id || idx}`}>
-                    {cloth.name || cloth.type || '搭配单品'}
-                    {cloth.color ? ` · ${cloth.color}` : ''}
+                  <div className={styles['item-row']} key={`${item.id}-${cloth.cloth_id || idx}`}>
+                    <div className={styles['item-row-name']}>
+                      {(cloth.type || '单品') + '：'}{cloth.name || cloth.color || '搭配单品'}
+                    </div>
+                    <div className={styles['item-row-tags']}>
+                      {[cloth.color, cloth.style, cloth.season]
+                        .filter(Boolean)
+                        .map((tag, tagIdx) => (
+                          <span className={styles['item-tag']} key={`${item.id}-${cloth.cloth_id || idx}-tag-${tagIdx}`}>
+                            {tag}
+                          </span>
+                        ))}
+                    </div>
                   </div>
                 ))}
               </div>
             )}
-            <div className={styles['item-actions']}>
-              <SvgIcon iconName="icon-icon-test" className={styles['action-icon']} />
-              <SvgIcon iconName="icon-aixin" className={styles['action-icon']} />
-            </div>
           </div>
         ))}
       </div>
@@ -306,3 +362,5 @@ export default function Recommend() {
     </div>
   )
 }
+
+

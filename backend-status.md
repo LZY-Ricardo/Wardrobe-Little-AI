@@ -1,4 +1,4 @@
-﻿# 后端现状（server）
+# 后端现状（server）
 
 ## 技术栈与基础
 - Koa + @koa/router + @koa/bodyparser + @koa/cors + @koa/multer，mysql2 直连（无 ORM/模型），bcrypt、jsonwebtoken。
@@ -14,8 +14,8 @@
 - /clothes（均需 token）
   - POST /uploadCloth：插入衣物（含 base64 图）。
   - GET /all：按 user_id 查询所有衣物。
-  - DELETE /:id、PUT /:id：未校验 user_id 归属，存在越权风险。
-  - GET /TopClothes、/BotClothes：SQL 使用乱码匹配（"%涓婅。%"/"%涓嬭。%"），可能导致始终查不到数据。
+  - DELETE /:id、PUT /:id：已校验 user_id 归属，避免越权删除/修改。
+  - GET /TopClothes、/BotClothes：按 type LIKE '%上衣%' / '%下衣%' 查询。
   - POST /analyze：multer 内存读文件，调用 Coze workflow_id，返回解析结果字符串。
   - POST /genPreview：接收 top/bottom/characterModel 文件 + sex，调用 Coze workflow2_id，返回输出字符串。
 - /scene（需 token）
@@ -23,16 +23,17 @@
 - /chat
   - 需鉴权；注入 system prompt（项目使用指导 + 穿搭知识），规范化 role（bot→assistant），并将 messages 流式转发到本地 Ollama（默认 http://localhost:11434/api/chat；模型默认 deepseek-r1:7b）；支持 /help；支持超时与历史裁剪。
   - 已支持工具调用 MVP：当问题涉及“我的衣橱/场景推荐/我的性别/人物模特”等需要读取真实数据时，后端会先规划并调用工具（当前：`list_clothes`、`get_user_profile`、`generate_scene_suits`），再基于工具结果生成回答（`generate_scene_suits` 优先离线规则，不返回图片）。
+  - 已支持写操作工具（需二次确认）：通过命令 `/favorite`、`/update`、`/delete`、`/sex` 发起，服务端返回确认码后，用户回复 `确认 <确认码>` 才会执行，避免误操作。
 
 ## 外部依赖与前置条件
 - MySQL 数据库（未提供建表 SQL，需自建 user/clothes 等表）。
 - Coze PAT 与 workflow_id/workflow2_id/workflow3_id 环境变量必填，否则 analyze/genPreview/generateSceneSuits 失败。
 - 本地 Ollama 服务与模型需预先加载，否则 /chat 失败；可用 `OLLAMA_BASE_URL`/`OLLAMA_MODEL` 覆盖默认值。
   - 可选配置：`OLLAMA_PLANNER_MODEL`（planner 使用的模型，默认同 `OLLAMA_MODEL`）、`CHAT_TOOL_CALLING_ENABLED`（默认启用）、`CHAT_TOOL_PLANNER_TIMEOUT_MS`、`CHAT_TOOL_EXEC_TIMEOUT_MS`。
+  - 可选配置：`CHAT_WRITE_TOOL_ENABLED`（默认启用）、`CHAT_WRITE_CONFIRM_TTL_MS`（确认码有效期，默认 5 分钟）。
 
 ## 已知缺口与风险
-- 衣物删除/更新缺少 user_id 归属校验，存在越权删除/修改风险。
-- Top/Bot 接口匹配字符串乱码，功能可能不可用。
+- Top/Bot 接口依赖 type 命名包含“上衣/下衣”，否则可能查不到数据。
 - /chat 现已鉴权；仍建议补充限流/并发控制与更细粒度的输入大小限制，防止被滥用。
 - 缺少统一错误/日志处理，中间件无异常兜底；返回码简单。
 - 图片、全身照采用 base64 入库，数据量大时影响性能/存储。

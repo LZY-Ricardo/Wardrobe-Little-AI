@@ -1,5 +1,5 @@
-const { getAllClothes } = require('../controllers/clothes')
-const { getUserInfoById } = require('../controllers/user')
+const { getAllClothes, getClothByIdForUser, deleteClothForUser, updateClothFieldsForUser } = require('../controllers/clothes')
+const { getUserInfoById, updateSex } = require('../controllers/user')
 
 const TOOL_DEFINITIONS = [
   {
@@ -39,6 +39,66 @@ const TOOL_DEFINITIONS = [
       required: ['scene'],
     },
   },
+  {
+    name: 'set_cloth_favorite',
+    dangerous: true,
+    description: '设置指定衣物的收藏状态（写操作，需要二次确认）',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cloth_id: { type: 'integer', minimum: 1 },
+        favorite: { type: 'boolean' },
+      },
+      required: ['cloth_id', 'favorite'],
+    },
+  },
+  {
+    name: 'update_cloth_fields',
+    dangerous: true,
+    description: '更新指定衣物的基础信息字段（写操作，需要二次确认；不支持更新图片）',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cloth_id: { type: 'integer', minimum: 1 },
+        name: { type: 'string' },
+        type: { type: 'string' },
+        color: { type: 'string' },
+        style: { type: 'string' },
+        season: { type: 'string' },
+        material: { type: 'string' },
+        favorite: { type: 'boolean' },
+      },
+      required: ['cloth_id'],
+    },
+  },
+  {
+    name: 'delete_cloth',
+    dangerous: true,
+    description: '删除指定衣物（写操作，需要二次确认）',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        cloth_id: { type: 'integer', minimum: 1 },
+      },
+      required: ['cloth_id'],
+    },
+  },
+  {
+    name: 'update_user_sex',
+    dangerous: true,
+    description: '更新当前用户的性别设置（写操作，需要二次确认）',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        sex: { type: 'string' },
+      },
+      required: ['sex'],
+    },
+  },
 ]
 
 const TOOL_NAME_SET = new Set(TOOL_DEFINITIONS.map((tool) => tool.name))
@@ -46,6 +106,20 @@ const TOOL_NAME_SET = new Set(TOOL_DEFINITIONS.map((tool) => tool.name))
 const coerceBoolean = (value) => Boolean(value === true || value === 1 || value === '1' || value === 'true')
 
 const safeString = (value) => (typeof value === 'string' ? value : value == null ? '' : String(value))
+
+const coerceInteger = (value) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.trunc(value)
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const normalizeSex = (value) => {
+  const raw = safeString(value).trim().toLowerCase()
+  if (!raw) return ''
+  if (['man', 'male', 'm', '男'].includes(raw)) return 'man'
+  if (['woman', 'female', 'f', '女'].includes(raw)) return 'woman'
+  return ''
+}
 
 const pickCloth = (cloth) => ({
   cloth_id: cloth.cloth_id,
@@ -277,6 +351,59 @@ const executeTool = async (name, args, ctx) => {
       totalClothes: closet.length,
       suits,
     }
+  }
+
+  if (name === 'set_cloth_favorite') {
+    const clothId = coerceInteger(safeArgs.cloth_id)
+    if (!clothId || clothId <= 0) return { error: 'INVALID_CLOTH_ID' }
+    if (!Object.prototype.hasOwnProperty.call(safeArgs, 'favorite')) return { error: 'MISSING_FAVORITE' }
+    const favorite = coerceBoolean(safeArgs.favorite)
+    const ok = await updateClothFieldsForUser(userId, clothId, { favorite })
+    if (!ok) return { error: 'NOT_FOUND' }
+    return { cloth_id: clothId, favorite, updated: true }
+  }
+
+  if (name === 'update_cloth_fields') {
+    const clothId = coerceInteger(safeArgs.cloth_id)
+    if (!clothId || clothId <= 0) return { error: 'INVALID_CLOTH_ID' }
+
+    const patch = {}
+    ;['name', 'type', 'color', 'style', 'season', 'material'].forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(safeArgs, key)) {
+        patch[key] = safeString(safeArgs[key])
+      }
+    })
+    if (Object.prototype.hasOwnProperty.call(safeArgs, 'favorite')) {
+      patch.favorite = coerceBoolean(safeArgs.favorite)
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return { error: 'NO_FIELDS' }
+    }
+
+    const ok = await updateClothFieldsForUser(userId, clothId, patch)
+    if (!ok) {
+      const exists = await getClothByIdForUser(userId, clothId)
+      if (!exists) return { error: 'NOT_FOUND' }
+      return { error: 'UPDATE_FAILED' }
+    }
+    return { cloth_id: clothId, updated: true, patch }
+  }
+
+  if (name === 'delete_cloth') {
+    const clothId = coerceInteger(safeArgs.cloth_id)
+    if (!clothId || clothId <= 0) return { error: 'INVALID_CLOTH_ID' }
+    const ok = await deleteClothForUser(userId, clothId)
+    if (!ok) return { error: 'NOT_FOUND' }
+    return { cloth_id: clothId, deleted: true }
+  }
+
+  if (name === 'update_user_sex') {
+    const sex = normalizeSex(safeArgs.sex)
+    if (!sex) return { error: 'INVALID_SEX', allowed: ['man', 'woman'] }
+    const ok = await updateSex(userId, sex)
+    if (!ok) return { error: 'UPDATE_FAILED' }
+    return { sex, updated: true }
   }
 
   return { error: 'UNSUPPORTED_TOOL' }

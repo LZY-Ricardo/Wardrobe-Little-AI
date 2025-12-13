@@ -1,6 +1,7 @@
 const Router = require('@koa/router')
 const router = new Router()
 const axios = require('axios')
+const crypto = require('crypto')
 const { verify } = require('../utils/jwt')
 const { buildHelpMessage, buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
 const { TOOL_DEFINITIONS, executeTool } = require('../utils/toolRegistry')
@@ -15,8 +16,13 @@ const MAX_HISTORY_MESSAGES = Number(process.env.OLLAMA_MAX_HISTORY_MESSAGES) || 
 const CHAT_TOOL_CALLING_ENABLED = String(process.env.CHAT_TOOL_CALLING_ENABLED || '1') !== '0'
 const CHAT_TOOL_PLANNER_TIMEOUT_MS = Number(process.env.CHAT_TOOL_PLANNER_TIMEOUT_MS) || 15000
 const CHAT_TOOL_EXEC_TIMEOUT_MS = Number(process.env.CHAT_TOOL_EXEC_TIMEOUT_MS) || 5000
+const CHAT_WRITE_CONFIRM_TTL_MS = Number(process.env.CHAT_WRITE_CONFIRM_TTL_MS) || 5 * 60 * 1000
+const CHAT_WRITE_TOOL_ENABLED = String(process.env.CHAT_WRITE_TOOL_ENABLED || '1') !== '0'
 
-const TOOL_NAME_SET = new Set(TOOL_DEFINITIONS.map((tool) => tool.name))
+const PLANNER_TOOL_DEFINITIONS = TOOL_DEFINITIONS.filter((tool) => !tool.dangerous)
+const PLANNER_TOOL_NAME_SET = new Set(PLANNER_TOOL_DEFINITIONS.map((tool) => tool.name))
+
+const pendingWriteOps = new Map()
 
 const TOOL_TRIGGER_KEYWORDS = [
   '我的衣橱',
@@ -125,7 +131,7 @@ const withTimeout = (promise, timeoutMs) =>
   })
 
 const buildToolsForPlannerPrompt = () =>
-  TOOL_DEFINITIONS.map((tool) => {
+  PLANNER_TOOL_DEFINITIONS.map((tool) => {
     const schema = JSON.stringify(tool.parameters || {})
     return `- ${tool.name}: ${tool.description}\n  parameters: ${schema}`
   }).join('\n')
@@ -158,7 +164,7 @@ const planToolCall = async (url, userText) => {
 
   const tool = parsed.tool
   const args = parsed.arguments
-  if (!tool || typeof tool !== 'string' || !TOOL_NAME_SET.has(tool)) {
+  if (!tool || typeof tool !== 'string' || !PLANNER_TOOL_NAME_SET.has(tool)) {
     return { action: 'none', reason: 'unknown_tool' }
   }
   if (args != null && typeof args !== 'object') {
@@ -170,6 +176,110 @@ const planToolCall = async (url, userText) => {
 
 const buildToolResultBlock = (toolName, result) =>
   `【TOOL_RESULT name=${toolName}】\n${JSON.stringify(result)}\n【/TOOL_RESULT】`
+
+const writeSseMessage = (ctx, message) => {
+  ctx.res.write(`data: ${JSON.stringify(String(message ?? ''))}\n\n`)
+}
+
+const endSse = (ctx) => {
+  ctx.res.write('data: [DONE]\n\n')
+  ctx.res.end()
+}
+
+const makeConfirmId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+
+const parsePositiveInt = (value) => {
+  const n = Number.parseInt(String(value), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
+
+const parseConfirmCode = (text = '') => {
+  const input = String(text || '').trim()
+  const match = input.match(/^(?:确认|继续|\/confirm)\s+([a-zA-Z0-9]{6,40})$/)
+  return match ? match[1] : null
+}
+
+const buildDangerConfirmPrompt = ({ operationType, scope, risk, confirmId }) =>
+  [
+    '⚠️ 危险操作检测！',
+    `操作类型：${operationType}`,
+    `影响范围：${scope}`,
+    `风险评估：${risk}`,
+    '',
+    `请确认是否继续？回复：确认 ${confirmId}`,
+  ].join('\n')
+
+const parseWriteCommand = (text = '') => {
+  const input = String(text || '').trim()
+
+  const delMatch = input.match(/^\/(?:delete|del)\s+(\d+)\s*$/i)
+  if (delMatch) {
+    const clothId = parsePositiveInt(delMatch[1])
+    if (!clothId) return { error: 'INVALID_ARGS', usage: '用法：/delete <cloth_id>' }
+    return {
+      tool: 'delete_cloth',
+      arguments: { cloth_id: clothId },
+      confirm: {
+        operationType: '删除衣物',
+        scope: `将删除 cloth_id=${clothId}（仅当前账号）`,
+        risk: '删除后不可恢复；若误删需要重新上传/重建数据。',
+      },
+    }
+  }
+
+  const favMatch = input.match(/^\/(?:favorite|fav)\s+(\d+)\s+(on|off|true|false|1|0)\s*$/i)
+  if (favMatch) {
+    const clothId = parsePositiveInt(favMatch[1])
+    if (!clothId) return { error: 'INVALID_ARGS', usage: '用法：/favorite <cloth_id> on|off' }
+    const value = favMatch[2].toLowerCase()
+    const favorite = value === 'on' || value === 'true' || value === '1'
+    return {
+      tool: 'set_cloth_favorite',
+      arguments: { cloth_id: clothId, favorite },
+      confirm: {
+        operationType: favorite ? '收藏衣物' : '取消收藏衣物',
+        scope: `将设置 cloth_id=${clothId} favorite=${favorite ? 'true' : 'false'}（仅当前账号）`,
+        risk: '该操作会修改衣物收藏状态，可能影响推荐与排序。',
+      },
+    }
+  }
+
+  const sexMatch = input.match(/^\/sex\s+(.+)\s*$/i)
+  if (sexMatch) {
+    const raw = sexMatch[1].trim()
+    if (!raw) return { error: 'INVALID_ARGS', usage: '用法：/sex man|woman' }
+    return {
+      tool: 'update_user_sex',
+      arguments: { sex: raw },
+      confirm: {
+        operationType: '更新性别设置',
+        scope: `将更新当前账号 sex=${raw}`,
+        risk: '该操作会影响搭配预览与推荐逻辑，可能导致生成结果变化。',
+      },
+    }
+  }
+
+  const updateMatch = input.match(/^\/update\s+(\d+)\s+([\s\S]+)$/i)
+  if (updateMatch) {
+    const clothId = parsePositiveInt(updateMatch[1])
+    if (!clothId) return { error: 'INVALID_ARGS', usage: '用法：/update <cloth_id> {"name":"...","color":"..."}' }
+    const payload = extractJsonObject(updateMatch[2])
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { error: 'INVALID_ARGS', usage: '用法：/update <cloth_id> {"name":"...","color":"..."}' }
+    }
+    return {
+      tool: 'update_cloth_fields',
+      arguments: { cloth_id: clothId, ...payload },
+      confirm: {
+        operationType: '更新衣物信息',
+        scope: `将更新 cloth_id=${clothId} 的部分字段（仅当前账号）`,
+        risk: '该操作会修改衣物信息，可能影响筛选、推荐与后续生成结果。',
+      },
+    }
+  }
+
+  return null
+}
 
 /**
  * AI聊天接口 - 处理流式响应
@@ -208,8 +318,87 @@ router.post('/', verify(), async (ctx) => {
     if (command === '/help') {
         const help = buildHelpMessage()
         ctx.res.write(`data: ${JSON.stringify(help)}\n\n`)
-        ctx.res.write('data: [DONE]\n\n')
-        ctx.res.end()
+        endSse(ctx)
+        return
+    }
+
+    const userKey = String(ctx.userId)
+
+    if (command === '取消' || command === '/cancel') {
+        pendingWriteOps.delete(userKey)
+        writeSseMessage(ctx, '已取消待确认操作。')
+        endSse(ctx)
+        return
+    }
+
+    const confirmCode = parseConfirmCode(command)
+    if (confirmCode) {
+        const pending = pendingWriteOps.get(userKey)
+        if (!pending) {
+            writeSseMessage(ctx, '当前没有待确认的写操作。你可以先输入 /help 查看可用命令。')
+            endSse(ctx)
+            return
+        }
+        if (pending.confirmId !== confirmCode) {
+            writeSseMessage(ctx, '确认码不匹配或已过期。请重新发起写操作获取新的确认码。')
+            endSse(ctx)
+            return
+        }
+        if (Date.now() - pending.createdAt > CHAT_WRITE_CONFIRM_TTL_MS) {
+            pendingWriteOps.delete(userKey)
+            writeSseMessage(ctx, '该确认码已过期（默认 5 分钟）。请重新发起写操作。')
+            endSse(ctx)
+            return
+        }
+
+        pendingWriteOps.delete(userKey)
+        let result = null
+        try {
+            result = await withTimeout(executeTool(pending.tool, pending.arguments, ctx), CHAT_TOOL_EXEC_TIMEOUT_MS)
+        } catch (error) {
+            result = { error: 'TOOL_EXEC_FAILED', message: error?.message || String(error) }
+        }
+
+        if (result?.error) {
+            writeSseMessage(ctx, `写操作执行失败：${result.error}${result.message ? `（${result.message}）` : ''}`)
+            endSse(ctx)
+            return
+        }
+
+        const okText =
+          pending.tool === 'delete_cloth'
+            ? `已删除衣物 cloth_id=${pending.arguments?.cloth_id}。你可以去 /outfit 刷新查看。`
+            : pending.tool === 'set_cloth_favorite'
+              ? `已更新收藏状态：cloth_id=${pending.arguments?.cloth_id} favorite=${result.favorite ? 'true' : 'false'}。`
+              : pending.tool === 'update_cloth_fields'
+                ? `已更新衣物信息：cloth_id=${pending.arguments?.cloth_id}（字段：${Object.keys(result.patch || {}).join(', ') || '未知'}）。你可以去 /outfit 或 /update 查看。`
+                : pending.tool === 'update_user_sex'
+                  ? `已更新性别设置为：${result.sex}。你可以去 /person 或 /match 验证。`
+                  : '写操作已完成。'
+
+        writeSseMessage(ctx, okText)
+        endSse(ctx)
+        return
+    }
+
+    const writeCommand = CHAT_WRITE_TOOL_ENABLED ? parseWriteCommand(command) : null
+    if (writeCommand) {
+        const confirmId = makeConfirmId()
+        pendingWriteOps.set(userKey, {
+            confirmId,
+            tool: writeCommand.tool,
+            arguments: writeCommand.arguments,
+            createdAt: Date.now(),
+        })
+
+        const prompt = buildDangerConfirmPrompt({
+            operationType: writeCommand.confirm?.operationType || '写操作',
+            scope: writeCommand.confirm?.scope || '将修改当前账号的数据',
+            risk: writeCommand.confirm?.risk || '该操作会修改数据，请确认后再继续。',
+            confirmId,
+        })
+        writeSseMessage(ctx, prompt)
+        endSse(ctx)
         return
     }
 

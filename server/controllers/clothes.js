@@ -103,6 +103,57 @@ const getBotClothes   = async (user_id) => {
     }
 }
 
+// 获取指定衣物（带 user_id 归属校验）
+const getClothByIdForUser = async (user_id, cloth_id) => {
+    const sql = 'SELECT * FROM clothes WHERE user_id = ? AND cloth_id = ? LIMIT 1'
+    const params = [user_id, cloth_id]
+    const result = await allServices.query(sql, params)
+    if (result.length > 0) {
+        return result[0]
+    } else {
+        return null
+    }
+}
+
+// 删除衣物（带 user_id 归属校验）
+const deleteClothForUser = async (user_id, cloth_id) => {
+    const sql = 'DELETE FROM clothes WHERE user_id = ? AND cloth_id = ?'
+    const params = [user_id, cloth_id]
+    const result = await allServices.query(sql, params)
+    return result.affectedRows > 0
+}
+
+// 更新衣物字段（带 user_id 归属校验；仅允许白名单字段）
+const updateClothFieldsForUser = async (user_id, cloth_id, patch = {}) => {
+    const allowedFields = ['name', 'type', 'color', 'style', 'season', 'material', 'favorite', 'image']
+    const updates = []
+    const params = []
+
+    allowedFields.forEach((field) => {
+        if (Object.prototype.hasOwnProperty.call(patch, field)) {
+            updates.push(`${field} = ?`)
+            if (field === 'favorite') {
+                const fav = patch.favorite === true || patch.favorite === 1 || patch.favorite === '1' || patch.favorite === 'true'
+                params.push(fav ? 1 : 0)
+            } else {
+                params.push(patch[field])
+            }
+        }
+    })
+
+    if (updates.length === 0) {
+        return false
+    }
+
+    updates.push('update_time = ?')
+    params.push(Date.now())
+    params.push(user_id, cloth_id)
+
+    const sql = `UPDATE clothes SET ${updates.join(', ')} WHERE user_id = ? AND cloth_id = ?`
+    const result = await allServices.query(sql, params)
+    return result.affectedRows > 0
+}
+
 module.exports = {
     insertClothesData,
     getAllClothes,
@@ -110,5 +161,8 @@ module.exports = {
     updateClothes,
     getTopClothes,
     getBotClothes,
+    getClothByIdForUser,
+    deleteClothForUser,
+    updateClothFieldsForUser,
 
 }

@@ -80,6 +80,16 @@ const buildHelpMessage = () =>
     '',
     '快捷命令：',
     '- /help：显示这份帮助',
+    '- 取消 或 /cancel：取消待确认写操作',
+    '',
+    '写操作命令（需要二次确认）：',
+    '- /favorite <cloth_id> on|off：收藏/取消收藏衣物',
+    '- /delete <cloth_id>：删除衣物',
+    '- /update <cloth_id> {"name":"...","color":"..."}：更新衣物字段（不支持图片）',
+    '- /sex man|woman：更新性别设置',
+    '',
+    '确认方式：',
+    '- 当系统提示确认码后，回复：确认 <确认码>（或 /confirm <确认码>）',
   ].join('\n')
 
 module.exports = {

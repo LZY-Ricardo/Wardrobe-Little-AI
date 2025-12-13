@@ -35,11 +35,11 @@
 
 3) `generate_scene_suits`
 - 用途：把“场景推荐”能力接到聊天里（用户在聊天里说“商务场景给我推荐”）
-- 数据来源：现有 `/scene/generateSceneSuits` 的逻辑（Coze 或你后续替换的引擎）
+- 数据来源：当前已实现优先离线本地规则（无需 Coze）；Ollama 负责解释与补充建议。
 - 返回建议字段：标准化后的 `{ suits: [...] }`，并保证可解析
-- 失败降级：返回 `{ error: "SERVICE_UNAVAILABLE" }`，让模型转为“规则推荐 + 引导去 /recommend”
+- 失败降级：衣橱为空返回 `{ error: "EMPTY_CLOSET" }` 并引导先上传；规则无法组成套装时退化为单品推荐。
 
-4) `get_project_help`
+4) `get_project_help`（可选/未实现）
 - 用途：当用户问“这个项目有什么功能/怎么用”时，返回**可信的项目功能索引**（避免模型编造）
 - 数据来源：静态文本（可复用 `server/utils/aichatPrompt.js` 的项目概览块），或后续升级为 RAG
 
@@ -59,7 +59,7 @@
 
 或不需要工具：
 ```json
-{ "action": "answer", "answer": "..." }
+{ "action": "none", "reason": "..." }
 ```
 
 > 强约束：planner 只允许输出 JSON，不允许额外解释文本；服务端对 JSON 做严格校验，失败则降级为普通聊天回答。
@@ -118,7 +118,7 @@ module.exports = { TOOLS, executeTool }
 3) 调用 Ollama：`stream:false`，可尝试 `format:'json'`（如可用）
 4) 解析 JSON：
    - 无法解析 → 降级到普通对话（不走工具）
-   - `action:answer` → 直接返回 `answer`
+   - `action:none` → 不调用工具，直接进入普通回答
    - `action:tool` → 进入 Step B
 
 #### Step B：执行工具（tool runner）
@@ -177,14 +177,14 @@ MVP：前端仍只展示流式文本即可（你现在已经可用）。
 ## 4. 分阶段落地路线图（建议按顺序做）
 
 ### Phase 1（1-2 天）：工具调用 MVP
-- [ ] 工具注册表 + 2 个工具：`get_user_profile`、`list_clothes`
-- [ ] `/chat` 两段式：planner（非流式）→ tool → answer（流式）
-- [ ] 失败降级：planner 解析失败 → 走普通聊天
-- [ ] 数据最小化（不回传图片）
+- [x] 工具注册表 + 2 个工具：`get_user_profile`、`list_clothes`
+- [x] `/chat` 两段式：planner（非流式）→ tool → answer（结合 SSE 流式输出）
+- [x] 失败降级：planner 解析失败 → 走普通聊天
+- [x] 数据最小化（不回传图片）
 
 ### Phase 2（2-4 天）：补齐“场景推荐”与“项目导览”
-- [ ] `generate_scene_suits` 工具接入（并做不可用降级）
-- [ ] `get_project_help` 工具（静态）→ 后续升级为 RAG
+- [x] `generate_scene_suits` 工具接入（优先离线规则；衣橱为空降级提示）
+- [ ] `get_project_help` 工具（静态，可选）→ 后续升级为 RAG
 
 ### Phase 3（持续）：体验与安全
 - [ ] 统一 traceId/日志，记录工具调用耗时与失败原因
@@ -203,8 +203,8 @@ MVP：前端仍只展示流式文本即可（你现在已经可用）。
 可用工具：
 1) get_user_profile({})：获取当前登录用户信息（sex/characterModel 等）
 2) list_clothes({limit?, favoriteOnly?, type?, season?, style?})：获取衣橱衣物列表
-3) generate_scene_suits({scene})：生成场景推荐（可能不可用）
-4) get_project_help({})：项目功能与页面导航
+3) generate_scene_suits({scene, limit?})：基于衣橱生成场景推荐（离线规则；不返回图片）
+4) get_project_help({})：项目功能与页面导航（可选/未实现）
 
 规则：
 - 如果用户的问题需要依赖“用户真实数据”或“项目真实状态”，选择 action=tool。
@@ -214,7 +214,7 @@ MVP：前端仍只展示流式文本即可（你现在已经可用）。
 输出格式（二选一）：
 { "action":"tool", "tool":"...", "arguments":{...}, "reason":"..." }
 或
-{ "action":"answer", "answer":"..." }
+{ "action": "none", "reason": "..." }
 ```
 
 ---
@@ -244,3 +244,25 @@ MVP：前端仍只展示流式文本即可（你现在已经可用）。
 2) `/chat` 内加入 planner/runner/answer 三段式编排
 3) 前端仅加一个“显示工具调用状态”的小提示（可选）
 
+
+---
+
+## 9. 写操作工具（已实现，需二次确认）
+
+为了避免误操作，写操作工具不会由 planner 自动触发，只能通过显式命令发起；服务端返回确认码后，用户再次确认才会执行。
+
+### 9.1 可用命令
+- `/favorite <cloth_id> on|off`：收藏/取消收藏衣物
+- `/delete <cloth_id>`：删除衣物
+- `/update <cloth_id> {"name":"...","color":"..."}`：更新衣物字段（不支持图片）
+- `/sex man|woman`：更新性别设置（支持输入 男/女，会归一化为 man/woman）
+- `取消` 或 `/cancel`：取消待确认操作
+
+### 9.2 二次确认流程
+1) 发送写操作命令 → 服务端返回“⚠️ 危险操作检测”与确认码
+2) 在有效期内回复：`确认 <确认码>`（或 `/confirm <确认码>`）→ 才执行写操作
+3) 确认码不匹配/已过期 → 拒绝执行；需要重新发起命令获取新确认码
+
+### 9.3 开关与有效期
+- `CHAT_WRITE_TOOL_ENABLED=0`：关闭写操作命令入口
+- `CHAT_WRITE_CONFIRM_TTL_MS`：确认码有效期（默认 5 分钟）

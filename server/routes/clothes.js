@@ -14,7 +14,7 @@ const upload = multer({
     }
 });
 const { verify } = require('../utils/jwt')
-const { insertClothesData, getAllClothes, deleteClothes, updateClothes, getTopClothes, getBotClothes } = require('../controllers/clothes')
+const { insertClothesData, getAllClothes, deleteClothForUser, updateClothFieldsForUser, getTopClothes, getBotClothes } = require('../controllers/clothes')
 
 router.prefix('/clothes')
 
@@ -95,7 +95,7 @@ router.delete('/:id', verify(), async (ctx) => {
     console.log(id);
     
     try {
-        const res = await deleteClothes(id)
+        const res = await deleteClothForUser(ctx.userId, id)
         console.log('删除衣物',res);
 
         if (res) {
@@ -121,22 +121,25 @@ router.delete('/:id', verify(), async (ctx) => {
 // 更新衣物
 router.put('/:id', verify(), async (ctx) => {
     const cloth_id = ctx.params.id
-    const { name, type, color, style, season, material,favorite, image } = ctx.request.body
-    const data = {
-        cloth_id,
-        name,
-        type,
-        color,
-        style,
-        season,
-        material,
-        favorite,
-        image,
-        update_time: Date.now(),
+    const payload = ctx.request.body || {}
+    const patch = {}
+    ;['name', 'type', 'color', 'style', 'season', 'material', 'favorite', 'image'].forEach((key) => {
+        if (Object.prototype.hasOwnProperty.call(payload, key)) {
+            patch[key] = payload[key]
+        }
+    })
+
+    if (Object.keys(patch).length === 0) {
+        ctx.body = {
+            code: 0,
+            msg: '未提供可更新字段',
+        }
+        return
     }
-    console.log('更新衣物的信息:',data);
+
+    console.log('更新衣物的信息:', { cloth_id, ...patch });
     try {
-        const res = await updateClothes(data)
+        const res = await updateClothFieldsForUser(ctx.userId, cloth_id, patch)
         console.log('更新衣物的结果:',res);
         if (res) {
             ctx.body = {

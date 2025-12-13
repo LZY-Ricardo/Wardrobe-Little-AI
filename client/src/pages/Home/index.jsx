@@ -1,10 +1,12 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import SvgIcon from '@/components/SvgIcon'
+import Icon from '@/components/Icon'
 import DarkModeToggle from '@/components/DarkModeToggle'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 import styles from './index.module.less'
-import { defaultWeather, defaultTags } from '@/config/homeConfig'
+import { defaultWeather } from '@/config/homeConfig'
 
 const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache_v1'
 
@@ -44,35 +46,80 @@ const getGeoPermissionState = async () => {
   }
 }
 
-const generateRandomColor = () => {
-  const colors = [
-    { bg: '#FFE4E1', text: '#8B0000' },
-    { bg: '#E6F3FF', text: '#0066CC' },
-    { bg: '#F0FFF0', text: '#006400' },
-    { bg: '#FFF8DC', text: '#B8860B' },
-    { bg: '#F5F0FF', text: '#6A0DAD' },
-    { bg: '#FFE4B5', text: '#FF8C00' },
-  ]
-  return colors[Math.floor(Math.random() * colors.length)]
+const logWeatherGeo = (...args) => {
+  console.log(...args)
+}
+
+const parseTempValue = (temp) => {
+  const match = String(temp || '').match(/-?\d+/)
+  if (!match) return null
+  const value = Number(match[0])
+  return Number.isFinite(value) ? value : null
+}
+
+const buildAdviceText = (tempValue, weatherText) => {
+  const desc = String(weatherText || '')
+  const tips = []
+
+  if (typeof tempValue === 'number') {
+    if (tempValue <= 5) tips.push('天气偏冷：厚外套 + 保暖内搭 + 长裤更稳妥。')
+    else if (tempValue <= 12) tips.push('有点冷：外套/卫衣 + 长裤，注意保暖。')
+    else if (tempValue <= 20) tips.push('体感舒适：长袖或薄外套，早晚可叠穿。')
+    else if (tempValue <= 27) tips.push('偏暖：短袖/薄衬衫 + 轻薄下装即可。')
+    else tips.push('天气较热：清爽面料（棉/亚麻）+ 透气鞋更舒适。')
+  } else {
+    tips.push('根据体感选择叠穿层次，更容易适应室内外温差。')
+  }
+
+  if (desc.includes('雨')) tips.push('有降雨概率：记得带伞，优先防水/易打理材质。')
+  if (desc.includes('雪')) tips.push('可能有降雪：鞋底防滑更重要。')
+  if (desc.includes('风')) tips.push('风较大：外套选择防风面料，围巾可加分。')
+
+  return tips.join(' ')
+}
+
+const buildAdviceTags = (tempValue, weatherText) => {
+  const tags = []
+  const desc = String(weatherText || '')
+
+  if (typeof tempValue === 'number') {
+    if (tempValue <= 12) tags.push('保暖')
+    if (tempValue >= 28) tags.push('清凉')
+    if (tempValue >= 20 && tempValue < 28) tags.push('舒适')
+    if (tempValue >= 13 && tempValue <= 20) tags.push('叠穿')
+  }
+
+  if (desc.includes('雨')) tags.push('带伞')
+  if (desc.includes('风')) tags.push('防风')
+  if (desc.includes('雪')) tags.push('防滑')
+
+  return Array.from(new Set(tags)).slice(0, 4)
 }
 
 export default function Home() {
-  const [labelColors, setLabelColors] = useState([])
+  const navigate = useNavigate()
   const [clothesData, setClothesData] = useState([])
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
   const [weather, setWeather] = useState(defaultWeather)
-  const [tags, setTags] = useState(defaultTags)
 
-  const randomClothes = useMemo(() => {
-    if (!clothesData?.length) return []
-    const shuffled = [...clothesData].sort(() => 0.5 - Math.random())
-    return shuffled.slice(0, 3)
+  const closetStats = useMemo(() => {
+    const list = Array.isArray(clothesData) ? clothesData : []
+    const includesType = (keyword) => list.filter((item) => item?.type?.includes(keyword)).length
+
+    return {
+      total: list.length,
+      top: includesType('上衣'),
+      bottom: includesType('下衣'),
+      shoes: includesType('鞋子'),
+      accessory: includesType('配饰'),
+      favorite: list.filter((item) => Boolean(item?.favorite)).length,
+    }
   }, [clothesData])
 
-  useEffect(() => {
-    setLabelColors([generateRandomColor(), generateRandomColor(), generateRandomColor(), generateRandomColor()])
-  }, [])
+  const tempValue = useMemo(() => parseTempValue(weather?.temp), [weather?.temp])
+  const adviceText = useMemo(() => buildAdviceText(tempValue, weather?.text), [tempValue, weather?.text])
+  const adviceTags = useMemo(() => buildAdviceTags(tempValue, weather?.text), [tempValue, weather?.text])
 
   useEffect(() => {
     const fetchClothes = async () => {
@@ -105,15 +152,11 @@ export default function Home() {
             temp: res.data.temp || defaultWeather.temp,
             text: res.data.text || defaultWeather.text,
           })
-          if (res.data.tags?.length) {
-            setTags(res.data.tags)
-          }
         }
         return res?.data || null
       } catch (err) {
         console.warn('天气接口不可用，使用兜底数据', err)
         setWeather(defaultWeather)
-        setTags(defaultTags)
         return null
       }
     }
@@ -137,6 +180,7 @@ export default function Home() {
       if (!isGeoSupported() || !isSecureGeoContext()) return
 
       const permissionState = await getGeoPermissionState()
+      logWeatherGeo('[weather] 定位请求已触发', { permissionState })
       const askedAt =
         typeof cached?.askedAt === 'number' ? cached.askedAt : cached?.asked ? Date.now() : 0
 
@@ -164,7 +208,7 @@ export default function Home() {
       })
 
       const maximumAge = 10 * 60 * 1000
-      const primaryTimeout = permissionState === 'prompt' ? 30000 : 15000
+      const primaryTimeout = permissionState === 'prompt' || permissionState === 'unknown' ? 30000 : 15000
       let retried = false
 
       const onSuccess = (position) => {
@@ -172,6 +216,7 @@ export default function Home() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         }
+        logWeatherGeo('[weather] 定位成功', coords)
         writeSessionJson(WEATHER_GEO_CACHE_KEY, {
           askedAt: nextAskedAt,
           coords,
@@ -180,13 +225,20 @@ export default function Home() {
           lastErrorAt: null,
         })
         void fetchWeather(coords).then((weatherData) => {
-          if (weatherData?.city === '当前位置') {
-            console.info('[weather] 定位成功，已切换到当前位置天气')
+          if (weatherData) {
+            logWeatherGeo('[weather] 天气已刷新', {
+              city: weatherData.city,
+              temp: weatherData.temp,
+              text: weatherData.text,
+            })
+          } else {
+            logWeatherGeo('[weather] 定位成功，但天气刷新失败（已使用默认天气）')
           }
         })
       }
 
       const onError = (geoError) => {
+        logWeatherGeo('[weather] 定位失败', { code: geoError?.code, message: geoError?.message })
         writeSessionJson(WEATHER_GEO_CACHE_KEY, {
           askedAt: nextAskedAt,
           coords: null,
@@ -195,11 +247,12 @@ export default function Home() {
           lastErrorAt: Date.now(),
         })
 
-        if (!retried && permissionState === 'granted' && geoError?.code === 3) {
+        if (!retried && geoError?.code === 3) {
           retried = true
           navigator.geolocation.getCurrentPosition(
             onSuccess,
             (finalError) => {
+              logWeatherGeo('[weather] 定位重试失败', { code: finalError?.code, message: finalError?.message })
               writeSessionJson(WEATHER_GEO_CACHE_KEY, {
                 askedAt: nextAskedAt,
                 coords: null,
@@ -227,41 +280,94 @@ export default function Home() {
     void requestGeo()
   }, [])
 
-  const renderClothes = () => {
-    if (status === 'loading') return <Loading text="加载衣物中..." />
+  const quickEntries = useMemo(
+    () => [
+      {
+        key: 'outfit',
+        title: '虚拟衣柜',
+        desc: '管理/筛选/搜索衣物',
+        to: '/outfit',
+        icon: <Icon type="iconfont icon-tubiao-" className={styles['entry-icon']} />,
+      },
+      {
+        key: 'match',
+        title: '搭配中心',
+        desc: '选上衣+下衣生成预览',
+        to: '/match',
+        icon: <Icon type="iconfont icon-magic" className={styles['entry-icon']} />,
+      },
+      {
+        key: 'recommend',
+        title: '场景推荐',
+        desc: '通勤/约会/运动…',
+        to: '/recommend',
+        icon: <Icon type="iconfont icon-dengpao" className={styles['entry-icon']} />,
+      },
+      {
+        key: 'add',
+        title: '添加衣物',
+        desc: '上传图片自动识别',
+        to: '/add',
+        icon: <SvgIcon iconName="icon-jiahao-copy" className={styles['entry-icon']} />,
+      },
+      {
+        key: 'person',
+        title: '我的',
+        desc: '资料/人物模特设置',
+        to: '/person',
+        icon: <Icon type="iconfont icon-icon-myself-1" className={styles['entry-icon']} />,
+      },
+      {
+        key: 'aichat',
+        title: 'AI 助手',
+        desc: '穿搭问答/使用指导',
+        to: '/aichat',
+        icon: <SvgIcon iconName="icon-zhinengkefu" className={styles['entry-icon']} />,
+      },
+    ],
+    []
+  )
+
+  const sceneShortcuts = useMemo(() => ['通勤', '约会', '运动', '旅行'], [])
+
+  const renderClosetOverview = () => {
+    if (status === 'loading') return <Loading text="加载衣橱概览..." />
     if (status === 'error') return <ErrorBanner message={error} onAction={() => window.location.reload()} />
-    if (!randomClothes.length) return <Empty description="暂无衣物，去添加一件吧" actionText="添加" onAction={() => window.location.href = '/add'} />
+    if (!clothesData?.length) {
+      return (
+        <Empty
+          description="你的衣橱还是空的，先添加一件衣物吧"
+          actionText="去添加"
+          onAction={() => navigate('/add')}
+        />
+      )
+    }
 
     return (
-      <div className={styles.container}>
-        {randomClothes.map((item, index) => (
-          <div className={styles['container-item']} key={item.cloth_id || index}>
-            <div className={styles['item-img']}>
-              <img src={item.image} alt={item.name} />
-            </div>
-            <div className={styles['item-label']}>
-              <div
-                className={styles.label}
-                style={{
-                  backgroundColor: labelColors[0]?.bg || '#f5f5f5',
-                  color: labelColors[0]?.text || '#333',
-                }}
-              >
-                {item.type}
-              </div>
-              <div
-                className={styles.label}
-                style={{
-                  backgroundColor: labelColors[1]?.bg || '#f5f5f5',
-                  color: labelColors[1]?.text || '#333',
-                }}
-              >
-                {item.style}
-              </div>
-            </div>
-            <div className={styles['item-message']}>{item.name}</div>
+      <div className={styles['overview-card']}>
+        <div className={styles['stats-row']}>
+          <div className={styles['stat-item']}>
+            <div className={styles['stat-label']}>衣物总数</div>
+            <div className={styles['stat-value']}>{closetStats.total}</div>
           </div>
-        ))}
+          <div className={styles['stat-item']}>
+            <div className={styles['stat-label']}>已收藏</div>
+            <div className={styles['stat-value']}>{closetStats.favorite}</div>
+          </div>
+        </div>
+
+        <div className={styles['category-row']}>
+          <span className={styles['category-chip']}>上衣 {closetStats.top}</span>
+          <span className={styles['category-chip']}>下衣 {closetStats.bottom}</span>
+          <span className={styles['category-chip']}>鞋子 {closetStats.shoes}</span>
+          <span className={styles['category-chip']}>配饰 {closetStats.accessory}</span>
+        </div>
+
+        <div className={styles['overview-actions']}>
+          <button type="button" className={styles['link-btn']} onClick={() => navigate('/outfit')}>
+            去管理衣橱
+          </button>
+        </div>
       </div>
     )
   }
@@ -280,17 +386,76 @@ export default function Home() {
       </div>
 
       <div className={styles.content}>
-        <div className={styles['content-title']}>精选衣物展示</div>
+        <div className={styles['today-card']}>
+          <div className={styles['today-top']}>
+            <div>
+              <div className={styles['today-title']}>今日建议</div>
+              <div className={styles['today-subtitle']}>
+                {weather.city} · {weather.temp} · {weather.text}
+              </div>
+            </div>
+            <div className={styles['today-tags']}>
+              {adviceTags.map((tag) => (
+                <span key={tag} className={styles['today-tag']}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
 
-        <div className={styles['tag-list']}>
-          {tags.map((tag) => (
-            <span key={tag} className={styles['tag-chip']}>
-              {tag}
-            </span>
-          ))}
+          <div className={styles['today-desc']}>{adviceText}</div>
+
+          <div className={styles['today-scenes']}>
+            {sceneShortcuts.map((scene) => (
+              <button
+                key={scene}
+                type="button"
+                className={styles['scene-chip']}
+                onClick={() => navigate('/recommend', { state: { presetScene: scene } })}
+              >
+                {scene}
+              </button>
+            ))}
+          </div>
+
+          <div className={styles['today-actions']}>
+            <button
+              type="button"
+              className={styles['btn-primary']}
+              onClick={() => (clothesData?.length ? navigate('/recommend') : navigate('/add'))}
+            >
+              {clothesData?.length ? '去场景推荐' : '去添加衣物'}
+            </button>
+            <button type="button" className={styles['btn-secondary']} onClick={() => navigate('/match')}>
+              去搭配中心
+            </button>
+          </div>
         </div>
 
-        {renderClothes()}
+        <div className={styles.section}>
+          <div className={styles['section-title']}>快捷入口</div>
+          <div className={styles['entry-grid']}>
+            {quickEntries.map((entry) => (
+              <button
+                key={entry.key}
+                type="button"
+                className={styles['entry-item']}
+                onClick={() => navigate(entry.to)}
+              >
+                <div className={styles['entry-icon-wrap']}>{entry.icon}</div>
+                <div className={styles['entry-text']}>
+                  <div className={styles['entry-title']}>{entry.title}</div>
+                  <div className={styles['entry-desc']}>{entry.desc}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.section}>
+          <div className={styles['section-title']}>衣橱概览</div>
+          {renderClosetOverview()}
+        </div>
       </div>
     </div>
   )

@@ -146,6 +146,7 @@
                     display: flex;
                     align-items: center;
                     justify-content: center;
+                    position: relative;
 
                     img {
                         width: 100%;
@@ -157,13 +158,30 @@
                         color: #9CA3AF;
                         font-size: 12px;
                     }
+
+                    .item-actions-overlay {
+                        position: absolute;
+                        right: 10px;
+                        top: 10px;
+                        display: flex;
+                        gap: 8px;
+                        padding: 6px 8px;
+                        background: rgba(255, 255, 255, 0.85);
+                        border-radius: 12px;
+                        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+
+                        .action-icon {
+                            font-size: 18px;
+                            color: #6b7280;
+                        }
+                    }
                 }
 
                 .item-message {
                     margin: 14px 14px 0 14px;
                     font-weight: 400;
                     font-size: 12px;
-                    color: #4B5563;
+                    color: #6B7280;
                     line-height: 18px;
 
                 }
@@ -204,28 +222,38 @@
 
                 .item-list {
                     display: flex;
-                    flex-wrap: wrap;
-                    gap: 6px;
-                    margin: 8px 14px 10px 14px;
-
-                    .item-chip {
-                        padding: 4px 8px;
-                        background: #f3f4f6;
-                        border-radius: 999px;
-                        font-size: 11px;
-                        color: #4b5563;
-                    }
+                    flex-direction: column;
+                    gap: 12px;
+                    margin: 10px 14px 12px 14px;
                 }
 
-                .item-actions {
+                .item-row {
                     display: flex;
-                    gap: 10px;
-                    margin: 0 14px;
+                    flex-direction: column;
+                    gap: 4px;
+                }
 
-                    .action-icon {
-                        font-size: 18px;
-                        color: #9CA3AF;
-                    }
+                .item-row-name {
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #111827;
+                    line-height: 18px;
+                }
+
+                .item-row-tags {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 6px;
+                }
+
+                .item-tag {
+                    padding: 2px 8px;
+                    background: #f3f4f6;
+                    border-radius: 8px;
+                    font-size: 11px;
+                    color: #4b5563;
+                    line-height: 16px;
+                    opacity: 0.8;
                 }
 
             }
