@@ -43,9 +43,26 @@ export default function Login() {
       setTokens({ accessToken: access_token, refreshToken: refresh_token })
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
-      const userInfo = { username, id, createTime, sex, characterModel, avatar }
+      const userInfo = {
+        username,
+        id,
+        createTime,
+        sex,
+        avatar,
+        hasCharacterModel: Boolean(characterModel),
+      }
       setUserInfo(userInfo)
-      localStorage.setItem('userInfo', JSON.stringify(userInfo))
+      const value = JSON.stringify(userInfo)
+      try {
+        localStorage.setItem('userInfo', value)
+      } catch {
+        try {
+          localStorage.removeItem('userInfo')
+          localStorage.setItem('userInfo', value)
+        } catch (retryError) {
+          console.warn('persist userInfo failed:', retryError)
+        }
+      }
 
       Toast.show({ content: '登录成功', duration: 1000 })
       setTimeout(() => {

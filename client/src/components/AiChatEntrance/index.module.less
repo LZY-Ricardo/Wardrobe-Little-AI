@@ -1,0 +1,38 @@
+.entrance {
+  position: fixed;
+  right: 14px;
+  bottom: calc(env(safe-area-inset-bottom) + 60px);
+  z-index: 7777;
+
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 50%;
+  height: 54px;
+  width: 54px;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+
+  box-shadow: var(--shadow-soft);
+  color: #fff;
+  cursor: pointer;
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.entrance-icon {
+  font-size: 18px;
+  color: #fff;
+}
+
+.entrance-text {
+  font-size: 10px;
+  line-height: 12px;
+  color: #fff;
+}
+

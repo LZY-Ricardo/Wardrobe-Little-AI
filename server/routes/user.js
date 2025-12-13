@@ -367,10 +367,11 @@ router.get('/getUserInfo', verify(), async (ctx) => {
     try {
         const res = await getUserInfoById(user_id)
         if (res) {
+            const { password, ...safeUser } = res
             ctx.body = {
                 code: 1,
                 msg: '获取成功',
-                data: res,
+                data: safeUser,
             }
         } else {
             ctx.body = {

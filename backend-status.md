@@ -22,7 +22,7 @@
   - POST /generateSceneSuits：将前端 body 透传给 Coze workflow3_id，不落库、不校验。
 - /chat
   - 需鉴权；注入 system prompt（项目使用指导 + 穿搭知识），规范化 role（bot→assistant），并将 messages 流式转发到本地 Ollama（默认 http://localhost:11434/api/chat；模型默认 deepseek-r1:7b）；支持 /help；支持超时与历史裁剪。
-  - 已支持工具调用 MVP：当问题涉及“我的衣橱/我的性别/人物模特”等需要读取真实数据时，后端会先规划并调用工具（当前：`list_clothes`、`get_user_profile`），再基于工具结果生成回答。
+  - 已支持工具调用 MVP：当问题涉及“我的衣橱/场景推荐/我的性别/人物模特”等需要读取真实数据时，后端会先规划并调用工具（当前：`list_clothes`、`get_user_profile`、`generate_scene_suits`），再基于工具结果生成回答（`generate_scene_suits` 优先离线规则，不返回图片）。
 
 ## 外部依赖与前置条件
 - MySQL 数据库（未提供建表 SQL，需自建 user/clothes 等表）。

@@ -1,5 +1,6 @@
 import React from 'react'
 import BottomNavigation from '@/components/BottomNavigation'
+import AiChatEntrance from '@/components/AiChatEntrance'
 import styles from './index.module.less'
 
 export default function Layout({children, showBottomNav = true}) {
@@ -8,6 +9,7 @@ export default function Layout({children, showBottomNav = true}) {
             <div className={styles['layout-content']}>
                 {children}
             </div>
+            <AiChatEntrance />
             {showBottomNav && <BottomNavigation />}
         </div>
     )

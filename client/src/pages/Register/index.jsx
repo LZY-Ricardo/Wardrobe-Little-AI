@@ -61,7 +61,7 @@ export default function Register() {
 
 
     setLoading(true);
-    const res = await axios.post('/user/register', {
+    await axios.post('/user/register', {
       username,
       password
     });

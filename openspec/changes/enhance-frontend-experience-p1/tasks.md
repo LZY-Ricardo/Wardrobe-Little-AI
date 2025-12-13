@@ -5,6 +5,7 @@
 ## 2. UI 基建与路由懒加载
 - [ ] 2.1 封装 Loading/Empty/ErrorBanner/ConfirmDialog/Skeleton 组件（支持重试/取消）。
 - [ ] 2.2 路由懒加载 fallback 接入骨架屏，验证首屏不白屏。
+- [x] 2.3 全局 AiChat 入口（悬浮按钮），在 `/aichat` 自动隐藏，确保不遮挡底部 TabBar。
 
 ## 3. Outfit/Home 列表体验
 - [ ] 3.1 搜索输入去抖（可配置），列表 loading/空态/错误提示与重试。

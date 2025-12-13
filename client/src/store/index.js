@@ -1,6 +1,18 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
+const normalizeUserInfo = (userInfo) => {
+  if (!userInfo || typeof userInfo !== 'object') return null
+  return {
+    id: userInfo.id,
+    username: userInfo.username,
+    createTime: userInfo.createTime ?? userInfo.create_time,
+    sex: userInfo.sex,
+    avatar: userInfo.avatar,
+    hasCharacterModel: Boolean(userInfo.hasCharacterModel || userInfo.characterModel),
+  }
+}
+
 export const useAuthStore = create(
   persist(
     (set) => ({
@@ -18,7 +30,7 @@ export const useAuthStore = create(
           refreshToken: '',
           userInfo: null,
         }),
-      setUserInfo: (userInfo) => set({ userInfo }),
+      setUserInfo: (userInfo) => set({ userInfo: normalizeUserInfo(userInfo) }),
     }),
     {
       name: 'auth-store',

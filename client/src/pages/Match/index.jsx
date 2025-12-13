@@ -48,13 +48,25 @@ export default function Match() {
       if (nextUser) {
         setUserInfo(nextUser)
         setAuthUserInfo(nextUser)
-        localStorage.setItem('userInfo', JSON.stringify({
+        const persistedUserInfo = {
           username: nextUser.username,
           id: nextUser.id,
-          createTime: nextUser.createTime,
+          createTime: nextUser.createTime || nextUser.create_time,
           sex: nextUser.sex,
-          characterModel: nextUser.characterModel,
-        }))
+          avatar: nextUser.avatar,
+          hasCharacterModel: Boolean(nextUser.characterModel),
+        }
+        const value = JSON.stringify(persistedUserInfo)
+        try {
+          localStorage.setItem('userInfo', value)
+        } catch {
+          try {
+            localStorage.removeItem('userInfo')
+            localStorage.setItem('userInfo', value)
+          } catch (retryError) {
+            console.warn('persist userInfo failed:', retryError)
+          }
+        }
       }
     } catch (error) {
       console.error('获取用户信息失败:', error);
@@ -68,14 +80,12 @@ export default function Match() {
   }, [setAuthUserInfo, setUserInfo])
 
   useEffect(() => {
-    if (!userInfo && accessToken) {
-      fetchUserInfo()
-    }
-  }, [userInfo, accessToken, fetchUserInfo])
+    if (accessToken) fetchUserInfo()
+  }, [accessToken, fetchUserInfo])
 
   useEffect(() => {
     if (authUserInfo) {
-      setUserInfo(authUserInfo)
+      setUserInfo((prev) => prev || authUserInfo)
     }
   }, [authUserInfo])
 

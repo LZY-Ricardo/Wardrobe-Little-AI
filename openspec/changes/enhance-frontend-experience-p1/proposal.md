@@ -8,6 +8,7 @@
 ## What Changes
 - 全局状态：统一使用 zustand 作为轻量 store，集中管理用户/主题/偏好/衣物列表，启动 hydrate，更新时持久化。
 - UI 基建：封装 Loading/Empty/ErrorBanner/ConfirmDialog/Skeleton 组件；路由懒加载 fallback 使用骨架屏。
+- AiChat 入口：提供全局悬浮入口（聊天页自动隐藏），便于从任意页面快速进入 AI 助手。
 - Outfit/Home：搜索输入去抖；分页/无限滚动；空态/错误提示与重试；天气/标签接口或配置驱动、失败降级。
 - 深色模式：主题写入 store + localStorage，并同步 html data-theme，刷新后恢复。
 - 上传可靠性：文件大小/类型前置校验，压缩参数可配置，上传支持超时/重试/取消，错误有文案。

@@ -1,7 +1,6 @@
 ﻿import React, { useState } from 'react'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
-import { useNavigate } from 'react-router-dom'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
 
@@ -121,7 +120,6 @@ export default function Recommend() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [serviceUnavailable, setServiceUnavailable] = useState(false)
-  const navigate = useNavigate()
 
   const handleBtnClick = () => {
     const value = scene.trim()
@@ -219,11 +217,6 @@ export default function Recommend() {
 
   return (
     <div className={styles['recommend']}>
-      <div className={styles['chat']} onClick={() => navigate('/aichat')}>
-        <SvgIcon iconName="icon-zhinengkefu" className={styles['chat-icon']} />
-        <p>AI 助手</p>
-      </div>
-
       <div className={styles['recommend-header']}>
         <SvgIcon iconName="icon-icon-sousuo" className={styles['search-icon']} />
         <input

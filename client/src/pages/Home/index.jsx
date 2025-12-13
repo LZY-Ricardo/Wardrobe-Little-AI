@@ -109,10 +109,12 @@ export default function Home() {
             setTags(res.data.tags)
           }
         }
+        return res?.data || null
       } catch (err) {
         console.warn('天气接口不可用，使用兜底数据', err)
         setWeather(defaultWeather)
         setTags(defaultTags)
+        return null
       }
     }
 
@@ -177,7 +179,11 @@ export default function Home() {
           lastErrorCode: null,
           lastErrorAt: null,
         })
-        fetchWeather(coords)
+        void fetchWeather(coords).then((weatherData) => {
+          if (weatherData?.city === '当前位置') {
+            console.info('[weather] 定位成功，已切换到当前位置天气')
+          }
+        })
       }
 
       const onError = (geoError) => {

@@ -33,15 +33,25 @@ export default function Person() {
       setUserInfo(res.data)
       setAvatar(res.data?.avatar ? `${API_BASE_URL}${res.data.avatar}` : '')
       setSex(res.data.sex || '') // 设置性别状态
-      const data = {
+      const persistedUserInfo = {
         username: res.data.username,
         id: res.data.id,
-        createTime: res.data.createTime,
+        createTime: res.data.createTime || res.data.create_time,
         sex: res.data.sex,
-        characterModel: res.data.characterModel,
         avatar: res.data.avatar,
+        hasCharacterModel: Boolean(res.data.characterModel),
       }
-      localStorage.setItem('userInfo', JSON.stringify(data))
+      const value = JSON.stringify(persistedUserInfo)
+      try {
+        localStorage.setItem('userInfo', value)
+      } catch {
+        try {
+          localStorage.removeItem('userInfo')
+          localStorage.setItem('userInfo', value)
+        } catch (retryError) {
+          console.warn('persist userInfo failed:', retryError)
+        }
+      }
     } catch (error) {
       console.error('获取用户信息失败:', error);
     }
