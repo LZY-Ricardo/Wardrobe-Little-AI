@@ -262,7 +262,7 @@ export default function AiChat() {
         </div>
       </div>
       <div className={styles['chat-container']}>
-        <div className={styles['bot']}>
+        <div className={styles['welcome-bot']}>
           你好，我是AI衣物小助手，有什么我可以帮忙的吗？
         </div>
         <div className={styles['quick-prompts']}>
@@ -272,27 +272,34 @@ export default function AiChat() {
               type="button"
               onClick={() => send(item.value)}
               disabled={connectionState === 'connecting' || connectionState === 'streaming'}
+              className={styles['prompt-btn']}
             >
               {item.label}
             </button>
           ))}
+          <div className={styles['fade-right']} aria-hidden />
         </div>
         <div className={styles['hint']}>提示：输入 /help 可查看示例问题</div>
 
         <div className={styles['container-chat']}>
           {list.map((item, index) => {
-            if (item.role === 'user') {
-              return (
-                <div className={styles['user']} key={index}>
-                  {item.content}
-                </div>
-              )
-            }
+            const isUser = item.role === 'user'
             return (
-              <div className={styles['bot']} key={index}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-                  {item.content}
-                </ReactMarkdown>
+              <div
+                className={`${styles['message-row']} ${isUser ? styles['from-user'] : styles['from-bot']}`}
+                key={index}
+              >
+                {!isUser && <div className={styles['avatar']} aria-label="assistant">🤖</div>}
+                <div className={styles['bubble']}>
+                  {isUser ? (
+                    item.content
+                  ) : (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
+                      {item.content}
+                    </ReactMarkdown>
+                  )}
+                </div>
+                {isUser && <div className={styles['avatar']} aria-label="me">我</div>}
               </div>
             )
           })}
@@ -301,13 +308,19 @@ export default function AiChat() {
         </div>
       </div>
       <div className={styles['chat-footer']}>
+        {(connectionState === 'connecting' || connectionState === 'streaming') && (
+          <div className={styles['stop-floating']}>
+            <button type="button" onClick={stopStreaming} className={styles['stop-pill']}>
+              停止生成
+            </button>
+          </div>
+        )}
         <div className={styles['footer-input']}>
           <input type="text" placeholder="请输入问题（/help）" ref={inputRef} />
-          <button onClick={() => send()} disabled={disabled}>
-            发送
-          </button>
-          <button onClick={stopStreaming} disabled={connectionState === 'idle'} className={styles['stop-btn']}>
-            停止生成
+          <button onClick={() => send()} disabled={disabled} className={styles['send-btn']} type="button">
+            <span className={styles['send-icon']} aria-hidden>
+              ➤
+            </span>
           </button>
         </div>
       </div>
