@@ -18,6 +18,7 @@ const TOOL_DEFINITIONS = [
       type: 'object',
       additionalProperties: false,
       properties: {
+        offset: { type: 'integer', minimum: 0, maximum: 10000 },
         limit: { type: 'integer', minimum: 1, maximum: 50 },
         favoriteOnly: { type: 'boolean' },
         type: { type: 'string' },
@@ -310,6 +311,8 @@ const executeTool = async (name, args, ctx) => {
   }
 
   if (name === 'list_clothes') {
+    const offsetRaw = coerceInteger(safeArgs.offset)
+    const offset = offsetRaw != null ? Math.max(0, offsetRaw) : 0
     const limitRaw = safeArgs.limit
     const limit = Number.isFinite(limitRaw) ? Math.min(50, Math.max(1, limitRaw)) : 30
     const favoriteOnly = coerceBoolean(safeArgs.favoriteOnly)
@@ -328,7 +331,9 @@ const executeTool = async (name, args, ctx) => {
 
     return {
       total: filtered.length,
-      items: filtered.slice(0, limit).map(pickCloth),
+      offset,
+      limit,
+      items: filtered.slice(offset, offset + limit).map(pickCloth),
     }
   }
 

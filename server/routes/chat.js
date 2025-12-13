@@ -18,11 +18,13 @@ const CHAT_TOOL_PLANNER_TIMEOUT_MS = Number(process.env.CHAT_TOOL_PLANNER_TIMEOU
 const CHAT_TOOL_EXEC_TIMEOUT_MS = Number(process.env.CHAT_TOOL_EXEC_TIMEOUT_MS) || 5000
 const CHAT_WRITE_CONFIRM_TTL_MS = Number(process.env.CHAT_WRITE_CONFIRM_TTL_MS) || 5 * 60 * 1000
 const CHAT_WRITE_TOOL_ENABLED = String(process.env.CHAT_WRITE_TOOL_ENABLED || '1') !== '0'
+const CHAT_LIST_PAGINATION_TTL_MS = Number(process.env.CHAT_LIST_PAGINATION_TTL_MS) || 5 * 60 * 1000
 
 const PLANNER_TOOL_DEFINITIONS = TOOL_DEFINITIONS.filter((tool) => !tool.dangerous)
 const PLANNER_TOOL_NAME_SET = new Set(PLANNER_TOOL_DEFINITIONS.map((tool) => tool.name))
 
 const pendingWriteOps = new Map()
+const pendingListOps = new Map()
 
 const TOOL_TRIGGER_KEYWORDS = [
   '我的衣橱',
@@ -281,6 +283,73 @@ const parseWriteCommand = (text = '') => {
   return null
 }
 
+const isClosetInventoryQuestion = (text = '') => {
+  const input = String(text || '').trim()
+  if (!input) return false
+  const hasClosetWord = ['衣橱', '衣柜', '衣服', '衣物'].some((k) => input.includes(k))
+  const isAskingList = ['有哪些', '有什么', '都有', '列表', '清单', '多少'].some((k) => input.includes(k))
+  const isHowTo = ['怎么', '如何', '怎样', '操作', '步骤', '哪里'].some((k) => input.includes(k))
+  return hasClosetWord && isAskingList && !isHowTo
+}
+
+const buildListClothesArgsFromQuery = (text = '') => {
+  const input = String(text || '').trim()
+  const args = { limit: 20, offset: 0 }
+
+  if (['收藏', '喜欢', '最爱'].some((k) => input.includes(k))) {
+    args.favoriteOnly = true
+  }
+  if (input.includes('上衣')) args.type = '上衣'
+  if (input.includes('下衣')) args.type = '下衣'
+
+  return args
+}
+
+const formatClosetInventory = (result) => {
+  if (!result || typeof result !== 'object') return '获取衣橱数据失败：返回为空。'
+  if (result.error) {
+    if (result.error === 'EMPTY_CLOSET') return result.message || '你的衣橱为空，请先上传衣物。'
+    if (result.error === 'UNAUTHORIZED') return '未登录或登录已过期，请重新登录后再试。'
+    return `获取衣橱数据失败：${result.error}`
+  }
+
+  const total = Number(result.total) || 0
+  const offset = Number(result.offset) || 0
+  const items = Array.isArray(result.items) ? result.items : []
+  if (total <= 0 || items.length === 0) {
+    return '你的衣橱目前还没有衣物。\n\n- 你可以去 `/add` 上传衣物（可选 AI 分析自动填表）\n- 或去 `/outfit` 查看/管理衣物'
+  }
+
+  const groups = new Map()
+  items.forEach((item) => {
+    const key = String(item.type || '未分类').trim() || '未分类'
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(item)
+  })
+
+  const startNo = Math.min(total, offset + 1)
+  const endNo = Math.min(total, offset + items.length)
+  const lines = [`我在你的衣橱里找到了 **${total}** 件衣物（展示 ${startNo}-${endNo}）：`]
+
+  for (const [type, list] of groups.entries()) {
+    lines.push('', `### ${type}（${list.length}）`)
+    list.forEach((item) => {
+      const meta = [item.color, item.style, item.season].filter((v) => v && String(v).trim()).join(' / ')
+      const name = String(item.name || '').trim() || '（未命名）'
+      const fav = item.favorite ? ' / ❤️收藏' : ''
+      lines.push(`- ${item.cloth_id}：${name}${meta ? `（${meta}${fav}）` : fav ? `（${fav.slice(3)}）` : ''}`)
+    })
+  }
+
+  if (total > endNo) {
+    lines.push('', `还有 **${total - endNo}** 件未展示。回复“继续”可查看更多，或告诉我你想看的类型（如“只看上衣/只看收藏”）。`)
+  } else {
+    lines.push('', '如果你想让我基于衣橱做“商务/通勤/约会/运动/旅行”等场景推荐，直接告诉我场景即可。')
+  }
+
+  return lines.join('\n')
+}
+
 /**
  * AI聊天接口 - 处理流式响应
  * 接收对话历史消息数组，转发给Ollama API，并将流式响应实时转发给前端
@@ -381,6 +450,43 @@ router.post('/', verify(), async (ctx) => {
         return
     }
 
+    if (command === '继续' || command === '/more') {
+        const pending = pendingListOps.get(userKey)
+        if (!pending) {
+            writeSseMessage(ctx, '当前没有可继续展示的衣橱列表。你可以直接问：我衣橱里有哪些衣服？')
+            endSse(ctx)
+            return
+        }
+        if (Date.now() - pending.createdAt > CHAT_LIST_PAGINATION_TTL_MS) {
+            pendingListOps.delete(userKey)
+            writeSseMessage(ctx, '上一次衣橱列表已过期，请重新问：我衣橱里有哪些衣服？')
+            endSse(ctx)
+            return
+        }
+
+        let result = null
+        try {
+            result = await withTimeout(executeTool('list_clothes', { ...pending.args, offset: pending.offset }, ctx), CHAT_TOOL_EXEC_TIMEOUT_MS)
+        } catch (error) {
+            result = { error: 'TOOL_EXEC_FAILED', message: error?.message || String(error) }
+        }
+
+        const total = Number(result?.total) || 0
+        const offset = Number(result?.offset) || 0
+        const items = Array.isArray(result?.items) ? result.items : []
+        const nextOffset = offset + items.length
+
+        if (total > nextOffset) {
+            pendingListOps.set(userKey, { ...pending, offset: nextOffset, createdAt: Date.now() })
+        } else {
+            pendingListOps.delete(userKey)
+        }
+
+        writeSseMessage(ctx, formatClosetInventory(result))
+        endSse(ctx)
+        return
+    }
+
     const writeCommand = CHAT_WRITE_TOOL_ENABLED ? parseWriteCommand(command) : null
     if (writeCommand) {
         const confirmId = makeConfirmId()
@@ -398,6 +504,30 @@ router.post('/', verify(), async (ctx) => {
             confirmId,
         })
         writeSseMessage(ctx, prompt)
+        endSse(ctx)
+        return
+    }
+
+    // 明确的“衣橱盘点”问题：直接读取衣橱并返回列表（不依赖 planner / 不走大模型）
+    if (CHAT_TOOL_CALLING_ENABLED && isClosetInventoryQuestion(command)) {
+        const args = buildListClothesArgsFromQuery(command)
+        let result = null
+        try {
+            result = await withTimeout(executeTool('list_clothes', args, ctx), CHAT_TOOL_EXEC_TIMEOUT_MS)
+        } catch (error) {
+            result = { error: 'TOOL_EXEC_FAILED', message: error?.message || String(error) }
+        }
+        const total = Number(result?.total) || 0
+        const offset = Number(result?.offset) || 0
+        const items = Array.isArray(result?.items) ? result.items : []
+        const nextOffset = offset + items.length
+
+        if (total > nextOffset) {
+            pendingListOps.set(userKey, { args, offset: nextOffset, createdAt: Date.now() })
+        } else {
+            pendingListOps.delete(userKey)
+        }
+        writeSseMessage(ctx, formatClosetInventory(result))
         endSse(ctx)
         return
     }

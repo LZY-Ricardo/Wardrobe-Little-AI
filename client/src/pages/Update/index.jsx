@@ -332,10 +332,10 @@ export default function Update() {
             <input ref={materialRef} type="text" id="material" placeholder="选填，如：棉/羊毛" />
           </div>
           <div className={styles.detailFavorite}>
-            <label htmlFor="favorite">是否常用</label>
+            <label htmlFor="favorite">是否收藏</label>
             <select ref={favoriteRef} id="favorite">
-              <option value="1">常用</option>
-              <option value="0">不常用</option>
+              <option value="1">收藏</option>
+              <option value="0">未收藏</option>
             </select>
           </div>
         </div>

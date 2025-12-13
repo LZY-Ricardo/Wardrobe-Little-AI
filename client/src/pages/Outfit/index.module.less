@@ -95,7 +95,8 @@
         padding: 8px;
         display: flex;
         flex-direction: column;
-        height: calc(100vh - 120px);
+        flex: 1;
+        min-height: 0;
         overflow-y: auto;
         position: relative;
         z-index: 1;
@@ -445,6 +446,50 @@
                 border: 1px solid rgba(0, 0, 0, 0.04);
                 z-index: 2;
 
+                .favorite-btn {
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 999px;
+                    border: 1px solid rgba(15, 23, 42, 0.10);
+                    padding: 0;
+                    background: rgba(255, 255, 255, 0.92);
+                    backdrop-filter: blur(6px);
+                    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    cursor: pointer;
+                    transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+                    z-index: 3;
+
+                    &:hover {
+                        transform: translateY(-1px);
+                        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+                    }
+
+                    &:active {
+                        transform: translateY(0);
+                    }
+
+                    &:disabled {
+                        opacity: 0.6;
+                        cursor: not-allowed;
+                        box-shadow: 0 6px 16px rgba(15, 23, 42, 0.10);
+                    }
+                }
+
+                .favorite-icon {
+                    font-size: 18px;
+                    color: #9ca3af;
+                }
+
+                .favorite-icon-active {
+                    color: #ef4444;
+                }
+
                 &:hover {
                     transform: translateY(-4px);
                     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
@@ -654,6 +699,37 @@
             justify-content: center;
         }
 
+        .favorite-button {
+            background: linear-gradient(135deg, #f43f5e, #fb7185);
+            color: #ffffff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(244, 63, 94, 0.28);
+
+            &:hover {
+                background: linear-gradient(135deg, #e11d48, #fb7185);
+                transform: translateY(-1px);
+                box-shadow: 0 4px 12px rgba(244, 63, 94, 0.35);
+            }
+
+            &:active {
+                transform: translateY(0);
+                box-shadow: 0 2px 6px rgba(244, 63, 94, 0.28);
+            }
+
+            &:disabled {
+                opacity: 0.7;
+                cursor: not-allowed;
+                transform: none;
+                box-shadow: none;
+            }
+        }
+
         .delete-button {
             background: linear-gradient(135deg, #ff4757, #ff3742);
             color: #ffffff;
@@ -782,6 +858,20 @@
         border-color: var(--border-subtle);
         box-shadow: var(--shadow-soft);
         transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .outfit .clothes .clothes-item .favorite-btn {
+        background: rgba(17, 24, 39, 0.72);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .outfit .clothes .clothes-item .favorite-icon {
+        color: var(--muted);
+    }
+
+    .outfit .clothes .clothes-item .favorite-icon-active {
+        color: #fb7185;
     }
 
     .outfit .clothes .clothes-item .clothes-img {

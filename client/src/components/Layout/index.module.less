@@ -1,11 +1,14 @@
-.layout{
+﻿.layout{
     min-height: 100vh;
+    max-height: 100vh;
     display: flex;
     flex-direction: column;
 
     .layout-content{
         flex: 1;
-        overflow: hidden; /* 禁用Layout层级的滚动 */
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
         padding-bottom: 60px;
     }
 

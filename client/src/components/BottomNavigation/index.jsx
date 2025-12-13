@@ -1,6 +1,7 @@
 import React from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { TabBar } from 'antd-mobile'
+import AiChatEntrance from '@/components/AiChatEntrance'
 import Icon from '@/components/Icon'
 import styles from './index.module.less'
 
@@ -39,6 +40,7 @@ export default function BottomNavigation() {
 
     return (
         <div className={styles['bottom-navigation-bar']}>
+            <AiChatEntrance />
             <TabBar
                 onChange={key => {
                     navigate(key)

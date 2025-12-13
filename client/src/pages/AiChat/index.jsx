@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store'
 const STREAM_TIMEOUT = 120000
 const MAX_RETRY = 3
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const BOT_AVATAR_SRC = `${import.meta.env.BASE_URL}logo_2.svg`
 
 const QUICK_PROMPTS = [
   {
@@ -41,11 +42,20 @@ export default function AiChat() {
   const controllerRef = useRef(null)
   const messagesRef = useRef([])
   const retryRef = useRef(0)
+  const retryTimerRef = useRef(null)
+  const scrollContainerRef = useRef(null)
+  const isAtBottomRef = useRef(true)
+  const lastSentInputRef = useRef('')
+  const abortReasonRef = useRef(null)
+
+  const authUserInfo = useAuthStore((s) => s.userInfo)
 
   const [list, setList] = useState([])
   const [disabled, setDisabled] = useState(false)
   const [connectionState, setConnectionState] = useState('idle') // idle|connecting|streaming|error
   const [errorMessage, setErrorMessage] = useState('')
+  const [retryTimes, setRetryTimes] = useState(0)
+  const [isAtBottom, setIsAtBottom] = useState(true)
   const navigate = useNavigate()
 
   const refreshAccessToken = async () => {
@@ -83,10 +93,56 @@ export default function AiChat() {
     messagesRef.current = list
   }, [list])
 
+  const updateIsAtBottom = () => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    const atBottom = distanceToBottom <= 80
+    if (atBottom !== isAtBottomRef.current) {
+      isAtBottomRef.current = atBottom
+      setIsAtBottom(atBottom)
+    }
+  }
+
+  const scrollToBottom = (behavior = 'auto') => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const top = container.scrollHeight
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({ top, behavior })
+    } else {
+      container.scrollTop = top
+    }
+    if (!isAtBottomRef.current) {
+      isAtBottomRef.current = true
+      setIsAtBottom(true)
+    }
+  }
+
+  const handleScroll = () => {
+    updateIsAtBottom()
+  }
+
+  useEffect(() => {
+    requestAnimationFrame(() => updateIsAtBottom())
+  }, [])
+
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      if ((connectionState === 'connecting' || connectionState === 'streaming') && isAtBottomRef.current) {
+        scrollToBottom('auto')
+      } else {
+        updateIsAtBottom()
+      }
+    })
+  }, [list, connectionState])
+
   const stopStreaming = () => {
+    abortReasonRef.current = 'user'
     controllerRef.current?.abort()
     controllerRef.current = null
     setConnectionState('idle')
+    setErrorMessage('')
     setDisabled(false)
   }
 
@@ -95,11 +151,24 @@ export default function AiChat() {
       setConnectionState('error')
       setErrorMessage('多次重试失败，请稍后再试')
       setDisabled(false)
+      setRetryTimes(retryRef.current)
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current)
+        retryTimerRef.current = null
+      }
       return
     }
     retryRef.current += 1
     const delay = Math.min(5000, 500 * 2 ** retryRef.current)
-    setTimeout(() => send(payload, true), delay)
+    setRetryTimes(retryRef.current)
+    setErrorMessage(`网络异常，正在自动重试（${retryRef.current}/${MAX_RETRY}）`)
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+    }
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null
+      send(payload, true)
+    }, delay)
   }
 
   const send = async (payload, isRetry = false) => {
@@ -119,10 +188,22 @@ export default function AiChat() {
       return
     }
 
+    lastSentInputRef.current = input
+    abortReasonRef.current = null
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+    if (!isAtBottomRef.current) {
+      isAtBottomRef.current = true
+      setIsAtBottom(true)
+    }
+
     setDisabled(true)
     setConnectionState('connecting')
     setErrorMessage('')
     retryRef.current = isRetry ? retryRef.current : 0
+    if (!isRetry) setRetryTimes(0)
 
     if (!isRetry) {
       setList((prev) => [...prev, { role: 'user', content: input }])
@@ -193,6 +274,7 @@ export default function AiChat() {
       let shouldBreak = false
       const timeoutId = setTimeout(() => {
         shouldBreak = true
+        abortReasonRef.current = 'timeout'
         controller.abort()
       }, STREAM_TIMEOUT)
 
@@ -240,15 +322,95 @@ export default function AiChat() {
     } catch (error) {
       console.error('Chat error:', error)
       controllerRef.current = null
-      setConnectionState('error')
-      setErrorMessage(error.name === 'AbortError' ? '请求已取消' : '网络异常，准备重试')
-      if (error.name !== 'AbortError') {
-        scheduleRetry(input)
-      } else {
+      if (error?.message === 'UNAUTHORIZED') {
+        setConnectionState('idle')
         setDisabled(false)
+        return
       }
+
+      if (error?.name === 'AbortError') {
+        const abortReason = abortReasonRef.current
+        abortReasonRef.current = null
+        if (abortReason === 'user') {
+          setConnectionState('idle')
+          setErrorMessage('')
+          setDisabled(false)
+          return
+        }
+        setConnectionState('error')
+        if (abortReason === 'timeout') {
+          scheduleRetry(input)
+          return
+        }
+        setErrorMessage('请求已取消')
+        setDisabled(false)
+        return
+      }
+
+      setConnectionState('error')
+      scheduleRetry(input)
     }
   }
+
+  const retryNow = () => {
+    const payload = lastSentInputRef.current
+    if (!payload) return
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
+    retryRef.current = 0
+    setRetryTimes(0)
+    send(payload, true)
+  }
+
+  const ThinkingIndicator = () => (
+    <div className={styles['thinking']} role="status" aria-live="polite">
+      <span className={styles['thinking-text']}>AI 小助手正在思考中</span>
+      <span className={styles['thinking-dots']} aria-hidden>
+        <i />
+        <i />
+        <i />
+      </span>
+    </div>
+  )
+
+  const showThinkingPlaceholder =
+    connectionState === 'connecting' && (!list.length || list[list.length - 1]?.role === 'user')
+
+  const resolveAvatarSrc = (avatar) => {
+    if (!avatar) return ''
+    if (avatar.startsWith('http://') || avatar.startsWith('https://') || avatar.startsWith('data:')) return avatar
+    if (avatar.startsWith('/')) return `${API_BASE_URL}${avatar}`
+    return avatar
+  }
+
+  const persistedUserInfo = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('userInfo') || 'null')
+    } catch {
+      return null
+    }
+  })()
+
+  const userAvatarRaw = authUserInfo?.avatar || persistedUserInfo?.avatar
+  const userAvatarSrc = resolveAvatarSrc(userAvatarRaw)
+
+  const BotAvatar = () => (
+    <div className={styles['avatar']} aria-label="assistant">
+      <img className={styles['avatar-image']} src={BOT_AVATAR_SRC} alt="" />
+    </div>
+  )
+
+  const UserAvatar = () => (
+    <div className={styles['avatar']} aria-label="me">
+      {userAvatarSrc ? (
+        <img className={styles['avatar-image']} src={userAvatarSrc} alt="" />
+      ) : (
+        <span aria-hidden>我</span>
+      )}
+    </div>
+  )
 
   return (
     <div className={styles['chat']}>
@@ -261,7 +423,7 @@ export default function AiChat() {
           <DarkModeToggle />
         </div>
       </div>
-      <div className={styles['chat-container']}>
+      <div className={styles['chat-container']} ref={scrollContainerRef} onScroll={handleScroll}>
         <div className={styles['welcome-bot']}>
           你好，我是AI衣物小助手，有什么我可以帮忙的吗？
         </div>
@@ -284,27 +446,41 @@ export default function AiChat() {
         <div className={styles['container-chat']}>
           {list.map((item, index) => {
             const isUser = item.role === 'user'
+            const isBotThinking =
+              !isUser &&
+              index === list.length - 1 &&
+              (connectionState === 'connecting' || connectionState === 'streaming') &&
+              !item.content
             return (
               <div
                 className={`${styles['message-row']} ${isUser ? styles['from-user'] : styles['from-bot']}`}
                 key={index}
               >
-                {!isUser && <div className={styles['avatar']} aria-label="assistant">🤖</div>}
+                {!isUser && <BotAvatar />}
                 <div className={styles['bubble']}>
                   {isUser ? (
                     item.content
+                  ) : isBotThinking ? (
+                    <ThinkingIndicator />
                   ) : (
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                       {item.content}
                     </ReactMarkdown>
                   )}
                 </div>
-                {isUser && <div className={styles['avatar']} aria-label="me">我</div>}
+                {isUser && <UserAvatar />}
               </div>
             )
           })}
 
-          {errorMessage ? <div className={styles['error-text']}>{errorMessage}</div> : null}
+          {showThinkingPlaceholder ? (
+            <div className={`${styles['message-row']} ${styles['from-bot']}`}>
+              <BotAvatar />
+              <div className={styles['bubble']}>
+                <ThinkingIndicator />
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className={styles['chat-footer']}>
@@ -315,6 +491,42 @@ export default function AiChat() {
             </button>
           </div>
         )}
+        {connectionState === 'error' && errorMessage ? (
+          <div className={styles['connection-banner']} role="alert">
+            <div className={styles['connection-banner-left']}>
+              <div className={styles['connection-banner-title']}>
+                {disabled && retryTimes > 0 && retryTimes < MAX_RETRY ? '连接异常（自动重试中）' : '连接异常'}
+              </div>
+              <div className={styles['connection-banner-desc']}>{errorMessage}</div>
+            </div>
+            <div className={styles['connection-banner-actions']}>
+              <button
+                type="button"
+                onClick={retryNow}
+                className={styles['connection-banner-btn']}
+                disabled={!lastSentInputRef.current}
+              >
+                重试
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {!isAtBottom ? (
+          <div className={styles['scroll-to-bottom']}>
+            <button
+              type="button"
+              onClick={() => scrollToBottom('smooth')}
+              className={styles['scroll-to-bottom-btn']}
+              aria-label="跳到页面底部"
+            >
+              <span className={styles['scroll-to-bottom-icon']} aria-hidden>
+                ↓
+              </span>
+            </button>
+          </div>
+        ) : null}
+
         <div className={styles['footer-input']}>
           <input type="text" placeholder="请输入问题（/help）" ref={inputRef} />
           <button onClick={() => send()} disabled={disabled} className={styles['send-btn']} type="button">

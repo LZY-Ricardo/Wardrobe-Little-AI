@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Overlay, Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
+import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import { useNavigate } from 'react-router-dom'
 import SvgIcon from '@/components/SvgIcon'
 import white from '@/assets/white.jpg'
@@ -31,6 +32,8 @@ const generateRandomColor = () => {
   return colors[Math.floor(Math.random() * colors.length)]
 }
 
+const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
+
 export default function Outfit() {
   const navigate = useNavigate()
   const [selectedItem, setSelectedItem] = useState(null)
@@ -38,6 +41,7 @@ export default function Outfit() {
   const [itemColors, setItemColors] = useState({})
   const [searchKeyword, setSearchKeyword] = useState('')
   const debouncedSearch = useDebouncedValue(searchKeyword, 300)
+  const [favoriteUpdating, setFavoriteUpdating] = useState({})
 
   const {
     items,
@@ -131,6 +135,45 @@ export default function Outfit() {
     }
   }
 
+  const updateFavoriteLocal = useCallback(
+    (clothId, favorite) => {
+      const nextFavorite = favorite ? 1 : 0
+      const nextItems = (items || []).map((item) =>
+        item.cloth_id === clothId ? { ...item, favorite: nextFavorite } : item
+      )
+      setItems(nextItems)
+      setSelectedItem((prev) => (prev?.cloth_id === clothId ? { ...prev, favorite: nextFavorite } : prev))
+    },
+    [items, setItems]
+  )
+
+  const toggleFavorite = async (cloth) => {
+    const clothId = cloth?.cloth_id
+    if (!clothId) return
+    if (favoriteUpdating[clothId]) return
+
+    const prevFavorite = isFavorited(cloth.favorite)
+    const nextFavorite = !prevFavorite
+
+    setFavoriteUpdating((prev) => ({ ...prev, [clothId]: true }))
+    updateFavoriteLocal(clothId, nextFavorite)
+
+    try {
+      await axios.put(`/clothes/${clothId}`, { favorite: nextFavorite ? 1 : 0 })
+      Toast.show({ icon: 'success', content: nextFavorite ? '已收藏' : '已取消收藏', duration: 900 })
+    } catch (err) {
+      console.error('更新收藏状态失败', err)
+      updateFavoriteLocal(clothId, prevFavorite)
+      Toast.show({ icon: 'fail', content: '操作失败，请重试', duration: 1200 })
+    } finally {
+      setFavoriteUpdating((prev) => {
+        const next = { ...prev }
+        delete next[clothId]
+        return next
+      })
+    }
+  }
+
   const renderContent = () => {
     if (status === 'loading') return <Loading text="加载衣物中..." />
     if (status === 'error') return <ErrorBanner message={error} onAction={loadClothes} />
@@ -147,6 +190,22 @@ export default function Outfit() {
               setVisible(true)
             }}
           >
+            <button
+              type="button"
+              className={styles['favorite-btn']}
+              disabled={Boolean(favoriteUpdating[item.cloth_id])}
+              aria-label={isFavorited(item.favorite) ? '取消收藏' : '收藏'}
+              onClick={(e) => {
+                e.stopPropagation()
+                void toggleFavorite(item)
+              }}
+            >
+              {isFavorited(item.favorite) ? (
+                <HeartFill className={`${styles['favorite-icon']} ${styles['favorite-icon-active']}`} />
+              ) : (
+                <HeartOutline className={styles['favorite-icon']} />
+              )}
+            </button>
             <div className={styles['clothes-img']}>
               <img src={item.image || white} alt={item.name} />
             </div>
@@ -302,13 +361,21 @@ export default function Outfit() {
                   <span className={styles['detail-value']}>{selectedItem.material || '未知'}</span>
                 </div>
                 <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>常用程度：</span>
+                  <span className={styles['detail-label']}>收藏：</span>
                   <span className={styles['detail-value']}>
-                    {selectedItem.favorite === 1 ? '常用' : '不常用'}
+                    {isFavorited(selectedItem.favorite) ? '已收藏' : '未收藏'}
                   </span>
                 </div>
 
                 <div className={styles['delete-button-container']}>
+                  <button
+                    type="button"
+                    className={styles['favorite-button']}
+                    disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
+                    onClick={() => void toggleFavorite(selectedItem)}
+                  >
+                    {isFavorited(selectedItem.favorite) ? '取消收藏' : '收藏'}
+                  </button>
                   <button
                     className={styles['delete-button']}
                     onClick={() =>

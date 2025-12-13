@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
+import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
@@ -28,43 +29,11 @@ const roundRect = (ctx, x, y, w, h, r) => {
   ctx.closePath()
 }
 
-const pickPalette = (scene = '') => {
-  const name = scene || ''
-  const map = [
-    {
-      keys: ['约会', '恋爱'],
-      bgFrom: '#fdf2f8',
-      bgTo: '#f3e8ff',
-      card: '#ffffff',
-      accent: '#f9a8d4',
-      blur: [
-        { x: 200, y: 180, r: 200, color: 'rgba(249,168,212,0.22)' },
-        { x: 700, y: 220, r: 180, color: 'rgba(196,181,253,0.18)' },
-      ],
-    },
-    {
-      keys: ['运动', '健身'],
-      bgFrom: '#f7fdf9',
-      bgTo: '#eef7ff',
-      card: '#ffffff',
-      accent: '#34d399',
-      blur: [
-        { x: 160, y: 140, r: 180, color: 'rgba(52,211,153,0.16)' },
-        { x: 720, y: 160, r: 160, color: 'rgba(96,165,250,0.14)' },
-      ],
-    },
-    {
-      keys: ['商务', '通勤'],
-      bgFrom: '#f8fafc',
-      bgTo: '#f1f5f9',
-      card: '#ffffff',
-      accent: '#cbd5e1',
-      blur: [],
-    },
-  ]
-  const hit = map.find((p) => p.keys.some((k) => name.includes(k)))
-  return hit || { bgFrom: '#f9fafb', bgTo: '#f3f4f6', card: '#ffffff', accent: '#d1d5db', blur: [] }
-}
+const pickPalette = () => ({
+  bg: '#f7f9fc',
+  card: '#ffffff',
+  stroke: '#e6e8ef',
+})
 
 const createComposite = async (images, scene = '') => {
   if (!images.length) return ''
@@ -76,24 +45,13 @@ const createComposite = async (images, scene = '') => {
   const ctx = canvas.getContext('2d')
 
   const palette = pickPalette(scene)
-  const gradient = ctx.createLinearGradient(0, 0, width, height)
-  gradient.addColorStop(0, palette.bgFrom)
-  gradient.addColorStop(1, palette.bgTo)
-  ctx.fillStyle = gradient
-  roundRect(ctx, 0, 0, width, height, 36)
+  ctx.fillStyle = palette.bg
+  roundRect(ctx, 0, 0, width, height, 32)
   ctx.fill()
-
-  if (Array.isArray(palette.blur)) {
-    palette.blur.forEach(({ x, y, r, color }) => {
-      const g = ctx.createRadialGradient(x, y, 0, x, y, r)
-      g.addColorStop(0, color)
-      g.addColorStop(1, 'rgba(255,255,255,0)')
-      ctx.fillStyle = g
-      ctx.beginPath()
-      ctx.arc(x, y, r, 0, Math.PI * 2)
-      ctx.fill()
-    })
-  }
+  ctx.strokeStyle = palette.stroke
+  ctx.lineWidth = 1
+  roundRect(ctx, 6, 6, width - 12, height - 12, 28)
+  ctx.stroke()
 
   // grid layout: main on top, two subs bottom, unified 4:5 ratio
   const imgs = await Promise.all(images.map((url) => loadImage(url)))
@@ -204,6 +162,15 @@ const normalizeSuits = (raw = [], fallbackScene = '') => {
   }))
 }
 
+const getSceneTone = (scene = '') => {
+  const name = scene || ''
+  if (['约会', '恋爱'].some((k) => name.includes(k))) return 'tone-romance'
+  if (['运动', '健身'].some((k) => name.includes(k))) return 'tone-sport'
+  return 'tone-neutral'
+}
+
+const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
+
 export default function Recommend() {
   const location = useLocation()
   const lastPresetKeyRef = React.useRef('')
@@ -215,6 +182,7 @@ export default function Recommend() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [serviceUnavailable, setServiceUnavailable] = useState(false)
+  const [favoriteUpdating, setFavoriteUpdating] = useState({})
 
   const handleBtnClick = () => {
     const value = scene.trim()
@@ -257,6 +225,115 @@ export default function Recommend() {
     }
   }
 
+  const applyFavoritePatch = (patch = {}) => {
+    const keys = Object.keys(patch)
+    if (!keys.length) return
+
+    setSceneSuits((prev) =>
+      prev.map((suit) => {
+        if (!Array.isArray(suit.items) || suit.items.length === 0) return suit
+        let changed = false
+        const nextItems = suit.items.map((cloth) => {
+          const clothId = cloth?.cloth_id
+          if (!clothId) return cloth
+          if (!Object.prototype.hasOwnProperty.call(patch, clothId)) return cloth
+          const nextFavorite = patch[clothId] ? 1 : 0
+          if (cloth.favorite === nextFavorite) return cloth
+          changed = true
+          return { ...cloth, favorite: nextFavorite }
+        })
+        return changed ? { ...suit, items: nextItems } : suit
+      })
+    )
+  }
+
+  const isSuitFavorited = (suit) => {
+    const items = Array.isArray(suit?.items) ? suit.items : []
+    const clothItems = items.filter((cloth) => cloth?.cloth_id)
+    if (!clothItems.length) return false
+    return clothItems.every((cloth) => isFavorited(cloth.favorite))
+  }
+
+  const toggleClothFavorite = async (cloth) => {
+    const clothId = cloth?.cloth_id
+    if (!clothId) return
+    if (favoriteUpdating[clothId]) return
+
+    const prevFavorite = isFavorited(cloth.favorite)
+    const nextFavorite = !prevFavorite
+
+    setFavoriteUpdating((prev) => ({ ...prev, [clothId]: true }))
+    applyFavoritePatch({ [clothId]: nextFavorite })
+
+    try {
+      await axios.put(`/clothes/${clothId}`, { favorite: nextFavorite ? 1 : 0 })
+      Toast.show({ content: nextFavorite ? '已收藏' : '已取消收藏', duration: 900 })
+    } catch (err) {
+      console.error('更新收藏状态失败:', err)
+      applyFavoritePatch({ [clothId]: prevFavorite })
+      Toast.show({ content: '操作失败，请重试', duration: 1200 })
+    } finally {
+      setFavoriteUpdating((prev) => {
+        const next = { ...prev }
+        delete next[clothId]
+        return next
+      })
+    }
+  }
+
+  const toggleSuitFavorite = async (suit) => {
+    const items = Array.isArray(suit?.items) ? suit.items : []
+    const prevPatch = {}
+    items.forEach((cloth) => {
+      const clothId = cloth?.cloth_id
+      if (!clothId) return
+      if (Object.prototype.hasOwnProperty.call(prevPatch, clothId)) return
+      prevPatch[clothId] = isFavorited(cloth.favorite)
+    })
+    const clothIds = Object.keys(prevPatch)
+    if (!clothIds.length) return
+
+    if (clothIds.some((id) => favoriteUpdating[id])) return
+
+    const nextFavorite = !clothIds.every((id) => prevPatch[id])
+    const nextPatch = {}
+    clothIds.forEach((id) => {
+      nextPatch[id] = nextFavorite
+    })
+
+    setFavoriteUpdating((prev) => {
+      const next = { ...prev }
+      clothIds.forEach((id) => {
+        next[id] = true
+      })
+      return next
+    })
+    applyFavoritePatch(nextPatch)
+
+    const results = await Promise.allSettled(
+      clothIds.map((id) => axios.put(`/clothes/${id}`, { favorite: nextFavorite ? 1 : 0 }))
+    )
+    const failedIds = clothIds.filter((_, index) => results[index]?.status === 'rejected')
+    if (failedIds.length) {
+      const revertPatch = {}
+      failedIds.forEach((id) => {
+        revertPatch[id] = prevPatch[id]
+      })
+      applyFavoritePatch(revertPatch)
+      Toast.show({ content: '部分单品操作失败，请重试', duration: 1200 })
+    } else {
+      Toast.show({ content: nextFavorite ? '已收藏该套单品' : '已取消收藏', duration: 900 })
+    }
+
+    setFavoriteUpdating((prev) => {
+      const next = { ...prev }
+      clothIds.forEach((id) => {
+        delete next[id]
+      })
+      return next
+    })
+  }
+
   React.useEffect(() => {
     if (!presetScene) return
     if (lastPresetKeyRef.current === location.key) return
@@ -287,40 +364,80 @@ export default function Recommend() {
     return (
       <div className={styles['recommend-body-content']}>
         {sceneSuits.map((item) => (
-          <div className={styles['content-item']} key={item.id}>
+          <div className={`${styles['content-item']} ${styles[getSceneTone(item.scene)]}`} key={item.id}>
             <div className={styles['item-img']}>
               {item.cover ? <img src={item.cover} alt={item.scene} /> : <div className={styles['placeholder']}>No Image</div>}
               <div className={styles['item-actions-overlay']}>
-                <SvgIcon iconName="icon-aixin" className={styles['action-icon']} />
+                {isSuitFavorited(item) ? (
+                  <HeartFill
+                    className={`${styles['action-icon']} ${styles['action-icon-active']}`}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void toggleSuitFavorite(item)
+                    }}
+                  />
+                ) : (
+                  <HeartOutline
+                    className={styles['action-icon']}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      void toggleSuitFavorite(item)
+                    }}
+                  />
+                )}
               </div>
             </div>
-            <div className={styles['item-header']}>
-              <div className={styles['item-scene']}>{item.scene}</div>
-              <div className={`${styles['item-source']} ${styles[`item-source-${item.source}`]}`}>
-                {item.source === 'rule' ? '规则推荐' : '模型推荐'}
+            <div className={styles['item-content']}>
+              <div className={styles['item-header']}>
+                <div className={styles['item-scene']}>{item.scene}</div>
+                <div className={`${styles['item-source']} ${styles[`item-source-${item.source}`]}`}>
+                  {item.source === 'rule' ? '规则推荐' : '模型推荐'}
+                </div>
               </div>
+              <div className={styles['item-message']}>{item.description}</div>
+              {Boolean(item.items?.length) && (
+                <div className={styles['item-list']}>
+                  {item.items.map((cloth, idx) => (
+                    <div className={styles['item-row']} key={`${item.id}-${cloth.cloth_id || idx}`}>
+                      <div className={styles['item-row-header']}>
+                        <div className={styles['item-row-name']}>
+                          {(cloth.type || '单品') + '：'}{cloth.name || cloth.color || '搭配单品'}
+                        </div>
+                        {cloth.cloth_id ? (
+                          <button
+                            type="button"
+                            className={styles['item-row-action']}
+                            disabled={Boolean(favoriteUpdating[cloth.cloth_id])}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void toggleClothFavorite(cloth)
+                            }}
+                            aria-label={isFavorited(cloth.favorite) ? '取消收藏' : '收藏'}
+                          >
+                            {isFavorited(cloth.favorite) ? (
+                              <HeartFill
+                                className={`${styles['item-row-fav-icon']} ${styles['item-row-fav-icon-active']}`}
+                              />
+                            ) : (
+                              <HeartOutline className={styles['item-row-fav-icon']} />
+                            )}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className={styles['item-row-tags']}>
+                        {[cloth.color, cloth.style, cloth.season]
+                          .filter(Boolean)
+                          .map((tag, tagIdx) => (
+                            <span className={styles['item-tag']} key={`${item.id}-${cloth.cloth_id || idx}-tag-${tagIdx}`}>
+                              {tag}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className={styles['item-message']}>{item.description}</div>
-            {Boolean(item.items?.length) && (
-              <div className={styles['item-list']}>
-                {item.items.map((cloth, idx) => (
-                  <div className={styles['item-row']} key={`${item.id}-${cloth.cloth_id || idx}`}>
-                    <div className={styles['item-row-name']}>
-                      {(cloth.type || '单品') + '：'}{cloth.name || cloth.color || '搭配单品'}
-                    </div>
-                    <div className={styles['item-row-tags']}>
-                      {[cloth.color, cloth.style, cloth.season]
-                        .filter(Boolean)
-                        .map((tag, tagIdx) => (
-                          <span className={styles['item-tag']} key={`${item.id}-${cloth.cloth_id || idx}-tag-${tagIdx}`}>
-                            {tag}
-                          </span>
-                        ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         ))}
       </div>

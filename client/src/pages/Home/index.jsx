@@ -5,6 +5,8 @@ import SvgIcon from '@/components/SvgIcon'
 import Icon from '@/components/Icon'
 import DarkModeToggle from '@/components/DarkModeToggle'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
+import { useAuthStore } from '@/store'
+import WeatherIcon from '@/components/WeatherIcon'
 import styles from './index.module.less'
 import { defaultWeather } from '@/config/homeConfig'
 
@@ -48,6 +50,14 @@ const getGeoPermissionState = async () => {
 
 const logWeatherGeo = (...args) => {
   console.log(...args)
+}
+
+const hasLoginSession = () => {
+  try {
+    return Boolean(useAuthStore.getState().accessToken || localStorage.getItem('access_token'))
+  } catch {
+    return Boolean(useAuthStore.getState().accessToken)
+  }
 }
 
 const parseTempValue = (temp) => {
@@ -151,6 +161,8 @@ export default function Home() {
             city: res.data.city || defaultWeather.city,
             temp: res.data.temp || defaultWeather.temp,
             text: res.data.text || defaultWeather.text,
+            weatherCode: typeof res.data.weatherCode === 'number' ? res.data.weatherCode : defaultWeather.weatherCode,
+            isDay: typeof res.data.isDay === 'boolean' ? res.data.isDay : defaultWeather.isDay,
           })
         }
         return res?.data || null
@@ -178,6 +190,7 @@ export default function Home() {
     const requestGeo = async () => {
       if (cachedCoords) return
       if (!isGeoSupported() || !isSecureGeoContext()) return
+      if (!hasLoginSession()) return
 
       const permissionState = await getGeoPermissionState()
       logWeatherGeo('[weather] 定位请求已触发', { permissionState })
@@ -377,7 +390,12 @@ export default function Home() {
       <div className={styles.header}>
         <div className={styles['header-title']}>首页</div>
         <div className={styles['header-weather']}>
-          <SvgIcon iconName="icon-qingtian" className={styles['weather-icon']} />
+          <WeatherIcon
+            weatherCode={weather.weatherCode}
+            isDay={weather.isDay}
+            text={weather.text}
+            className={styles['weather-icon']}
+          />
           {weather.city} · {weather.temp} · {weather.text}
         </div>
         <div className={styles['header-actions']}>
