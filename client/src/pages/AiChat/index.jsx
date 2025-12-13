@@ -109,6 +109,11 @@ export default function AiChat() {
       return
     }
 
+    // 主动输入发送后清空输入框，避免重复内容
+    if (!payload && inputRef.current) {
+      inputRef.current.value = ''
+    }
+
     if (connectionState === 'connecting' || connectionState === 'streaming') {
       Toast.show({ content: '正在生成，请稍候或点击停止', duration: 1200 })
       return
