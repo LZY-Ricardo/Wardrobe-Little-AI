@@ -6,6 +6,34 @@ import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 import styles from './index.module.less'
 import { defaultWeather, defaultTags } from '@/config/homeConfig'
 
+const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache_v1'
+
+const readSessionJson = (key) => {
+  try {
+    const raw = sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+const writeSessionJson = (key, value) => {
+  try {
+    sessionStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    // ignore
+  }
+}
+
+const isGeoSupported = () => typeof navigator !== 'undefined' && Boolean(navigator.geolocation)
+
+const isSecureGeoContext = () => {
+  if (typeof window === 'undefined') return false
+  if (window.isSecureContext) return true
+  const host = window.location?.hostname
+  return host === 'localhost' || host === '127.0.0.1'
+}
+
 const generateRandomColor = () => {
   const colors = [
     { bg: '#FFE4E1', text: '#8B0000' },
@@ -51,9 +79,16 @@ export default function Home() {
       }
     }
 
-    const fetchWeather = async () => {
+    const fetchWeather = async (coords) => {
       try {
-        const res = await axios.get('/weather/today')
+        const res = coords
+          ? await axios.get('/weather/today', {
+              params: {
+                lat: coords.latitude,
+                lon: coords.longitude,
+              },
+            })
+          : await axios.get('/weather/today')
         if (res?.data) {
           setWeather({
             city: res.data.city || defaultWeather.city,
@@ -72,7 +107,42 @@ export default function Home() {
     }
 
     fetchClothes()
-    fetchWeather()
+
+    const cached = readSessionJson(WEATHER_GEO_CACHE_KEY)
+    const cachedCoords =
+      Number.isFinite(cached?.coords?.latitude) && Number.isFinite(cached?.coords?.longitude)
+        ? cached.coords
+        : null
+
+    if (cachedCoords) {
+      fetchWeather(cachedCoords)
+    } else {
+      fetchWeather()
+    }
+
+    const shouldRequestGeo = !cached?.asked && isGeoSupported() && isSecureGeoContext()
+    if (shouldRequestGeo) {
+      writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords: cachedCoords, at: Date.now() })
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }
+          writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords, at: Date.now() })
+          fetchWeather(coords)
+        },
+        (geoError) => {
+          console.warn('获取定位失败，使用默认天气', geoError)
+          writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords: null, at: Date.now() })
+        },
+        {
+          enableHighAccuracy: false,
+          timeout: 5000,
+          maximumAge: 10 * 60 * 1000,
+        }
+      )
+    }
   }, [])
 
   const renderClothes = () => {

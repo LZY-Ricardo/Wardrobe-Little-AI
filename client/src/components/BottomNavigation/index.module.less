@@ -1,13 +1,25 @@
-.bottom-navigation-bar{
+﻿.bottom-navigation-bar{
     position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
     z-index: 6666;
-    background: #fff;
-    box-shadow: 1px 0 2px 0 rgba(0, 0, 0, 0.1);
+    background: var(--nav-bg);
+    box-shadow: var(--nav-shadow);
+    transition: background-color 0.3s ease, box-shadow 0.3s ease;
 
     :global(.adm-tab-bar) {
-    background: #fff;
-  }
+        background: var(--nav-bg);
+    }
+
+    :global(.adm-tab-bar-item-icon),
+    :global(.adm-tab-bar-item-title) {
+        color: var(--text-secondary);
+        transition: color 0.3s ease;
+    }
+
+    :global(.adm-tab-bar-item-active .adm-tab-bar-item-icon),
+    :global(.adm-tab-bar-item-active .adm-tab-bar-item-title) {
+        color: var(--accent-primary);
+    }
 }

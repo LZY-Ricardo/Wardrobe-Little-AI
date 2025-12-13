@@ -15,7 +15,36 @@ const CACHE_TTL_MS = Number.parseInt(process.env.WEATHER_CACHE_TTL_MS, 10) || 10
 const FALLBACK_TEMP = process.env.WEATHER_FALLBACK_TEMP || '25℃'
 const FALLBACK_TEXT = process.env.WEATHER_FALLBACK_TEXT || '多云'
 
-let cache = { at: 0, data: null }
+const cacheByKey = new Map()
+
+const parseOptionalFloat = (value) => {
+  if (value === undefined || value === null || value === '') return null
+  const parsed = Number.parseFloat(String(value))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const parseCoordsFromQuery = (query) => {
+  const latitude = parseOptionalFloat(query?.lat ?? query?.latitude)
+  const longitude = parseOptionalFloat(query?.lon ?? query?.longitude)
+  if (latitude === null || longitude === null) return null
+  if (latitude < -90 || latitude > 90) return null
+  if (longitude < -180 || longitude > 180) return null
+  return { latitude, longitude }
+}
+
+const toCacheKey = (coords) => {
+  if (!coords) return 'default'
+  const latKey = coords.latitude.toFixed(3)
+  const lonKey = coords.longitude.toFixed(3)
+  return `${latKey},${lonKey}`
+}
+
+const resolveCityLabel = (query, coords) => {
+  const city = typeof query?.city === 'string' ? query.city.trim() : ''
+  if (city) return city.slice(0, 32)
+  if (coords) return '当前位置'
+  return DEFAULT_CITY
+}
 
 const getTextFromWmoCode = (code) => {
   const numericCode = Number(code)
@@ -33,12 +62,14 @@ const getTextFromWmoCode = (code) => {
   return '未知'
 }
 
-const fetchOpenMeteoToday = async () => {
+const fetchOpenMeteoToday = async (coords) => {
+  const latitude = coords?.latitude ?? DEFAULT_LAT
+  const longitude = coords?.longitude ?? DEFAULT_LON
   const res = await axios.get('https://api.open-meteo.com/v1/forecast', {
     timeout: TIMEOUT_MS,
     params: {
-      latitude: DEFAULT_LAT,
-      longitude: DEFAULT_LON,
+      latitude,
+      longitude,
       current: 'temperature_2m,weather_code',
       timezone: 'Asia/Shanghai',
     },
@@ -58,8 +89,8 @@ const fetchOpenMeteoToday = async () => {
   }
 }
 
-const buildFallback = () => ({
-  city: DEFAULT_CITY,
+const buildFallback = (city) => ({
+  city,
   temp: FALLBACK_TEMP,
   text: FALLBACK_TEXT,
   tags: DEFAULT_TAGS,
@@ -67,16 +98,20 @@ const buildFallback = () => ({
   updatedAt: new Date().toISOString(),
 })
 
-const getTodayWeather = async () => {
+const getTodayWeather = async (query = {}) => {
+  const coords = parseCoordsFromQuery(query)
+  const city = resolveCityLabel(query, coords)
+  const cacheKey = toCacheKey(coords)
   const now = Date.now()
-  if (cache.data && now - cache.at < CACHE_TTL_MS) return cache.data
+  const cached = cacheByKey.get(cacheKey)
+  if (cached?.data && now - cached.at < CACHE_TTL_MS) return cached.data
 
   let data
   try {
     if (PROVIDER === 'open-meteo') {
-      const real = await fetchOpenMeteoToday()
+      const real = await fetchOpenMeteoToday(coords)
       data = {
-        city: DEFAULT_CITY,
+        city,
         temp: real.temp,
         text: real.text,
         tags: DEFAULT_TAGS,
@@ -84,13 +119,13 @@ const getTodayWeather = async () => {
         updatedAt: new Date().toISOString(),
       }
     } else {
-      data = { ...buildFallback(), source: 'mock' }
+      data = { ...buildFallback(city), source: 'mock' }
     }
   } catch (err) {
-    data = buildFallback()
+    data = buildFallback(city)
   }
 
-  cache = { at: now, data }
+  cacheByKey.set(cacheKey, { at: now, data })
   return data
 }
 

@@ -103,6 +103,18 @@ const uploadPhoto = async (characterModel, id) => {
 }
 
 // 获取用户信息
+// upload avatar (store relative url/path in DB)
+const uploadAvatar = async (avatar, id) => {
+    const sql = 'UPDATE user SET avatar = ? WHERE id = ?'
+    const params = [avatar, id]
+    const results = await allServices.query(sql, params)
+    if (results.affectedRows > 0) {
+        return true
+    } else {
+        return false
+    }
+}
+
 const getUserInfoById = async (id) => {
     const sql = 'SELECT * FROM user WHERE id = ?'
     const params = [id]
@@ -171,9 +183,9 @@ module.exports = {
     userRegister,
     checkUsername,
     uploadPhoto,
+    uploadAvatar,
     getUserInfoById,
     updateSex,
     updateUserName,
     updatePassword,
 }
-

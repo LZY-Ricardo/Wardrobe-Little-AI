@@ -703,3 +703,33 @@
         }
     }
 }
+
+/* theme overrides */
+.outfit {
+    background: var(--bg-body) !important;
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.outfit::before {
+    display: none;
+}
+
+.outfit .header,
+.outfit .content,
+.outfit .card,
+.outfit .filter,
+.outfit .preview,
+.outfit .grid,
+.outfit .actions {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-soft);
+    border-color: var(--border-subtle);
+}
+
+.outfit .text-muted,
+.outfit .tip,
+.outfit .hint {
+    color: var(--muted);
+}

@@ -336,3 +336,35 @@
 
 
 }
+
+/* theme overrides */
+.chat {
+    background: var(--bg-body);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.chat-header,
+.chat-main,
+.chat-footer,
+.chat-input,
+.chat-message,
+.chat-messages,
+.chat-side {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-soft);
+    border-color: var(--border-subtle);
+}
+
+.chat .header-title,
+.chat .message-text,
+.chat .input-area {
+    color: var(--text-primary);
+}
+
+.chat .message-time,
+.chat .tips,
+.chat .status-text {
+    color: var(--muted);
+}

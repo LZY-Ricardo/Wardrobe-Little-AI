@@ -291,3 +291,41 @@
     text-align: center;
     padding: 16px;
 }
+
+/* theme overrides */
+.add {
+    background: var(--bg-body);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.add .header {
+    background: var(--bg-surface);
+    box-shadow: var(--shadow-soft);
+    color: var(--text-primary);
+}
+
+.add .headerTitle {
+    color: var(--text-primary);
+}
+
+.add .container {
+    background: transparent;
+    color: var(--text-primary);
+}
+
+.add .container > * {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-soft);
+    border-color: var(--border-subtle);
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.add label,
+.add input,
+.add select,
+.add textarea {
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}

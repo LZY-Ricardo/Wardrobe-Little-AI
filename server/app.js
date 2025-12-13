@@ -1,6 +1,9 @@
 // 引入配置文件（会加载 .env）
 const config = require('./config')
 
+const fs = require('fs')
+const path = require('path')
+
 const Koa = require('koa')
 const app = new Koa()
 const userRouter = require('./routes/user')
@@ -20,6 +23,29 @@ app.use(bodyParser({
 })); // 辅助 koa 解析请求体中的数据
 
 // 注册路由
+const uploadsRoot = path.resolve(__dirname, 'public', 'uploads')
+app.use(async (ctx, next) => {
+  if (ctx.method !== 'GET' && ctx.method !== 'HEAD') return next()
+  if (!ctx.path.startsWith('/uploads/')) return next()
+
+  const relativePath = ctx.path.slice('/uploads/'.length)
+  const filePath = path.resolve(uploadsRoot, relativePath)
+  if (!filePath.startsWith(uploadsRoot + path.sep)) {
+    ctx.status = 403
+    return
+  }
+
+  try {
+    const stat = await fs.promises.stat(filePath)
+    if (!stat.isFile()) return next()
+  } catch (error) {
+    return next()
+  }
+
+  ctx.type = path.extname(filePath)
+  ctx.body = fs.createReadStream(filePath)
+})
+
 app.use(userRouter.routes());
 app.use(userRouter.allowedMethods());
 app.use(clothesRouter.routes());

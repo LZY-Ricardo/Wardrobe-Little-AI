@@ -6,7 +6,7 @@ const router = new Router()
 router.prefix('/weather')
 
 router.get('/today', async (ctx) => {
-  const data = await getTodayWeather()
+  const data = await getTodayWeather(ctx.query)
   ctx.body = { code: 1, msg: '获取成功', data }
 })
 

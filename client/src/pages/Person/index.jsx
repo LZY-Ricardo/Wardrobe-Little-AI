@@ -5,9 +5,11 @@ import { Dialog, Popup } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 
 export default function Person() {
   const navigate = useNavigate()
+  const avatarInputRef = useRef(null)
   const fileInputRef = useRef(null) // 图片上传input
   const [uploadedImage, setUploadedImage] = useState(null) // 展示预览图片
   const [uploading, setUploading] = useState(false) // 上传中
@@ -29,6 +31,7 @@ export default function Person() {
       const res = await axios.get('/user/getUserInfo')
       console.log('获取用户信息成功:', res);
       setUserInfo(res.data)
+      setAvatar(res.data?.avatar ? `${API_BASE_URL}${res.data.avatar}` : '')
       setSex(res.data.sex || '') // 设置性别状态
       const data = {
         username: res.data.username,
@@ -36,6 +39,7 @@ export default function Person() {
         createTime: res.data.createTime,
         sex: res.data.sex,
         characterModel: res.data.characterModel,
+        avatar: res.data.avatar,
       }
       localStorage.setItem('userInfo', JSON.stringify(data))
     } catch (error) {
@@ -54,6 +58,78 @@ export default function Person() {
   }
 
   // 上传图片Input框的触发点击函数
+  const handleAvatarClick = () => {
+    avatarInputRef.current?.click()
+  }
+
+  const handleAvatarChange = async (event) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      Toast.show({
+        icon: 'fail',
+        content: '\u8bf7\u9009\u62e9\u56fe\u7247\u6587\u4ef6',
+        duration: 1000,
+      })
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      Toast.show({
+        icon: 'fail',
+        content: '\u5934\u50cf\u56fe\u7247\u4e0d\u80fd\u8d85\u8fc72MB',
+        duration: 1200,
+      })
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64Data = e.target.result
+      try {
+        const res = await axios.post('/user/uploadAvatar', {
+          image: base64Data,
+        })
+        const avatarPath = res?.data?.avatar
+        if (avatarPath) {
+          setAvatar(`${API_BASE_URL}${avatarPath}?t=${Date.now()}`)
+        } else if (typeof base64Data === 'string') {
+          setAvatar(base64Data)
+        }
+
+        Toast.show({
+          icon: 'success',
+          content: '\u5934\u50cf\u4e0a\u4f20\u6210\u529f',
+          duration: 1200,
+        })
+        getUserInfo()
+      } catch (error) {
+        console.error('upload avatar failed:', error)
+        Toast.show({
+          icon: 'fail',
+          content: '\u5934\u50cf\u4e0a\u4f20\u5931\u8d25',
+          duration: 1200,
+        })
+      } finally {
+        if (avatarInputRef.current) avatarInputRef.current.value = ''
+      }
+    }
+
+    reader.onerror = () => {
+      Toast.show({
+        icon: 'fail',
+        content: '\u6587\u4ef6\u8bfb\u53d6\u5931\u8d25',
+        duration: 1200,
+      })
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+
+    reader.readAsDataURL(file)
+  }
+
   const handleUploadClick = () => {
     fileInputRef.current?.click()
   }
@@ -304,14 +380,25 @@ export default function Person() {
     <div className={styles.person}>
       {/* 用户信息区域 */}
       <div className={styles.userInfo}>
-        <div className={styles.avatar}>
+        <div className={styles.avatar} onClick={handleAvatarClick}>
           <div className={styles.avatarIcon}>
+            {avatar ? (
+              <img className={styles.avatarImg} src={avatar} alt="avatar" />
+            ) : (
             <svg viewBox="0 0 1024 1024" width="40" height="40">
               <path d="M512 512m-160 0a160 160 0 1 0 320 0 160 160 0 1 0-320 0Z" fill="#ccc" />
               <path d="M512 704c-123.2 0-224 100.8-224 224h448c0-123.2-100.8-224-224-224z" fill="#ccc" />
             </svg>
+            )}
           </div>
         </div>
+        <input
+          ref={avatarInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleAvatarChange}
+          style={{ display: 'none' }}
+        />
         <div className={styles.userDetails}>
           <div className={styles.userName}>
             {isEditingName ? (

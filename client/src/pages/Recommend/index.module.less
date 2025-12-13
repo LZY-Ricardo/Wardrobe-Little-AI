@@ -315,3 +315,36 @@
         }
     }
 }
+
+/* theme overrides */
+.recommend {
+    background: var(--bg-body);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.recommend .chat,
+.recommend .entrance,
+.recommend .content,
+.recommend .card,
+.recommend .section,
+.recommend .panel,
+.recommend .form,
+.recommend .list {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    box-shadow: var(--shadow-soft);
+    border-color: var(--border-subtle);
+}
+
+.recommend .title,
+.recommend .label,
+.recommend .stat {
+    color: var(--text-primary);
+}
+
+.recommend .muted,
+.recommend .tip,
+.recommend .desc {
+    color: var(--muted);
+}

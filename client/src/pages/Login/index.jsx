@@ -39,11 +39,11 @@ export default function Login() {
     }
     try {
       const res = await axios.post('/user/login', { username, password })
-      const { access_token, refresh_token, id, createTime, sex, characterModel } = res.data || {}
+      const { access_token, refresh_token, id, createTime, sex, characterModel, avatar } = res.data || {}
       setTokens({ accessToken: access_token, refreshToken: refresh_token })
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
-      const userInfo = { username, id, createTime, sex, characterModel }
+      const userInfo = { username, id, createTime, sex, characterModel, avatar }
       setUserInfo(userInfo)
       localStorage.setItem('userInfo', JSON.stringify(userInfo))
 

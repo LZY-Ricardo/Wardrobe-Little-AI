@@ -1,7 +1,19 @@
 const Router = require('@koa/router')
 const router = new Router()
-const { userLogin, userRegister, checkUsername, uploadPhoto, getUserInfoById, updateUserName, updateSex, updatePassword } = require('../controllers/user')
+const {
+    userLogin,
+    userRegister,
+    checkUsername,
+    uploadPhoto,
+    uploadAvatar,
+    getUserInfoById,
+    updateUserName,
+    updateSex,
+    updatePassword,
+} = require('../controllers/user')
 
+const fs = require('fs')
+const path = require('path')
 
 const { sign, verify, refreshToken } = require('../utils/jwt')
 const { escape } = require('../utils/security')
@@ -34,6 +46,7 @@ router.post('/login', async (ctx) => {
                 createTime: res.create_time,
                 sex: res.sex,
                 characterModel: res.characterModel,
+                avatar: res.avatar,
                 access_token,
                 refresh_token,
             }
@@ -219,6 +232,136 @@ router.post('/uploadPhoto', verify(), async (ctx) => {
 })
 
 // 获取用户信息
+// upload avatar (base64 data url -> save file -> store relative url in DB)
+router.post('/uploadAvatar', verify(), async (ctx) => {
+  try {
+    if (!ctx.request.body || !ctx.request.body.image) {
+      ctx.status = 400
+      ctx.body = {
+        code: 0,
+        msg: '\u8bf7\u63d0\u4f9b\u5934\u50cf\u56fe\u7247\u6570\u636e',
+      }
+      return
+    }
+
+    const imageData = ctx.request.body.image
+    const id = ctx.userId
+
+    let prevAvatarUrl = ''
+    try {
+      const user = await getUserInfoById(id)
+      prevAvatarUrl = user?.avatar || ''
+    } catch (e) {
+      prevAvatarUrl = ''
+    }
+
+    if (!imageData.startsWith('data:image/')) {
+      ctx.status = 400
+      ctx.body = {
+        code: 0,
+        msg: '\u65e0\u6548\u7684\u56fe\u7247\u6570\u636e\u683c\u5f0f',
+      }
+      return
+    }
+
+    const matches = imageData.match(/^data:image\/(\w+);base64,(.+)$/)
+    if (!matches) {
+      ctx.status = 400
+      ctx.body = {
+        code: 0,
+        msg: '\u65e0\u6548\u7684base64\u56fe\u7247\u683c\u5f0f',
+      }
+      return
+    }
+
+    const fileType = (matches[1] || '').toLowerCase()
+    const base64Data = matches[2] || ''
+
+    const allowedTypes = ['jpeg', 'jpg', 'png', 'webp']
+    if (!allowedTypes.includes(fileType)) {
+      ctx.status = 400
+      ctx.body = {
+        code: 0,
+        msg: '\u4e0d\u652f\u6301\u7684\u56fe\u7247\u7c7b\u578b',
+      }
+      return
+    }
+
+    const buffer = Buffer.from(base64Data, 'base64')
+    if (buffer.length > 2 * 1024 * 1024) {
+      ctx.status = 400
+      ctx.body = {
+        code: 0,
+        msg: '\u5934\u50cf\u56fe\u7247\u4e0d\u80fd\u8d85\u8fc72MB',
+      }
+      return
+    }
+
+    const avatarDir = path.join(__dirname, '..', 'public', 'uploads', 'avatars', String(id))
+    await fs.promises.mkdir(avatarDir, { recursive: true })
+
+    const ext = fileType === 'jpeg' ? 'jpg' : fileType
+    const fileName = `avatar-${Date.now()}.${ext}`
+    const filePath = path.join(avatarDir, fileName)
+    await fs.promises.writeFile(filePath, buffer)
+
+    const avatarUrl = `/uploads/avatars/${id}/${fileName}`
+
+    let result = false
+    try {
+      result = await uploadAvatar(avatarUrl, id)
+    } catch (error) {
+      await fs.promises.unlink(filePath).catch(() => {})
+      throw error
+    }
+
+    if (result) {
+      if (
+        prevAvatarUrl &&
+        prevAvatarUrl !== avatarUrl &&
+        prevAvatarUrl.startsWith(`/uploads/avatars/${id}/`)
+      ) {
+        const publicRoot = path.resolve(__dirname, '..', 'public')
+        const prevFilePath = path.resolve(publicRoot, prevAvatarUrl.replace(/^\//, ''))
+        if (prevFilePath.startsWith(publicRoot + path.sep)) {
+          await fs.promises.unlink(prevFilePath).catch(() => {})
+        }
+      }
+      ctx.body = {
+        code: 1,
+        msg: '\u5934\u50cf\u4e0a\u4f20\u6210\u529f',
+        data: { avatar: avatarUrl },
+      }
+      return
+    }
+
+    await fs.promises.unlink(filePath).catch(() => {})
+    ctx.status = 500
+    ctx.body = {
+      code: 0,
+      msg: '\u5934\u50cf\u4e0a\u4f20\u5931\u8d25',
+    }
+  } catch (error) {
+    if (error?.code === 'ER_BAD_FIELD_ERROR') {
+      ctx.status = 500
+      ctx.body = {
+        code: 0,
+        msg:
+          '\u6570\u636e\u5e93\u7f3a\u5c11 avatar \u5b57\u6bb5\uff0c\u8bf7\u5148\u6267\u884c: ALTER TABLE user ADD COLUMN avatar VARCHAR(255) NULL;',
+      }
+      return
+    }
+
+    console.error('upload avatar error:', error)
+    ctx.status = 500
+    ctx.body = {
+      code: -1,
+      msg: '\u5934\u50cf\u4e0a\u4f20\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5',
+      error: error.message,
+    }
+  }
+})
+
 router.get('/getUserInfo', verify(), async (ctx) => {
     const user_id = ctx.userId
     try {
