@@ -704,32 +704,142 @@
     }
 }
 
-/* theme overrides */
-.outfit {
-    background: var(--bg-body) !important;
-    color: var(--text-primary);
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
+/* dark theme */
+[data-theme='dark'] {
+    .outfit {
+        background: var(--bg-body);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
 
-.outfit::before {
-    display: none;
-}
+    .outfit::before {
+        opacity: 0.12;
+    }
 
-.outfit .header,
-.outfit .content,
-.outfit .card,
-.outfit .filter,
-.outfit .preview,
-.outfit .grid,
-.outfit .actions {
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-soft);
-    border-color: var(--border-subtle);
-}
+    .outfit .header {
+        background: var(--nav-bg);
+        box-shadow: var(--shadow-header);
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
 
-.outfit .text-muted,
-.outfit .tip,
-.outfit .hint {
-    color: var(--muted);
+    .outfit .header-left {
+        color: var(--text-primary);
+    }
+
+    .outfit .search-box .search-input {
+        background: var(--bg-surface);
+        border-color: var(--chip-border);
+        color: var(--text-primary);
+        box-shadow: none;
+    }
+
+    .outfit .search-box .search-input::placeholder {
+        color: var(--muted);
+    }
+
+    .outfit .search-box .search-input:hover,
+    .outfit .search-box .search-input:focus {
+        background: var(--bg-surface);
+    }
+
+    .outfit .container {
+        background: transparent;
+    }
+
+    .outfit .container .select {
+        color: var(--text-primary);
+    }
+
+    .outfit .container .select .select-type,
+    .outfit .container .select .select-color,
+    .outfit .container .select .select-season,
+    .outfit .container .select .select-style {
+        background: var(--bg-surface);
+        border: 1px solid var(--border-subtle);
+        box-shadow: var(--shadow-soft);
+        transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .outfit .container .select .select-type .type-item,
+    .outfit .container .select .select-color .color-item,
+    .outfit .container .select .select-season .season-item,
+    .outfit .container .select .select-style .style-item {
+        background: var(--chip-bg);
+        border-color: var(--chip-border);
+        color: var(--text-secondary);
+        box-shadow: none;
+    }
+
+    .outfit .container .select .select-type .type-item:hover,
+    .outfit .container .select .select-color .color-item:hover,
+    .outfit .container .select .select-season .season-item:hover,
+    .outfit .container .select .select-style .style-item:hover {
+        background: var(--bg-surface);
+    }
+
+    .outfit .clothes .clothes-item {
+        background-color: var(--bg-surface);
+        border-color: var(--border-subtle);
+        box-shadow: var(--shadow-soft);
+        transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .outfit .clothes .clothes-item .clothes-img {
+        background: var(--bg-body);
+    }
+
+    .outfit .clothes .clothes-item .label {
+        background: transparent;
+    }
+
+    .outfit .clothes .no-data {
+        background: var(--bg-surface);
+        color: var(--muted);
+        border-color: var(--border-subtle);
+    }
+
+    .outfit .clothes .load-more {
+        background: var(--bg-surface);
+        color: var(--accent-primary);
+        border-color: var(--border-subtle);
+        box-shadow: var(--shadow-soft);
+    }
+
+    .outfit .clothes .no-more {
+        color: var(--muted);
+    }
+
+    .overlay-content {
+        background: var(--bg-surface);
+        box-shadow: var(--shadow-soft);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, box-shadow 0.3s ease, color 0.3s ease;
+    }
+
+    .overlay-content .detail-title {
+        color: var(--text-primary);
+    }
+
+    .overlay-content .detail-row {
+        background: var(--bg-body);
+    }
+
+    .overlay-content .detail-row:hover {
+        background: var(--nav-bg);
+    }
+
+    .overlay-content .detail-label {
+        color: var(--text-secondary);
+    }
+
+    .overlay-content .detail-value {
+        background: var(--bg-surface);
+        color: var(--text-primary);
+        border-color: var(--border-subtle);
+        box-shadow: none;
+    }
+
+    .overlay-content .delete-button-container {
+        border-top-color: var(--border-subtle);
+    }
 }

@@ -34,6 +34,16 @@ const isSecureGeoContext = () => {
   return host === 'localhost' || host === '127.0.0.1'
 }
 
+const getGeoPermissionState = async () => {
+  try {
+    if (!navigator?.permissions?.query) return 'unknown'
+    const status = await navigator.permissions.query({ name: 'geolocation' })
+    return status?.state || 'unknown'
+  } catch {
+    return 'unknown'
+  }
+}
+
 const generateRandomColor = () => {
   const colors = [
     { bg: '#FFE4E1', text: '#8B0000' },
@@ -120,29 +130,95 @@ export default function Home() {
       fetchWeather()
     }
 
-    const shouldRequestGeo = !cached?.asked && isGeoSupported() && isSecureGeoContext()
-    if (shouldRequestGeo) {
-      writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords: cachedCoords, at: Date.now() })
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const coords = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          }
-          writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords, at: Date.now() })
-          fetchWeather(coords)
-        },
-        (geoError) => {
-          console.warn('获取定位失败，使用默认天气', geoError)
-          writeSessionJson(WEATHER_GEO_CACHE_KEY, { asked: true, coords: null, at: Date.now() })
-        },
-        {
-          enableHighAccuracy: false,
-          timeout: 5000,
-          maximumAge: 10 * 60 * 1000,
+    const requestGeo = async () => {
+      if (cachedCoords) return
+      if (!isGeoSupported() || !isSecureGeoContext()) return
+
+      const permissionState = await getGeoPermissionState()
+      const askedAt =
+        typeof cached?.askedAt === 'number' ? cached.askedAt : cached?.asked ? Date.now() : 0
+
+      if (permissionState === 'denied') {
+        writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+          askedAt: askedAt || Date.now(),
+          coords: null,
+          coordsAt: null,
+          lastErrorCode: 1,
+          lastErrorAt: Date.now(),
+        })
+        return
+      }
+
+      const shouldRequest = permissionState === 'granted' || !askedAt
+      if (!shouldRequest) return
+
+      const nextAskedAt = askedAt || Date.now()
+      writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+        askedAt: nextAskedAt,
+        coords: null,
+        coordsAt: null,
+        lastErrorCode: null,
+        lastErrorAt: null,
+      })
+
+      const maximumAge = 10 * 60 * 1000
+      const primaryTimeout = permissionState === 'prompt' ? 30000 : 15000
+      let retried = false
+
+      const onSuccess = (position) => {
+        const coords = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
         }
-      )
+        writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+          askedAt: nextAskedAt,
+          coords,
+          coordsAt: Date.now(),
+          lastErrorCode: null,
+          lastErrorAt: null,
+        })
+        fetchWeather(coords)
+      }
+
+      const onError = (geoError) => {
+        writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+          askedAt: nextAskedAt,
+          coords: null,
+          coordsAt: null,
+          lastErrorCode: geoError?.code ?? null,
+          lastErrorAt: Date.now(),
+        })
+
+        if (!retried && permissionState === 'granted' && geoError?.code === 3) {
+          retried = true
+          navigator.geolocation.getCurrentPosition(
+            onSuccess,
+            (finalError) => {
+              writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+                askedAt: nextAskedAt,
+                coords: null,
+                coordsAt: null,
+                lastErrorCode: finalError?.code ?? null,
+                lastErrorAt: Date.now(),
+              })
+            },
+            {
+              enableHighAccuracy: false,
+              timeout: 30000,
+              maximumAge,
+            }
+          )
+        }
+      }
+
+      navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+        enableHighAccuracy: false,
+        timeout: primaryTimeout,
+        maximumAge,
+      })
     }
+
+    void requestGeo()
   }, [])
 
   const renderClothes = () => {

@@ -292,40 +292,73 @@
     padding: 16px;
 }
 
-/* theme overrides */
-.add {
-    background: var(--bg-body);
-    color: var(--text-primary);
-    transition: background-color 0.3s ease, color 0.3s ease;
-}
+/* dark theme */
+[data-theme='dark'] {
+    .add {
+        background: var(--bg-body);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
 
-.add .header {
-    background: var(--bg-surface);
-    box-shadow: var(--shadow-soft);
-    color: var(--text-primary);
-}
+    .add .header {
+        background: var(--nav-bg);
+        box-shadow: var(--shadow-header);
+        color: var(--text-primary);
+        transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    }
 
-.add .headerTitle {
-    color: var(--text-primary);
-}
+    .add .headerTitle {
+        color: var(--text-primary);
+    }
 
-.add .container {
-    background: transparent;
-    color: var(--text-primary);
-}
+    .add .container {
+        background-color: transparent;
+        color: var(--text-primary);
+    }
 
-.add .container > * {
-    background: var(--bg-surface);
-    color: var(--text-primary);
-    box-shadow: var(--shadow-soft);
-    border-color: var(--border-subtle);
-    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
-}
+    .add .container .name,
+    .add .container .detail {
+        background: var(--bg-surface);
+        box-shadow: var(--shadow-soft);
+        border: 1px solid var(--border-subtle);
+        transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+    }
 
-.add label,
-.add input,
-.add select,
-.add textarea {
-    color: var(--text-primary);
-    background: var(--bg-surface);
+    .add .container .name label,
+    .add .container .detail label {
+        color: var(--text-secondary);
+    }
+
+    .add .container .name input,
+    .add .container .detail input {
+        color: var(--text-primary);
+        background: var(--nav-bg);
+        border: 1px solid var(--chip-border);
+        outline: none;
+        transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+    }
+
+    .add .container .name input::placeholder,
+    .add .container .detail input::placeholder {
+        color: var(--muted);
+    }
+
+    .add .container .img .uploadBox {
+        background-color: var(--bg-surface);
+        border-color: var(--chip-border);
+        transition: background-color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .add .container .img .uploadBox p {
+        color: var(--text-primary);
+    }
+
+    .add .container .img .uploadBox .uploadTip,
+    .add .container .img .helperText {
+        color: var(--muted);
+    }
+
+    .add .container .img .uploadBox .cameraIcon {
+        color: var(--muted);
+    }
 }
