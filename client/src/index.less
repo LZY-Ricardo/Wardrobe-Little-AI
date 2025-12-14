@@ -109,3 +109,34 @@ body {
   color: var(--text-primary);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
+
+/* react-vant: dark theme overrides (Popup/Dialog/Picker etc.) */
+html[data-theme='dark'] {
+  --rv-text-color: var(--text-primary);
+  --rv-text-color-weak: var(--muted);
+  --rv-border-color: var(--border-subtle);
+  --rv-background-color: var(--bg-body);
+  --rv-background-color-light: var(--bg-surface);
+
+  --rv-popup-background-color: var(--bg-surface);
+  --rv-popup-title-color: var(--text-primary);
+  --rv-popup-description-color: var(--text-secondary);
+  --rv-popup-close-icon-color: rgba(229, 231, 235, 0.72);
+  --rv-popup-close-icon-active-color: rgba(229, 231, 235, 0.92);
+
+  --rv-dialog-background-color: var(--bg-surface);
+  --rv-dialog-has-title-message-text-color: var(--text-secondary);
+  --rv-dialog-confirm-button-text-color: var(--accent-primary);
+
+  --rv-picker-background-color: var(--bg-surface);
+  --rv-picker-option-text-color: var(--text-primary);
+  --rv-picker-cancel-action-color: var(--muted);
+  --rv-picker-confirm-action-color: var(--accent-primary);
+  --rv-picker-loading-mask-color: rgba(17, 24, 39, 0.92);
+  --rv-picker-mask-background-image: linear-gradient(
+      180deg,
+      rgba(17, 24, 39, 0.9),
+      rgba(17, 24, 39, 0.4)
+    ),
+    linear-gradient(0deg, rgba(17, 24, 39, 0.9), rgba(17, 24, 39, 0.4));
+}
