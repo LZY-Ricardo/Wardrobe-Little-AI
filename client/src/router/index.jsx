@@ -111,6 +111,7 @@ const routes = [
       </ProtectedRoute>
     ),
   },
+  { path: '*', element: <Navigate to="/home" replace /> },
 ]
 
 function WrapperRoutes() {
