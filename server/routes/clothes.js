@@ -67,17 +67,10 @@ router.get('/all', verify(), async (ctx) => {
     const user_id = ctx.userId
     try {
         const res = await getAllClothes(user_id)
-        if (res) {
-            ctx.body = {
-                code: 1,
-                msg: '获取成功',
-                data: res,
-            }
-        } else {
-            ctx.body = {
-                code: 0,
-                msg: '获取失败',
-            }
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data: Array.isArray(res) ? res : [],
         }
     } catch (error) {
         ctx.body = {
@@ -166,17 +159,10 @@ router.get('/TopClothes', verify(), async (ctx) => {
     const user_id = ctx.userId
     try {
         const res = await getTopClothes(user_id)
-        if (res) {
-            ctx.body = {
-                code: 1,
-                msg: '获取成功',
-                data: res,
-            }
-        } else {
-            ctx.body = {
-                code: 0,
-                msg: '获取失败',
-            }
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data: Array.isArray(res) ? res : [],
         }
     } catch (error) {
         ctx.body = {
@@ -192,17 +178,10 @@ router.get('/BotClothes', verify(), async (ctx) => {
     const user_id = ctx.userId
     try {
         const res = await getBotClothes(user_id)
-        if (res) {
-            ctx.body = {
-                code: 1,
-                msg: '获取成功',
-                data: res,
-            }
-        } else {
-            ctx.body = {
-                code: 0,
-                msg: '获取失败',
-            }
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data: Array.isArray(res) ? res : [],
         }
     } catch (error) {
         ctx.body = {

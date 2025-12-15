@@ -44,11 +44,7 @@ const getAllClothes = async (user_id) => {
     const sql = 'SELECT * FROM clothes WHERE user_id = ?'
     const params = [user_id]
     const result = await allServices.query(sql, params)
-    if (result.length > 0) {
-        return result
-    } else {
-        return false
-    }
+    return Array.isArray(result) ? result : []
 }
 
 // 删除衣物
@@ -84,11 +80,7 @@ const getTopClothes   = async (user_id) => {
     const sql = 'SELECT * FROM clothes WHERE user_id = ? AND type LIKE ?'
     const params = [user_id, '%上衣%']
     const result = await allServices.query(sql, params)
-    if (result.length > 0) {
-        return result
-    } else {
-        return false
-    }
+    return Array.isArray(result) ? result : []
 }
 
 // 获取下衣数据
@@ -96,11 +88,7 @@ const getBotClothes   = async (user_id) => {
     const sql = 'SELECT * FROM clothes WHERE user_id = ? AND type LIKE ?'
     const params = [user_id, '%下衣%']
     const result = await allServices.query(sql, params)
-    if (result.length > 0) {
-        return result
-    } else {
-        return false
-    }
+    return Array.isArray(result) ? result : []
 }
 
 // 获取指定衣物（带 user_id 归属校验）
