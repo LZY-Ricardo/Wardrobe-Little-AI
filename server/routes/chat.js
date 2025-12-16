@@ -1,18 +1,19 @@
 const Router = require('@koa/router')
 const router = new Router()
-const axios = require('axios')
 const crypto = require('crypto')
 const { verify } = require('../utils/jwt')
 const { buildHelpMessage, buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
 const { TOOL_DEFINITIONS, executeTool } = require('../utils/toolRegistry')
+const { createChatCompletion, ensureApiKey } = require('../utils/deepseekClient')
 
 router.prefix('/chat')
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b'
-const OLLAMA_PLANNER_MODEL = process.env.OLLAMA_PLANNER_MODEL || OLLAMA_MODEL
-const OLLAMA_TIMEOUT_MS = Number(process.env.OLLAMA_TIMEOUT_MS) || 120000
-const MAX_HISTORY_MESSAGES = Number(process.env.OLLAMA_MAX_HISTORY_MESSAGES) || 20
+const DEEPSEEK_CHAT_MODEL = process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat'
+const DEEPSEEK_PLANNER_MODEL = process.env.DEEPSEEK_PLANNER_MODEL || DEEPSEEK_CHAT_MODEL
+const DEEPSEEK_TIMEOUT_MS = Number(process.env.DEEPSEEK_TIMEOUT_MS) || 120000
+const DEEPSEEK_PLANNER_TIMEOUT_MS = Number(process.env.DEEPSEEK_PLANNER_TIMEOUT_MS) || 15000
+const MAX_HISTORY_MESSAGES =
+  Number(process.env.DEEPSEEK_MAX_HISTORY_MESSAGES || process.env.OLLAMA_MAX_HISTORY_MESSAGES) || 20
 const CHAT_TOOL_CALLING_ENABLED = String(process.env.CHAT_TOOL_CALLING_ENABLED || '1') !== '0'
 const CHAT_TOOL_PLANNER_TIMEOUT_MS = Number(process.env.CHAT_TOOL_PLANNER_TIMEOUT_MS) || 15000
 const CHAT_TOOL_EXEC_TIMEOUT_MS = Number(process.env.CHAT_TOOL_EXEC_TIMEOUT_MS) || 5000
@@ -140,24 +141,23 @@ const buildToolsForPlannerPrompt = () =>
 
 const buildPlannerSystemPrompt = () => `你是一个“工具调用规划器”。你只能输出 JSON，禁止输出任何额外文本。\n\n可用工具：\n${buildToolsForPlannerPrompt()}\n\n规则：\n- 仅当需要“读取当前登录用户的真实数据”（衣橱/用户画像）时，才选择 action=tool。\n- 只能选择一个工具；arguments 必须是对象且尽量最小化。\n- tool 必须是可用工具之一。\n\n输出（二选一）：\n1) {\"action\":\"tool\",\"tool\":\"...\",\"arguments\":{...},\"reason\":\"...\"}\n2) {\"action\":\"none\",\"reason\":\"...\"}`
 
-const planToolCall = async (url, userText) => {
+const planToolCall = async (userText) => {
   const plannerMessages = [
     { role: 'system', content: buildPlannerSystemPrompt() },
     { role: 'user', content: String(userText || '').slice(0, 2000) },
   ]
 
-  const res = await axios.post(
-    url,
+  const res = await createChatCompletion(
     {
-      model: OLLAMA_PLANNER_MODEL,
+      model: DEEPSEEK_PLANNER_MODEL,
       messages: plannerMessages,
       stream: false,
-      options: { temperature: 0 },
+      temperature: 0,
     },
-    { timeout: CHAT_TOOL_PLANNER_TIMEOUT_MS }
+    { timeout: DEEPSEEK_PLANNER_TIMEOUT_MS || CHAT_TOOL_PLANNER_TIMEOUT_MS }
   )
 
-  const content = res?.data?.message?.content || ''
+  const content = res?.data?.choices?.[0]?.message?.content || ''
   const parsed = extractJsonObject(content)
   if (!parsed || typeof parsed !== 'object') return { action: 'none', reason: 'planner_parse_failed' }
 
@@ -352,7 +352,7 @@ const formatClosetInventory = (result) => {
 
 /**
  * AI聊天接口 - 处理流式响应
- * 接收对话历史消息数组，转发给Ollama API，并将流式响应实时转发给前端
+ * 接收对话历史消息数组，转发给DeepSeek API，并将流式响应实时转发给前端
  */
 router.post('/', verify(), async (ctx) => {
     console.log('Chat route accessed with messages:', ctx.request.body.messages);
@@ -534,14 +534,13 @@ router.post('/', verify(), async (ctx) => {
 
     const intent = isProjectIntent(lastUserText) ? 'project' : 'clothing'
     const systemPrompt = buildSystemPrompt({ intent })
-    const url = `${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`
 
     let toolPlan = null
     let toolResult = null
 
     if (CHAT_TOOL_CALLING_ENABLED && shouldAttemptToolCalling(lastUserText)) {
         try {
-            toolPlan = await planToolCall(url, lastUserText)
+            toolPlan = await planToolCall(lastUserText)
         } catch (error) {
             toolPlan = null
         }
@@ -564,106 +563,78 @@ router.post('/', verify(), async (ctx) => {
         finalMessages.push({ role: 'user', content: buildToolResultBlock(toolPlan.tool, toolResult) })
     }
 
-    // 构造Ollama API请求数据：system prompt + 对话历史 +（可选）工具结果
+    // Call DeepSeek chat API with system prompt, history, and optional tool result
     const data = {
-        model: OLLAMA_MODEL,
+        model: DEEPSEEK_CHAT_MODEL,
         messages: finalMessages,
         stream: true,
-        options: { temperature: 0.4 },
+        temperature: 0.4,
     }
-    
-    // 流式响应状态控制变量
-    let isEnded = false;
-    
+
+    let isEnded = false
+
     try {
-        // 向Ollama API发送流式请求
-        const response = await axios.post(url, data, {
-            responseType: 'stream',  // 设置响应类型为流
-            timeout: OLLAMA_TIMEOUT_MS,
-        });
-        
-        /**
-         * 处理从Ollama接收到的流式数据
-         * 直接转发AI回复内容给前端
-         */
+        ensureApiKey()
+        const response = await createChatCompletion(data, {
+            stream: true,
+            timeout: DEEPSEEK_TIMEOUT_MS,
+        })
+
         response.data.on('data', (chunk) => {
-            // 如果流已结束，忽略后续数据
-            if (isEnded) return;
-            
-            // 将二进制数据转换为字符串，并按行分割
+            if (isEnded) return
+
             const lines = chunk
               .toString()
               .split(/\r?\n/)
-              .filter((line) => line.trim() !== '');
-            
-            // 处理每一行JSON数据
-            lines.forEach(line => {
-                if (isEnded) return;
-                
+              .filter((line) => line.trim() !== '')
+
+            lines.forEach((line) => {
+                if (isEnded) return
+                if (!line.startsWith('data:')) return
+                const payload = line.slice(5).trim()
+
+                if (payload === '[DONE]') {
+                    isEnded = true
+                    ctx.res.write('data: [DONE]\n\n')
+                    ctx.res.end()
+                    return
+                }
+
                 try {
-                    // 解析JSON数据
-                    const jsonData = JSON.parse(line);
-                    
-                    // 如果有消息内容且流未结束，直接发送给前端
-                    if (jsonData.message && jsonData.message.content && !isEnded) {
-                        const content = jsonData.message.content;
-                        // 确保换行符被正确编码传输
-                        const encodedContent = JSON.stringify(content);
-                        ctx.res.write(`data: ${encodedContent}\n\n`);
-                    }
-                    
-                    // 检查Ollama是否完成响应
-                    if (jsonData.done && !isEnded) {
-                        console.log('Ollama stream done, sending [DONE]');
-                        isEnded = true;
-                        
-                        // 发送结束标记给前端
-                        ctx.res.write('data: [DONE]\n\n');
-                        ctx.res.end(); // 结束响应
+                    const jsonData = JSON.parse(payload)
+                    const delta = jsonData?.choices?.[0]?.delta || {}
+                    const textPart =
+                      (typeof delta.content === 'string' && delta.content) ||
+                      (typeof delta.reasoning_content === 'string' && delta.reasoning_content) ||
+                      ''
+                    if (textPart) {
+                        ctx.res.write(`data: ${JSON.stringify(textPart)}\n\n`)
                     }
                 } catch (parseError) {
-                    // 记录JSON解析错误（某些行可能不是有效JSON）
-                    console.log('Parse error for line:', line);
+                    return
                 }
-            });
-        });
-        
-        /**
-         * 处理Ollama流结束事件
-         * 当Ollama完全结束数据传输时触发
-         */
+            })
+        })
+
         response.data.on('end', () => {
-            console.log('Ollama stream ended, isEnded:', isEnded, 'headersSent:', ctx.res.headersSent);
-            // 如果流未正常结束，发送结束标记
             if (!isEnded) {
-                console.log('Sending [DONE] from end event');
-                isEnded = true;
-                ctx.res.write('data: [DONE]\n\n');
-                ctx.res.end();
+                isEnded = true
+                ctx.res.write('data: [DONE]\n\n')
+                ctx.res.end()
             }
-        });
-        
-        /**
-         * 处理客户端断开连接事件
-         * 当前端用户关闭页面或网络断开时触发
-         */
+        })
+
         ctx.req.on('close', () => {
-            isEnded = true;
-            // 清理Ollama响应流，防止内存泄漏
+            isEnded = true
             if (response.data && !response.data.destroyed) {
-                response.data.destroy();
+                response.data.destroy()
             }
-        });
-        
+        })
     } catch (error) {
-        // 处理请求Ollama API时的错误
-        console.error('Chat API Error:', error.message);
+        console.error('Chat API Error:', error.message)
         if (!isEnded && !ctx.res.headersSent) {
-            // 向前端发送错误信息
-            ctx.res.write('event: error\ndata: ' + JSON.stringify({
-                error: error.message
-            }) + '\n\n');
-            ctx.res.end();
+            ctx.res.write('event: error\ndata: ' + JSON.stringify({ error: error.message }) + '\n\n')
+            ctx.res.end()
         }
     }
 })

@@ -1,9 +1,12 @@
 const axios = require('axios')
 const { getAllClothes } = require('./clothes')
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
-const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'deepseek-r1:7b'
-const LLM_TIMEOUT_MS = Number(process.env.LLM_SCENE_TIMEOUT_MS) || 5000
+const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '')
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat'
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
+const LLM_TIMEOUT_MS =
+  Number(process.env.DEEPSEEK_SCENE_TIMEOUT_MS || process.env.LLM_SCENE_TIMEOUT_MS || process.env.DEEPSEEK_TIMEOUT_MS) ||
+  8000
 const MAX_SUITS = 5
 
 const sceneRules = [
@@ -217,8 +220,8 @@ const parseLlmResult = (payload) => {
 }
 
 const callLlm = async (scene, clothes, options = {}) => {
-  if (!OLLAMA_BASE_URL || !OLLAMA_MODEL) {
-    return { suits: [], error: 'LLM 未配置' }
+  if (!DEEPSEEK_API_KEY) {
+    return { suits: [], error: 'DeepSeek API key 未配置' }
   }
 
   const prompt = buildPrompt(scene, clothes, options)
@@ -227,20 +230,24 @@ const callLlm = async (scene, clothes, options = {}) => {
     { role: 'user', content: prompt },
   ]
 
-  const url = `${OLLAMA_BASE_URL.replace(/\/$/, '')}/api/chat`
+  const url = `${DEEPSEEK_BASE_URL}/v1/chat/completions`
   try {
     const res = await axios.post(
       url,
       {
-        model: OLLAMA_MODEL,
+        model: DEEPSEEK_MODEL,
         messages,
         stream: false,
-        format: 'json',
-        options: { temperature: 0.7 },
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
       },
-      { timeout: LLM_TIMEOUT_MS }
+      { timeout: LLM_TIMEOUT_MS, headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
     )
-    const content = res?.data?.message?.content || res?.data?.content || res?.data
+    const content =
+      res?.data?.choices?.[0]?.message?.content ||
+      res?.data?.message?.content ||
+      res?.data?.content ||
+      res?.data
     const parsed = parseLlmResult(content)
     if (!Array.isArray(parsed)) {
       return { suits: [], error: 'LLM 输出不可解析' }
