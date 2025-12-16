@@ -1,5 +1,6 @@
-// 加载环境变量
-require('dotenv').config();
+// 加载环境变量（生产部署时常从仓库根目录启动，需显式指向 server/.env）
+const path = require('path')
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') })
 
 const config = {
     port: process.env.PORT || 3000,
