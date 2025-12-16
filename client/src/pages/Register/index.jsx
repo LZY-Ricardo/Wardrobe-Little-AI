@@ -77,7 +77,7 @@ export default function Register() {
           },
         })
       }, 600)
-    } catch (error) {
+    } catch {
       Toast.show({
         content: '注册失败，请稍后重试',
         position: 'center',
