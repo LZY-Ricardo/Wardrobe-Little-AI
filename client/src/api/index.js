@@ -4,6 +4,11 @@ import { useAuthStore } from '@/store'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 const DEFAULT_TIMEOUT = 15000
+const RETRY_CONFIG = {
+  max: 2,
+  delay: 600,
+  methods: ['get', 'head', 'options'],
+}
 
 const ERROR_CODE_MESSAGE = {
   0: '登录已过期，请重新登录',
@@ -75,6 +80,23 @@ const refreshToken = async () => {
   throw new Error(msg)
 }
 
+const shouldRetry = (error) => {
+  const config = error?.config || {}
+  const method = (config.method || '').toLowerCase()
+  if (!RETRY_CONFIG.methods.includes(method)) return false
+  const retryCount = config._retryCount || 0
+  if (retryCount >= RETRY_CONFIG.max) return false
+  if (axios.isCancel(error)) return false
+
+  const status = error?.response?.status
+  if (error?.code === 'ECONNABORTED') return true
+  if (!error?.response) return true
+  if (status && status >= 500 && status !== 501) return true
+  return false
+}
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 api.interceptors.request.use(
   (config) => {
     const token = getAccessToken()
@@ -135,6 +157,12 @@ api.interceptors.response.use(
 
       logoutAndRedirect(ERROR_CODE_MESSAGE[errCode] || '登录失效，请重新登录')
       return Promise.reject(error)
+    }
+
+    if (shouldRetry(error)) {
+      originalRequest._retryCount = (originalRequest._retryCount || 0) + 1
+      const backoff = RETRY_CONFIG.delay * originalRequest._retryCount
+      return delay(backoff).then(() => api(originalRequest))
     }
 
     const statusMessage = response?.data?.msg || ERROR_CODE_MESSAGE[response?.data?.code]

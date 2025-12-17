@@ -64,9 +64,10 @@ export default function Login() {
         }
       }
 
+      const redirectPath = state?.redirect || '/'
       Toast.show({ content: '登录成功', duration: 1000 })
       setTimeout(() => {
-        navigate('/')
+        navigate(redirectPath, { replace: true })
       }, 800)
     } catch (error) {
       console.error('登录失败:', error)
