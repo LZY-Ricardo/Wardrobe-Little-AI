@@ -6,6 +6,7 @@ import { Button, Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
+import { buildAutoSuitName } from '@/utils/suitName'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
   const img = new Image()
@@ -172,7 +173,7 @@ const getSceneTone = (scene = '') => {
 
 const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
 
-export default function Recommend() {
+export default function Recommend({ embedded = false }) {
   const location = useLocation()
   const lastPresetKeyRef = React.useRef('')
   const presetScene =
@@ -322,7 +323,7 @@ export default function Recommend() {
     setSuitSaving((prev) => ({ ...prev, [signature]: true }))
     try {
       await axios.post('/suits', {
-        name: suit?.scene ? `${suit.scene}套装` : '推荐套装',
+        name: buildAutoSuitName(suit?.scene || ''),
         scene: suit?.scene || '',
         description: suit?.description || suit?.message || suit?.reason || '',
         cover: suit?.cover || '',

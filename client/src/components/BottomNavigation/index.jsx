@@ -8,32 +8,22 @@ import styles from './index.module.less'
 const tabs = [
     {
         key: '/home',
-        title: '首页',
+        title: '衣序',
         icon: <Icon type='iconfont icon-shouye1' />
     },
     {
         key: '/outfit',
-        title: '虚拟衣柜',
+        title: '衣藏',
         icon: <Icon type='iconfont icon-tubiao-' />
     },
     {
         key: '/match',
-        title: '搭配中心',
+        title: '衣织',
         icon: <Icon type='iconfont icon-magic' />
     },
     {
-        key: '/recommend',
-        title: '场景推荐',
-        icon: <Icon type='iconfont icon-dengpao' />
-    },
-    {
-        key: '/suits',
-        title: '搭配合集',
-        icon: <Icon type='iconfont icon-dengpao' />
-    },
-    {
         key: '/person',
-        title: '我的',
+        title: '衣笺',
         icon: <Icon type='iconfont icon-icon-myself-1' />
     }
 ]
@@ -43,6 +33,16 @@ export default function BottomNavigation() {
     const location = useLocation()
     const { pathname } = location
 
+    const activeKey = React.useMemo(() => {
+        if (pathname.startsWith('/match')) return '/match'
+        if (pathname.startsWith('/recommend')) return '/match'
+        if (pathname.startsWith('/suits')) return '/match'
+        if (pathname.startsWith('/outfit')) return '/outfit'
+        if (pathname.startsWith('/home')) return '/home'
+        if (pathname.startsWith('/person')) return '/person'
+        return pathname
+    }, [pathname])
+
     return (
         <div className={styles['bottom-navigation-bar']}>
             <AiChatEntrance />
@@ -50,7 +50,7 @@ export default function BottomNavigation() {
                 onChange={key => {
                     navigate(key)
                 }}
-                activeKey={pathname}
+                activeKey={activeKey}
             >
                 {
                     tabs.map(item => (

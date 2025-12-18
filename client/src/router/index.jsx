@@ -7,14 +7,12 @@ import { useAuthStore } from '@/store'
 const Login = React.lazy(() => import('../pages/Login'))
 const Home = React.lazy(() => import('../pages/Home'))
 const Register = React.lazy(() => import('../pages/Register'))
-const Match = React.lazy(() => import('../pages/Match'))
+const MatchHub = React.lazy(() => import('../pages/MatchHub'))
 const Outfit = React.lazy(() => import('../pages/Outfit'))
-const Recommend = React.lazy(() => import('../pages/Recommend'))
 const Person = React.lazy(() => import('../pages/Person'))
 const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
 const AiChat = React.lazy(() => import('../pages/AiChat'))
-const Suits = React.lazy(() => import('../pages/Suits'))
 const SuitCreate = React.lazy(() => import('../pages/SuitCreate'))
 
 const isAuthed = () => {
@@ -61,7 +59,7 @@ const routes = [
     path: '/match',
     element: (
       <ProtectedRoute>
-        {withLayout(<Match />)}
+        {withLayout(<MatchHub />)}
       </ProtectedRoute>
     ),
   },
@@ -75,19 +73,11 @@ const routes = [
   },
   {
     path: '/recommend',
-    element: (
-      <ProtectedRoute>
-        {withLayout(<Recommend />)}
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/match?tab=recommend" replace />,
   },
   {
     path: '/suits',
-    element: (
-      <ProtectedRoute>
-        {withLayout(<Suits />)}
-      </ProtectedRoute>
-    ),
+    element: <Navigate to="/match?tab=collection" replace />,
   },
   {
     path: '/suits/create',

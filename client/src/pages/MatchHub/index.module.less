@@ -1,0 +1,44 @@
+.hub {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: #f7f8fa;
+  padding: 10px 14px;
+}
+
+.tabs {
+  background: #fff;
+  border-radius: 14px;
+  padding: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  box-shadow: 0 6px 18px rgba(17, 38, 146, 0.06);
+}
+
+.tab {
+  border: none;
+  border-radius: 12px;
+  padding: 10px 8px;
+  background: transparent;
+  color: #4b5563;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tabActive {
+  background: linear-gradient(135deg, rgba(47, 84, 235, 0.14), rgba(114, 98, 253, 0.14));
+  color: #2f54eb;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+}
+

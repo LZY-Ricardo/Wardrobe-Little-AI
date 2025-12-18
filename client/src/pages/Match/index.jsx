@@ -22,7 +22,7 @@ const safeParseUserInfo = () => {
   }
 }
 
-export default function Match() {
+export default function Match({ embedded = false }) {
   const navigate = useNavigate()
   const authUserInfo = useAuthStore((s) => s.userInfo)
   const accessToken = useAuthStore((s) => s.accessToken)
@@ -234,11 +234,13 @@ export default function Match() {
         <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>{userLoading ? '正在获取用户信息...' : '正在生成中...'}</Loading>
       </div>
 
-      <div className={styles['match-header']}>
-        <div className={styles['match-header-title']}>
-          搭配中心
+      {embedded ? null : (
+        <div className={styles['match-header']}>
+          <div className={styles['match-header-title']}>
+            搭配中心
+          </div>
         </div>
-      </div>
+      )}
 
       <div className={styles['match-content']}>
         <div className={styles['match-content-title']}>
