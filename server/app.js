@@ -6,19 +6,28 @@ const path = require('path')
 
 const Koa = require('koa')
 const app = new Koa()
+const errorHandler = require('./middleware/errorHandler')
+const requestContext = require('./middleware/requestContext')
+const requestLogger = require('./middleware/logger')
+const rateLimit = require('./middleware/rateLimit')
 const userRouter = require('./routes/user')
 const clothesRouter = require('./routes/clothes')
 const sceneRouter = require('./routes/scene')
 const chatRouter = require('./routes/chat')
 const weatherRouter = require('./routes/weather')
+const suitsRouter = require('./routes/suits')
 const { bodyParser } = require('@koa/bodyparser');
 const cors = require('@koa/cors')
 
+app.use(errorHandler())
+app.use(requestContext())
+app.use(requestLogger())
+app.use(rateLimit())
 app.use(cors()) // 允许跨域
 app.use(bodyParser({
-  jsonLimit: '50mb',    // JSON请求体限制50MB
-  formLimit: '50mb',    // 表单请求体限制50MB
-  textLimit: '50mb',    // 文本请求体限制50MB
+  jsonLimit: '5mb',    // JSON请求体限制5MB
+  formLimit: '5mb',    // 表单请求体限制5MB
+  textLimit: '5mb',    // 文本请求体限制5MB
   enableTypes: ['json', 'form', 'text']
 })); // 辅助 koa 解析请求体中的数据
 
@@ -56,6 +65,8 @@ app.use(chatRouter.routes());
 app.use(chatRouter.allowedMethods());
 app.use(weatherRouter.routes());
 app.use(weatherRouter.allowedMethods());
+app.use(suitsRouter.routes());
+app.use(suitsRouter.allowedMethods());
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`)
 })

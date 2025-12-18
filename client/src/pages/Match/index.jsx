@@ -279,6 +279,7 @@ export default function Match() {
                       <img
                         src={item?.image || test}
                         alt={item?.name || '上衣'}
+                        loading="lazy"
                         onError={(e) => {
                           e.currentTarget.src = test
                         }}
@@ -303,6 +304,7 @@ export default function Match() {
                       <img
                         src={item?.image || test}
                         alt={item?.name || '下衣'}
+                        loading="lazy"
                         onError={(e) => {
                           e.currentTarget.src = test
                         }}
@@ -324,13 +326,14 @@ export default function Match() {
               <div className={styles['preview']}>
                 <div className={styles['preview-img']}>
                   <img
-                    src={previewImageUrl}
-                    alt="预览图"
-                    onError={(e) => {
-                      console.error('图片加载失败:', previewImageUrl)
-                      e.currentTarget.src = test
-                    }}
-                  />
+                          src={previewImageUrl}
+                          alt="预览图"
+                          loading="lazy"
+                          onError={(e) => {
+                            console.error('图片加载失败:', previewImageUrl)
+                            e.currentTarget.src = test
+                          }}
+                        />
                 </div>
               </div>
             ) : (
@@ -348,6 +351,7 @@ export default function Match() {
                         <img
                           src={topClothes.image}
                           alt={topClothes.name || '上衣'}
+                          loading="lazy"
                           onError={(e) => {
                             e.target.src = test
                           }}
@@ -358,6 +362,7 @@ export default function Match() {
                         <img
                           src={bottomClothes.image}
                           alt={bottomClothes.name || '下衣'}
+                          loading="lazy"
                           onError={(e) => {
                             e.target.src = test
                           }}
@@ -378,6 +383,7 @@ export default function Match() {
                         <img
                           src={topClothes.image}
                           alt={topClothes.name || '上衣'}
+                          loading="lazy"
                           onError={(e) => {
                             e.target.src = test
                           }}
@@ -431,6 +437,7 @@ export default function Match() {
                         <img
                           src={bottomClothes.image}
                           alt={bottomClothes.name || '下衣'}
+                          loading="lazy"
                           onError={(e) => {
                             e.target.src = test
                           }}

@@ -5,6 +5,7 @@ const { verify } = require('../utils/jwt')
 const { buildHelpMessage, buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
 const { TOOL_DEFINITIONS, executeTool } = require('../utils/toolRegistry')
 const { createChatCompletion, ensureApiKey } = require('../utils/deepseekClient')
+const { isProbablyBase64Image } = require('../utils/validate')
 
 router.prefix('/chat')
 
@@ -20,6 +21,9 @@ const CHAT_TOOL_EXEC_TIMEOUT_MS = Number(process.env.CHAT_TOOL_EXEC_TIMEOUT_MS) 
 const CHAT_WRITE_CONFIRM_TTL_MS = Number(process.env.CHAT_WRITE_CONFIRM_TTL_MS) || 5 * 60 * 1000
 const CHAT_WRITE_TOOL_ENABLED = String(process.env.CHAT_WRITE_TOOL_ENABLED || '1') !== '0'
 const CHAT_LIST_PAGINATION_TTL_MS = Number(process.env.CHAT_LIST_PAGINATION_TTL_MS) || 5 * 60 * 1000
+const CHAT_MAX_INPUT_MESSAGES = Number(process.env.CHAT_MAX_INPUT_MESSAGES) || 30
+const CHAT_MAX_INPUT_CHARS = Number(process.env.CHAT_MAX_INPUT_CHARS) || 12000
+const CHAT_MAX_SINGLE_MESSAGE_CHARS = Number(process.env.CHAT_MAX_SINGLE_MESSAGE_CHARS) || 4000
 
 const PLANNER_TOOL_DEFINITIONS = TOOL_DEFINITIONS.filter((tool) => !tool.dangerous)
 const PLANNER_TOOL_NAME_SET = new Set(PLANNER_TOOL_DEFINITIONS.map((tool) => tool.name))
@@ -366,6 +370,49 @@ router.post('/', verify(), async (ctx) => {
         ctx.body = { error: 'Messages array is required and cannot be empty' };
         return;
     }
+
+    if (messages.length > CHAT_MAX_INPUT_MESSAGES) {
+        ctx.status = 400
+        ctx.body = { code: 0, msg: '\u8f93\u5165\u6d88\u606f\u8fc7\u591a\uff0c\u8bf7\u7cbe\u7b80\u5bf9\u8bdd\u5386\u53f2' }
+        return
+    }
+
+    const invalidItem = messages.find((m) => !m || typeof m !== 'object')
+    if (invalidItem) {
+        ctx.status = 400
+        ctx.body = { code: 0, msg: '\u6d88\u606f\u683c\u5f0f\u65e0\u6548' }
+        return
+    }
+
+    const totalChars = messages.reduce((sum, item) => {
+        const content = typeof item.content === 'string' ? item.content : String(item.content ?? '')
+        return sum + content.length
+    }, 0)
+    if (totalChars > CHAT_MAX_INPUT_CHARS) {
+        ctx.status = 400
+        ctx.body = { code: 0, msg: '\u8f93\u5165\u5185\u5bb9\u8fc7\u957f\uff0c\u8bf7\u7cbe\u7b80\u95ee\u9898\u6216\u6e05\u7406\u5386\u53f2' }
+        return
+    }
+
+    const tooLongMessage = messages.find((item) => {
+        const content = typeof item.content === 'string' ? item.content : String(item.content ?? '')
+        return content.length > CHAT_MAX_SINGLE_MESSAGE_CHARS
+    })
+    if (tooLongMessage) {
+        ctx.status = 400
+        ctx.body = { code: 0, msg: '\u5355\u6761\u6d88\u606f\u8fc7\u957f\uff0c\u8bf7\u62c6\u5206\u6216\u7cbe\u7b80' }
+        return
+    }
+
+    const hasBase64 = messages.some((item) => {
+        const content = typeof item.content === 'string' ? item.content : String(item.content ?? '')
+        return isProbablyBase64Image(content) || content.includes('data:image/')
+    })
+    if (hasBase64) {
+        ctx.status = 400
+        ctx.body = { code: 0, msg: '\u4e0d\u652f\u6301\u5728\u804a\u5929\u4e2d\u76f4\u63a5\u4f20\u5165\u56fe\u7247\u6570\u636e' }
+        return
+    }
     
     // 设置为不使用Koa的响应处理，直接操作原生Node.js响应对象
     // 这样可以更精确地控制流式响应的发送
@@ -374,11 +421,27 @@ router.post('/', verify(), async (ctx) => {
     // 设置SSE（Server-Sent Events）响应头
     ctx.res.writeHead(200, {
         'Content-Type': 'text/event-stream',    // SSE内容类型
-        'Cache-Control': 'no-cache',            // 禁用缓存
+        'Cache-Control': 'no-cache, no-transform',            // 禁用缓存
         'Connection': 'keep-alive',             // 保持连接
+        'X-Accel-Buffering': 'no',              // 禁止代理缓冲（提升 Zeabur/反代下 SSE 稳定性）
         'Access-Control-Allow-Origin': '*',     // 允许跨域
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type' // 允许的请求头
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Request-Id', // 允许的请求头
+        'x-request-id': ctx.state.requestId,
     });
+
+    const heartbeatMs = Number(process.env.CHAT_SSE_HEARTBEAT_MS) || 15000
+    let heartbeatTimer = setInterval(() => {
+        try {
+            ctx.res.write(': ping\n\n')
+        } catch {
+            // ignore
+        }
+    }, heartbeatMs)
+    const stopHeartbeat = () => {
+        if (!heartbeatTimer) return
+        clearInterval(heartbeatTimer)
+        heartbeatTimer = null
+    }
     
     const safeMessages = normalizeMessages(messages).filter((item) => item.role !== 'system')
     const lastUserText = [...safeMessages].reverse().find((m) => m.role === 'user')?.content || ''
@@ -387,6 +450,7 @@ router.post('/', verify(), async (ctx) => {
     if (command === '/help') {
         const help = buildHelpMessage()
         ctx.res.write(`data: ${JSON.stringify(help)}\n\n`)
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -396,6 +460,7 @@ router.post('/', verify(), async (ctx) => {
     if (command === '取消' || command === '/cancel') {
         pendingWriteOps.delete(userKey)
         writeSseMessage(ctx, '已取消待确认操作。')
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -405,17 +470,20 @@ router.post('/', verify(), async (ctx) => {
         const pending = pendingWriteOps.get(userKey)
         if (!pending) {
             writeSseMessage(ctx, '当前没有待确认的写操作。你可以先输入 /help 查看可用命令。')
+            stopHeartbeat()
             endSse(ctx)
             return
         }
         if (pending.confirmId !== confirmCode) {
             writeSseMessage(ctx, '确认码不匹配或已过期。请重新发起写操作获取新的确认码。')
+            stopHeartbeat()
             endSse(ctx)
             return
         }
         if (Date.now() - pending.createdAt > CHAT_WRITE_CONFIRM_TTL_MS) {
             pendingWriteOps.delete(userKey)
             writeSseMessage(ctx, '该确认码已过期（默认 5 分钟）。请重新发起写操作。')
+            stopHeartbeat()
             endSse(ctx)
             return
         }
@@ -430,6 +498,7 @@ router.post('/', verify(), async (ctx) => {
 
         if (result?.error) {
             writeSseMessage(ctx, `写操作执行失败：${result.error}${result.message ? `（${result.message}）` : ''}`)
+            stopHeartbeat()
             endSse(ctx)
             return
         }
@@ -446,6 +515,7 @@ router.post('/', verify(), async (ctx) => {
                   : '写操作已完成。'
 
         writeSseMessage(ctx, okText)
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -454,12 +524,14 @@ router.post('/', verify(), async (ctx) => {
         const pending = pendingListOps.get(userKey)
         if (!pending) {
             writeSseMessage(ctx, '当前没有可继续展示的衣橱列表。你可以直接问：我衣橱里有哪些衣服？')
+            stopHeartbeat()
             endSse(ctx)
             return
         }
         if (Date.now() - pending.createdAt > CHAT_LIST_PAGINATION_TTL_MS) {
             pendingListOps.delete(userKey)
             writeSseMessage(ctx, '上一次衣橱列表已过期，请重新问：我衣橱里有哪些衣服？')
+            stopHeartbeat()
             endSse(ctx)
             return
         }
@@ -483,6 +555,7 @@ router.post('/', verify(), async (ctx) => {
         }
 
         writeSseMessage(ctx, formatClosetInventory(result))
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -504,6 +577,7 @@ router.post('/', verify(), async (ctx) => {
             confirmId,
         })
         writeSseMessage(ctx, prompt)
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -528,6 +602,7 @@ router.post('/', verify(), async (ctx) => {
             pendingListOps.delete(userKey)
         }
         writeSseMessage(ctx, formatClosetInventory(result))
+        stopHeartbeat()
         endSse(ctx)
         return
     }
@@ -595,6 +670,7 @@ router.post('/', verify(), async (ctx) => {
 
                 if (payload === '[DONE]') {
                     isEnded = true
+                    stopHeartbeat()
                     ctx.res.write('data: [DONE]\n\n')
                     ctx.res.end()
                     return
@@ -619,6 +695,7 @@ router.post('/', verify(), async (ctx) => {
         response.data.on('end', () => {
             if (!isEnded) {
                 isEnded = true
+                stopHeartbeat()
                 ctx.res.write('data: [DONE]\n\n')
                 ctx.res.end()
             }
@@ -626,15 +703,31 @@ router.post('/', verify(), async (ctx) => {
 
         ctx.req.on('close', () => {
             isEnded = true
+            stopHeartbeat()
             if (response.data && !response.data.destroyed) {
                 response.data.destroy()
             }
         })
     } catch (error) {
         console.error('Chat API Error:', error.message)
-        if (!isEnded && !ctx.res.headersSent) {
-            ctx.res.write('event: error\ndata: ' + JSON.stringify({ error: error.message }) + '\n\n')
-            ctx.res.end()
+        if (!isEnded) {
+            isEnded = true
+            stopHeartbeat()
+            try {
+                ctx.res.write('event: error\ndata: ' + JSON.stringify({ error: error.message, requestId: ctx.state.requestId }) + '\n\n')
+            } catch {
+                // ignore
+            }
+            try {
+                ctx.res.write('data: [DONE]\n\n')
+            } catch {
+                // ignore
+            }
+            try {
+                ctx.res.end()
+            } catch {
+                // ignore
+            }
         }
     }
 })

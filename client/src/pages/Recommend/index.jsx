@@ -5,6 +5,7 @@ import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
+import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
   const img = new Image()
@@ -183,6 +184,27 @@ export default function Recommend() {
   const [error, setError] = useState('')
   const [serviceUnavailable, setServiceUnavailable] = useState(false)
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
+  const [suitSaving, setSuitSaving] = useState({})
+  const [savedSuitSignatures, setSavedSuitSignatures] = useState(new Set())
+
+  const fetchSavedSuits = React.useCallback(async () => {
+    try {
+      const res = await axios.get('/suits')
+      const list = Array.isArray(res?.data) ? res.data : []
+      const sigs = new Set(
+        list
+          .map((suit) => toSuitSignature(extractClothIds(suit.items || [])))
+          .filter(Boolean)
+      )
+      setSavedSuitSignatures(sigs)
+    } catch (err) {
+      console.warn('加载套装库失败', err)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    void fetchSavedSuits()
+  }, [fetchSavedSuits])
 
   const handleBtnClick = () => {
     const value = scene.trim()
@@ -247,11 +269,10 @@ export default function Recommend() {
     )
   }
 
-  const isSuitFavorited = (suit) => {
-    const items = Array.isArray(suit?.items) ? suit.items : []
-    const clothItems = items.filter((cloth) => cloth?.cloth_id)
-    if (!clothItems.length) return false
-    return clothItems.every((cloth) => isFavorited(cloth.favorite))
+  const isSuitSaved = (suit) => {
+    const signature = toSuitSignature(extractClothIds(suit?.items))
+    if (!signature) return false
+    return savedSuitSignatures.has(signature)
   }
 
   const toggleClothFavorite = async (cloth) => {
@@ -281,57 +302,48 @@ export default function Recommend() {
     }
   }
 
-  const toggleSuitFavorite = async (suit) => {
-    const items = Array.isArray(suit?.items) ? suit.items : []
-    const prevPatch = {}
-    items.forEach((cloth) => {
-      const clothId = cloth?.cloth_id
-      if (!clothId) return
-      if (Object.prototype.hasOwnProperty.call(prevPatch, clothId)) return
-      prevPatch[clothId] = isFavorited(cloth.favorite)
-    })
-    const clothIds = Object.keys(prevPatch)
-    if (!clothIds.length) return
-
-    if (clothIds.some((id) => favoriteUpdating[id])) return
-
-    const nextFavorite = !clothIds.every((id) => prevPatch[id])
-    const nextPatch = {}
-    clothIds.forEach((id) => {
-      nextPatch[id] = nextFavorite
-    })
-
-    setFavoriteUpdating((prev) => {
-      const next = { ...prev }
-      clothIds.forEach((id) => {
-        next[id] = true
-      })
-      return next
-    })
-    applyFavoritePatch(nextPatch)
-
-    const results = await Promise.allSettled(
-      clothIds.map((id) => axios.put(`/clothes/${id}`, { favorite: nextFavorite ? 1 : 0 }))
-    )
-    const failedIds = clothIds.filter((_, index) => results[index]?.status === 'rejected')
-    if (failedIds.length) {
-      const revertPatch = {}
-      failedIds.forEach((id) => {
-        revertPatch[id] = prevPatch[id]
-      })
-      applyFavoritePatch(revertPatch)
-      Toast.show({ content: '部分单品操作失败，请重试', duration: 1200 })
-    } else {
-      Toast.show({ content: nextFavorite ? '已收藏该套单品' : '已取消收藏', duration: 900 })
+  const saveSuitToLibrary = async (suit) => {
+    const clothIds = extractClothIds(suit?.items)
+    const signature = toSuitSignature(clothIds)
+    if (!clothIds.length) {
+      Toast.show({ content: '该套装缺少单品，无法收藏', duration: 1200 })
+      return
     }
+    if (clothIds.length < 2) {
+      Toast.show({ content: '套装至少需要 2 件单品', duration: 1200 })
+      return
+    }
+    if (savedSuitSignatures.has(signature)) {
+      Toast.show({ content: '已在套装库中', duration: 900 })
+      return
+    }
+    if (suitSaving[signature]) return
 
-    setFavoriteUpdating((prev) => {
-      const next = { ...prev }
-      clothIds.forEach((id) => {
-        delete next[id]
+    setSuitSaving((prev) => ({ ...prev, [signature]: true }))
+    try {
+      await axios.post('/suits', {
+        name: suit?.scene ? `${suit.scene}套装` : '推荐套装',
+        scene: suit?.scene || '',
+        description: suit?.description || suit?.message || suit?.reason || '',
+        cover: suit?.cover || '',
+        source: 'recommend',
+        items: clothIds,
       })
-      return next
-    })
+      setSavedSuitSignatures((prev) => {
+        const next = new Set(prev)
+        if (signature) next.add(signature)
+        return next
+      })
+      Toast.show({ content: '已加入套装库', duration: 1000 })
+    } catch (err) {
+      Toast.show({ content: err?.msg || '收藏失败，请重试', duration: 1200 })
+    } finally {
+      setSuitSaving((prev) => {
+        const next = { ...prev }
+        delete next[signature]
+        return next
+      })
+    }
   }
 
   React.useEffect(() => {
@@ -366,25 +378,31 @@ export default function Recommend() {
         {sceneSuits.map((item) => (
           <div className={`${styles['content-item']} ${styles[getSceneTone(item.scene)]}`} key={item.id}>
             <div className={styles['item-img']}>
-              {item.cover ? <img src={item.cover} alt={item.scene} /> : <div className={styles['placeholder']}>No Image</div>}
+              {item.cover ? <img src={item.cover} alt={item.scene} loading="lazy" /> : <div className={styles['placeholder']}>No Image</div>}
               <div className={styles['item-actions-overlay']}>
-                {isSuitFavorited(item) ? (
+                {(() => {
+                  const signature = toSuitSignature(extractClothIds(item.items))
+                  const saved = isSuitSaved(item)
+                  const saving = suitSaving[signature]
+                  return saved ? (
                   <HeartFill
                     className={`${styles['action-icon']} ${styles['action-icon-active']}`}
                     onClick={(e) => {
                       e.stopPropagation()
-                      void toggleSuitFavorite(item)
+                      void saveSuitToLibrary(item)
                     }}
                   />
-                ) : (
+                  ) : (
                   <HeartOutline
-                    className={styles['action-icon']}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void toggleSuitFavorite(item)
-                    }}
+                      className={styles['action-icon']}
+                      onClick={(e) => {
+                        if (saving) return
+                        e.stopPropagation()
+                        void saveSuitToLibrary(item)
+                      }}
                   />
-                )}
+                  )
+                })()}
               </div>
             </div>
             <div className={styles['item-content']}>

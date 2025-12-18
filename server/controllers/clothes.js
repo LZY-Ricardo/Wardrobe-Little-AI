@@ -1,30 +1,13 @@
 // 数据库相关操作
-const mysql = require('mysql2')
-const config = require('../config')
+const { query } = require('../models/db')
 
-// 创建线程池
-const pool = mysql.createPool({
-    host: config.db.host,
-    user: config.db.user,
-    password: config.db.password,
-    database: config.db.database,
-    port: config.db.port
-})
+const allServices = { query }
 
-// 执行sql的方法
-const allServices = {
-    async query(sql, params) {
-        return new Promise((resolve, reject) => {
-            pool.query(sql, params, (err, results) => {
-                if (err) {
-                    reject(err)
-                } else {
-                    resolve(results)
-                }
-            })
-        })
-    }
-}
+const parseTypeKeywords = (raw, fallback) =>
+    String(raw || fallback || '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
 
 // 插入衣物数据
 const insertClothesData = async (data) => {
@@ -142,6 +125,32 @@ const updateClothFieldsForUser = async (user_id, cloth_id, patch = {}) => {
     return result.affectedRows > 0
 }
 
+const buildTypeLikeQuery = (user_id, keywords = []) => {
+    const list = Array.isArray(keywords) ? keywords.filter(Boolean) : []
+    if (!list.length) {
+        return { sql: 'SELECT * FROM clothes WHERE user_id = ?', params: [user_id] }
+    }
+    const clauses = list.map(() => 'type LIKE ?').join(' OR ')
+    return {
+        sql: `SELECT * FROM clothes WHERE user_id = ? AND (${clauses})`,
+        params: [user_id, ...list.map((k) => `%${k}%`)],
+    }
+}
+
+const getTopClothesByConfig = async (user_id) => {
+    const keywords = parseTypeKeywords(process.env.CLOTHES_TOP_TYPE_KEYWORDS, '\u4e0a\u8863')
+    const { sql, params } = buildTypeLikeQuery(user_id, keywords)
+    const result = await allServices.query(sql, params)
+    return Array.isArray(result) ? result : []
+}
+
+const getBotClothesByConfig = async (user_id) => {
+    const keywords = parseTypeKeywords(process.env.CLOTHES_BOTTOM_TYPE_KEYWORDS, '\u4e0b\u8863')
+    const { sql, params } = buildTypeLikeQuery(user_id, keywords)
+    const result = await allServices.query(sql, params)
+    return Array.isArray(result) ? result : []
+}
+
 module.exports = {
     insertClothesData,
     getAllClothes,
@@ -149,6 +158,8 @@ module.exports = {
     updateClothes,
     getTopClothes,
     getBotClothes,
+    getTopClothesByConfig,
+    getBotClothesByConfig,
     getClothByIdForUser,
     deleteClothForUser,
     updateClothFieldsForUser,

@@ -1,5 +1,7 @@
 const axios = require('axios')
 const { getAllClothes } = require('./clothes')
+const { isProbablyBase64Image } = require('../utils/validate')
+const { createCircuitBreaker } = require('../utils/circuitBreaker')
 
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '')
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat'
@@ -8,6 +10,11 @@ const LLM_TIMEOUT_MS =
   Number(process.env.DEEPSEEK_SCENE_TIMEOUT_MS || process.env.LLM_SCENE_TIMEOUT_MS || process.env.DEEPSEEK_TIMEOUT_MS) ||
   8000
 const MAX_SUITS = 5
+const SCENE_LLM_BREAKER = createCircuitBreaker({
+  name: 'deepseek-scene',
+  failureThreshold: Number(process.env.DEEPSEEK_SCENE_BREAKER_FAILURE_THRESHOLD) || 3,
+  cooldownMs: Number(process.env.DEEPSEEK_SCENE_BREAKER_COOLDOWN_MS) || 60 * 1000,
+})
 
 const sceneRules = [
   {
@@ -223,6 +230,9 @@ const callLlm = async (scene, clothes, options = {}) => {
   if (!DEEPSEEK_API_KEY) {
     return { suits: [], error: 'DeepSeek API key 未配置' }
   }
+  if (SCENE_LLM_BREAKER.isOpen()) {
+    return { suits: [], error: '\u6a21\u578b\u670d\u52a1\u6682\u65f6\u4e0d\u53ef\u7528\uff08\u7a33\u5b9a\u6027\u4fdd\u62a4\u4e2d\uff09' }
+  }
 
   const prompt = buildPrompt(scene, clothes, options)
   const messages = [
@@ -232,16 +242,22 @@ const callLlm = async (scene, clothes, options = {}) => {
 
   const url = `${DEEPSEEK_BASE_URL}/v1/chat/completions`
   try {
-    const res = await axios.post(
-      url,
-      {
-        model: DEEPSEEK_MODEL,
-        messages,
-        stream: false,
-        temperature: 0.7,
-        response_format: { type: 'json_object' },
-      },
-      { timeout: LLM_TIMEOUT_MS, headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY}` } }
+    const res = await SCENE_LLM_BREAKER.exec(() =>
+      axios.post(
+        url,
+        {
+          model: DEEPSEEK_MODEL,
+          messages,
+          stream: false,
+          temperature: 0.7,
+          response_format: { type: 'json_object' },
+        },
+        {
+          timeout: LLM_TIMEOUT_MS,
+          proxy: false,
+          headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY}` },
+        }
+      )
     )
     const content =
       res?.data?.choices?.[0]?.message?.content ||
@@ -313,7 +329,8 @@ const sanitizeSuits = (rawSuits, closetMap, scene, source) => {
 
 // 生成场景套装
 const generateSceneSuits = async (ctx) => {
-  const scene = (ctx.request.body?.scene || '').trim()
+  const rawScene = ctx.request.body?.scene
+  const scene = String(rawScene || '').trim()
   const userId = ctx.userId
 
   if (!userId) {
@@ -325,6 +342,17 @@ const generateSceneSuits = async (ctx) => {
   if (!scene) {
     ctx.status = 400
     ctx.body = { code: 0, msg: '场景不能为空' }
+    return
+  }
+
+  if (scene.length > 64) {
+    ctx.status = 400
+    ctx.body = { code: 0, msg: '\u573a\u666f\u957f\u5ea6\u4e0d\u80fd\u8d85\u8fc764' }
+    return
+  }
+  if (isProbablyBase64Image(scene) || scene.includes('data:image/')) {
+    ctx.status = 400
+    ctx.body = { code: 0, msg: '\u8bf7\u4e0d\u8981\u4f20\u5165\u56fe\u7247\u6570\u636e' }
     return
   }
 

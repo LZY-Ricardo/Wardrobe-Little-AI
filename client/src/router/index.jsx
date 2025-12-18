@@ -14,6 +14,8 @@ const Person = React.lazy(() => import('../pages/Person'))
 const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
 const AiChat = React.lazy(() => import('../pages/AiChat'))
+const Suits = React.lazy(() => import('../pages/Suits'))
+const SuitCreate = React.lazy(() => import('../pages/SuitCreate'))
 
 const isAuthed = () => {
   const token = useAuthStore.getState().accessToken || localStorage.getItem('access_token')
@@ -76,6 +78,22 @@ const routes = [
     element: (
       <ProtectedRoute>
         {withLayout(<Recommend />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/suits',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Suits />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/suits/create',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<SuitCreate />)}
       </ProtectedRoute>
     ),
   },

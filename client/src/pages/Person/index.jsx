@@ -748,7 +748,7 @@ export default function Person() {
         <div className={styles.avatar} onClick={handleAvatarClick}>
           <div className={styles.avatarIcon}>
             {avatar ? (
-              <img className={styles.avatarImg} src={avatar} alt="avatar" />
+              <img className={styles.avatarImg} src={avatar} alt="avatar" loading="lazy" />
             ) : (
             <svg viewBox="0 0 1024 1024" width="40" height="40">
               <path d="M512 512m-160 0a160 160 0 1 0 320 0 160 160 0 1 0-320 0Z" fill="#ccc" />
@@ -1144,7 +1144,7 @@ export default function Person() {
       >
         <div className={styles.modelPreviewBody}>
           <div className={styles.modelPreviewImage}>
-            {uploadedImage ? <img src={uploadedImage} alt="人物模特预览" /> : null}
+            {uploadedImage ? <img src={uploadedImage} alt="人物模特预览" loading="lazy" /> : null}
           </div>
           <div className={styles.modelPreviewActions}>
             <button

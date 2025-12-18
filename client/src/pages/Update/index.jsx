@@ -8,7 +8,8 @@ import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 
 const VALID_TYPES = ['上衣', '下衣', '鞋子', '配饰']
 const MIN_FILE_SIZE = 5 * 1024
-const MAX_FILE_SIZE = 10 * 1024 * 1024
+const MAX_FILE_SIZE = 5 * 1024 * 1024
+const MAX_STORE_SIZE = 1 * 1024 * 1024
 const COMPRESS_CONFIG = { quality: 0.8, maxWidth: 600, maxHeight: 600 }
 const UPLOAD_TIMEOUT = 20000
 
@@ -62,11 +63,6 @@ export default function Update() {
       return
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      Toast.show({ icon: 'fail', content: '图片大小不能超过 10MB', duration: 1200 })
-      return
-    }
-
     setCompressing(true)
     setOriginalSize(file.size)
     setAnalysisUnavailable(false)
@@ -79,6 +75,11 @@ export default function Update() {
         COMPRESS_CONFIG.maxHeight
       )
       setCompressedSize(compressedBlob.size)
+      if (compressedBlob.size > MAX_STORE_SIZE) {
+        Toast.show({ icon: 'fail', content: '压缩后仍超过 1MB，请换更小的图片', duration: 1500 })
+        setCompressing(false)
+        return
+      }
       const base64 = await blobToBase64(compressedBlob)
       setImageUrl(base64)
 
@@ -265,7 +266,7 @@ export default function Update() {
           <label htmlFor="img" className={styles.uploadBox}>
             {imageUrl ? (
               <div className={styles.imageContainer}>
-                <img src={imageUrl} alt="预览" className={styles.previewImg} />
+                <img src={imageUrl} alt="预览" className={styles.previewImg} loading="lazy" />
               </div>
             ) : (
               <div className={styles.uploadContent}>

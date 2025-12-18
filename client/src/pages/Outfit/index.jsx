@@ -30,6 +30,8 @@ export default function Outfit() {
   const debouncedSearch = useDebouncedValue(searchKeyword, 300)
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
   const [filtersExpanded, setFiltersExpanded] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
+  const importInputRef = React.useRef(null)
 
   const {
     items,
@@ -95,6 +97,65 @@ export default function Outfit() {
   const handleLoadMore = () => {
     if (hasMore) {
       setPage(page + 1)
+    }
+  }
+
+  const downloadJson = (payload, filename) => {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: 'application/json;charset=utf-8',
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleExport = async (includeImages) => {
+    if (backupBusy) return
+    setBackupBusy(true)
+    try {
+      const res = await axios.get('/clothes/export', {
+        params: { includeImages: includeImages ? 1 : 0 },
+      })
+      const date = new Date().toISOString().slice(0, 10)
+      const suffix = includeImages ? 'with-images' : 'no-images'
+      downloadJson(res?.data ?? res, `closet-export-${suffix}-${date}.json`)
+      Toast.show({ content: '已导出', duration: 1000 })
+    } catch (err) {
+      console.error('导出失败', err)
+      Toast.show({ content: '导出失败，请重试', duration: 1500 })
+    } finally {
+      setBackupBusy(false)
+    }
+  }
+
+  const handleImportFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (backupBusy) return
+    setBackupBusy(true)
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text)
+      const rawItems = Array.isArray(parsed) ? parsed : parsed?.data?.items || parsed?.items || []
+      const items = Array.isArray(rawItems) ? rawItems : []
+      if (!items.length) {
+        Toast.show({ content: '导入文件为空或格式不正确', duration: 1500 })
+        return
+      }
+      await axios.post('/clothes/import', { items })
+      Toast.show({ content: '导入完成', duration: 1200 })
+      await loadClothes()
+    } catch (err) {
+      console.error('导入失败', err)
+      Toast.show({ content: '导入失败，请检查文件内容', duration: 1800 })
+    } finally {
+      setBackupBusy(false)
+      if (importInputRef.current) importInputRef.current.value = ''
     }
   }
 
@@ -193,7 +254,7 @@ export default function Outfit() {
                   )}
                 </button>
                 <div className={styles['clothes-img']}>
-                  <img src={item.image || white} alt={item.name} />
+                  <img src={item.image || white} alt={item.name} loading="lazy" />
                 </div>
                 <div className={styles.label}>
                   <div className={styles['label-title']} title={item.name || ''}>
@@ -236,8 +297,46 @@ export default function Outfit() {
             className={styles['search-input']}
           />
         </div>
-        <div className={styles['header-right']} onClick={() => navigate('/add')}>
-          <SvgIcon iconName="icon-jiahao-copy" />
+        <div className={styles['header-actions']}>
+          <button
+            type="button"
+            className={styles['header-action']}
+            disabled={backupBusy}
+            onClick={() => void handleExport(false)}
+          >
+            导出
+          </button>
+          <button
+            type="button"
+            className={styles['header-action']}
+            disabled={backupBusy}
+            onClick={() =>
+              Dialog.confirm({
+                message: '包含图片导出可能较大，且可能触发服务端大小限制，是否继续？',
+                onConfirm: () => handleExport(true),
+              })
+            }
+          >
+            含图
+          </button>
+          <button
+            type="button"
+            className={styles['header-action']}
+            disabled={backupBusy}
+            onClick={() => importInputRef.current?.click()}
+          >
+            导入
+          </button>
+          <div className={styles['header-right']} onClick={() => navigate('/add')}>
+            <SvgIcon iconName="icon-jiahao-copy" />
+          </div>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            onChange={handleImportFile}
+          />
         </div>
       </div>
 
@@ -343,7 +442,7 @@ export default function Outfit() {
           {selectedItem ? (
             <>
               <div className={styles['detail-image']}>
-                <img src={selectedItem.image || white} alt={selectedItem.name} />
+                <img src={selectedItem.image || white} alt={selectedItem.name} loading="lazy" />
               </div>
               <div className={styles['detail-info']}>
                 <h3 className={styles['detail-title']}>{selectedItem.name}</h3>

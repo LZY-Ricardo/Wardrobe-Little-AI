@@ -27,6 +27,11 @@ const tabs = [
         icon: <Icon type='iconfont icon-dengpao' />
     },
     {
+        key: '/suits',
+        title: '搭配合集',
+        icon: <Icon type='iconfont icon-dengpao' />
+    },
+    {
         key: '/person',
         title: '我的',
         icon: <Icon type='iconfont icon-icon-myself-1' />
