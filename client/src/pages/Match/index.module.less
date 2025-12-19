@@ -44,7 +44,7 @@
     }
 
     .match-content {
-        padding: 12px 14px 14px; /* 收紧顶部留白 */
+        padding: 8px 14px 14px; /* 收紧顶部留白 */
         /* 涓娿€佸乏鍙炽€佷笅鍐呰竟璺?*/
         background-color: var(--bg-body);
         height: calc(100vh - 120px);
@@ -547,6 +547,12 @@
 
 [data-theme='dark'] {
     .match {
+        .match-header {
+            background: var(--bg-surface);
+            box-shadow: none;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
         .match-content {
             .match-content-title {
                 background: var(--chip-bg);
@@ -704,4 +710,34 @@
             }
         }
     }
+}
+/* Dark mode overrides for Match hub top tab */
+[data-theme='dark'] {
+  .match {
+    .match-header {
+      background: var(--bg-body);
+      box-shadow: none;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .match-content-title {
+      background: var(--chip-bg);
+      border-color: var(--chip-border);
+      box-shadow: none;
+    }
+
+    .match-content-title-indicator {
+      background: var(--accent-primary);
+      box-shadow: none;
+    }
+
+    .match-content-title-left,
+    .match-content-title-right {
+      color: var(--text-secondary);
+    }
+
+    .active {
+      color: #fff;
+    }
+  }
 }

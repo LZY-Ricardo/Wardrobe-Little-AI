@@ -219,3 +219,69 @@
   box-shadow: 0 10px 20px rgba(47, 84, 235, 0.25);
   z-index: 7000;
 }
+
+[data-theme='dark'] {
+  .suits {
+    background: var(--bg-body);
+  }
+
+  .card {
+    background: var(--bg-surface);
+    box-shadow: none;
+  }
+
+  .cardCover {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
+    img {
+      background: var(--bg-surface);
+    }
+  }
+
+  .cardTitleText,
+  .cardSubtitle {
+    color: var(--text-primary);
+  }
+
+  .cardMetaRow,
+  .metaCount,
+  .metaTime {
+    color: var(--text-secondary);
+  }
+
+  .cardDelete {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ff8080;
+  }
+
+  .thumb {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+  }
+
+  .cardPlaceholder {
+    color: var(--text-secondary);
+  }
+
+  .header {
+    color: var(--text-primary);
+  }
+
+  .headerAction {
+    background: linear-gradient(135deg, rgba(47, 84, 235, 0.75), rgba(114, 98, 253, 0.75));
+    color: #fff;
+  }
+
+  .metaScene {
+    background: rgba(47, 84, 235, 0.2);
+    color: #dbe4ff;
+  }
+
+  .metaCount,
+  .metaTime {
+    color: var(--text-secondary);
+  }
+
+  .cardMetaRow {
+    color: var(--text-secondary);
+  }
+}

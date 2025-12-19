@@ -10,6 +10,7 @@
   z-index: 20;
   background: #f7f8fa;
   padding: 10px 14px;
+  padding-bottom: 0;
 }
 
 .tabs {
@@ -40,5 +41,25 @@
 .body {
   flex: 1;
   min-height: 0;
+}
+
+[data-theme='dark'] {
+  .header {
+    background: var(--bg-surface);
+  }
+
+  .tabs {
+    background: var(--chip-bg);
+    box-shadow: none;
+  }
+
+  .tab {
+    color: var(--text-secondary);
+  }
+
+  .tabActive {
+    background: linear-gradient(135deg, rgba(47, 84, 235, 0.28), rgba(114, 98, 253, 0.28));
+    color: #e5e9ff;
+  }
 }
 

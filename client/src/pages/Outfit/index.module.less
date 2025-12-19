@@ -1205,3 +1205,39 @@
         border-top-color: var(--border-subtle);
     }
 }
+@media (prefers-reduced-motion: reduce) {
+  .header-action {
+    transition: none;
+  }
+}
+
+/* ==== Dark mode overrides for outfit header ==== */
+[data-theme='dark'] {
+  .outfit {
+    .header {
+      background: var(--bg-surface);
+      box-shadow: none;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .header-left {
+      color: var(--text-primary);
+    }
+
+    .search-box input {
+      background: var(--bg-body);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .header-action {
+      background: var(--bg-body);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+    }
+
+    .header-action:hover {
+      background: var(--bg-body);
+    }
+  }
+}
