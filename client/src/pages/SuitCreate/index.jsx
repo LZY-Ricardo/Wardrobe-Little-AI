@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
+import { buildCompositeCover } from '@/utils/compositeCover'
 import { useUiStore } from '@/store'
 import styles from './index.module.less'
 
@@ -65,6 +66,7 @@ const SuitCreate = () => {
       return
     }
 
+    const cover = await buildCompositeCover(items.filter((item) => selected.includes(item.cloth_id)))
     const autoName = buildAutoSuitName(scene)
     const payload = {
       name: name.trim() || autoName,
@@ -72,6 +74,7 @@ const SuitCreate = () => {
       description: description.trim(),
       items: clothIds,
       source: 'manual',
+      cover,
     }
 
     setSaving(true)

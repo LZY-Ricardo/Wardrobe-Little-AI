@@ -30,12 +30,15 @@
         height: 50px;
         display: flex;
         justify-content: space-between;
+        align-items: center;
         padding: 14px;
         background: #ffffff;
         box-shadow: 0 1px 2px 0px rgba(0, 0, 0, 0.05);
         box-sizing: border-box;
         position: relative;
         z-index: 10;
+        overflow: hidden;
+        transition: padding 0.2s ease;
 
         .header-left {
             font-weight: 500;
@@ -44,6 +47,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            transition: opacity 0.2s ease;
         }
 
 
@@ -54,24 +58,43 @@
             position: relative;
             display: flex;
             align-items: center;
+            height: 32px;
+            transition: margin 0.2s ease, flex 0.2s ease;
+            z-index: 1;
+
+            &:focus-within {
+                margin: 0;
+                flex: 1 1 100%;
+                position: absolute;
+                left: 8px;
+                right: 8px;
+                top: 50%;
+                height: 32px;
+                transform: translateY(-50%);
+                z-index: 20;
+            }
 
             .search-input {
                 width: 100%;
                 height: 32px;
                 padding: 0 18px;
-                border: none;
+                border: 1px solid transparent;
                 border-radius: 999px;
                 font-size: 15px;
                 font-weight: 500;
                 outline: none;
                 background: rgba(15, 23, 42, 0.04);
                 box-shadow: none;
-                transition: background-color 0.2s ease, outline-color 0.2s ease;
+                transition: background-color 0.2s ease, outline-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
                 box-sizing: border-box;
+                position: relative;
+                z-index: 1;
 
                 &:focus {
-                    background: rgba(15, 23, 42, 0.06);
-                    outline: 2px solid var(--outfit-accent-border);
+                    background: #f8faff;
+                    border-color: rgba(22, 119, 255, 0.28);
+                    outline: none;
+                    box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.22);
                 }
 
                 &::placeholder {
@@ -93,6 +116,29 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            min-width: 0;
+            transition: width 0.2s ease, opacity 0.2s ease, gap 0.2s ease, padding 0.2s ease;
+        }
+
+        .search-box:focus-within ~ .header-actions {
+            flex: 0 0 0;
+            width: 0;
+            opacity: 0;
+            padding: 0;
+            gap: 0;
+            min-width: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        &:focus-within {
+            padding-left: 8px;
+            padding-right: 8px;
+        }
+
+        &:focus-within .header-left {
+            opacity: 0;
+            pointer-events: none;
         }
 
         .header-action {

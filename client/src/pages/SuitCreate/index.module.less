@@ -1,7 +1,7 @@
 ﻿.create {
   min-height: 100vh;
   background: #f7f8fa;
-  padding: 16px 14px 100px;
+  padding: 16px 14px 80px; /* 收紧底部留白，留出 footer 吸底 */
 }
 
 .header {
@@ -147,6 +147,7 @@
 
 .items {
   min-height: 200px;
+  padding-bottom: 40px; /* 留少量空间，避免内容被吸底遮挡 */
 }
 
 .hint {
@@ -257,8 +258,8 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(var(--bottom-nav-height, 50px) + 6px);
-  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  bottom: 0;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(6px);
   box-shadow: 0 -6px 14px rgba(0, 0, 0, 0.04);

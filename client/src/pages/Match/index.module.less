@@ -28,6 +28,8 @@
         background: var(--bg-surface);
         box-shadow: var(--shadow-soft);
         transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        margin-bottom: 0; /* 去掉底部空白 */
+        padding-bottom: 0; /* 去掉底部空白 */
 
         .match-header-title {
             font-weight: 500;
@@ -42,7 +44,7 @@
     }
 
     .match-content {
-        padding: 17px 14px 16px;
+        padding: 12px 14px 14px; /* 收紧顶部留白 */
         /* 涓娿€佸乏鍙炽€佷笅鍐呰竟璺?*/
         background-color: var(--bg-body);
         height: calc(100vh - 120px);
@@ -118,7 +120,7 @@
         .match-content-material {
             width: 100%;
             position: relative;
-            margin-top: 16px;
+            margin-top: 10px; /* 收紧与顶部标签的间距 */
             padding: 14px 12px;
             background: #ffffff;
             border: 1px solid rgba(0, 0, 0, 0.04);
