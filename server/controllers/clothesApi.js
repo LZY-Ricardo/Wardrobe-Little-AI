@@ -10,7 +10,7 @@ const uploadUrl = 'https://api.coze.cn/v1/files/upload';
 const workflowUrl = 'https://api.coze.cn/v1/workflow/run';
 const workflow_id = process.env.COZE_WORKFLOW_ID; // 从环境变量获取
 const workflow2_id = process.env.COZE_WORKFLOW2_ID; // 从环境变量获取
-const COZE_TIMEOUT_MS = Number(process.env.COZE_TIMEOUT_MS) || 15000
+const COZE_TIMEOUT_MS = Number(process.env.COZE_TIMEOUT_MS) || 60000
 
 const cozeBreaker = createCircuitBreaker({
     name: 'coze',
