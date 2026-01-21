@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
+import { getErrorMessage } from '@/utils/errorMessage'
 
 const VALID_TYPES = REQUIRED_CLOTHES_TYPES
 const MIN_FILE_SIZE = 5 * 1024
@@ -232,7 +233,8 @@ export default function Add() {
         Toast.show({ icon: 'fail', content: '已取消上传', duration: 1200 })
       } else {
         console.error('上传衣物失败:', error)
-        Toast.show({ icon: 'fail', content: '上传失败，请重试', duration: 1500 })
+        const message = getErrorMessage(error, '上传失败，请重试')
+        Toast.show({ icon: 'fail', content: message, duration: 1500 })
       }
     } finally {
       setUploading(false)
