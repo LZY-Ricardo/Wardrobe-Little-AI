@@ -5,8 +5,9 @@ import { Button, Dialog, Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
+import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
 
-const VALID_TYPES = ['上衣', '下衣', '鞋子', '配饰']
+const VALID_TYPES = REQUIRED_CLOTHES_TYPES
 const MIN_FILE_SIZE = 5 * 1024
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const MAX_STORE_SIZE = 1 * 1024 * 1024
@@ -111,7 +112,8 @@ export default function Add() {
       }
 
       const data = JSON.parse(res.data)
-      typeRef.current.value = data.type || ''
+      const normalizedType = normalizeClothesTypeInput(data.type || '')
+      typeRef.current.value = normalizedType.value
       colorRef.current.value = data.color || ''
       styleRef.current.value = data.style || ''
       seasonRef.current.value = data.season || ''
@@ -138,6 +140,22 @@ export default function Add() {
     }
   }
 
+  const applyTypeNormalization = (value, notify = false) => {
+    const normalized = normalizeClothesTypeInput(value)
+    if (normalized.value && normalized.value !== value) {
+      typeRef.current.value = normalized.value
+      if (notify && normalized.added) {
+        Toast.show({ icon: 'success', content: `已自动补充类型：${normalized.added}`, duration: 1200 })
+      }
+    }
+    return normalized.value || value
+  }
+
+  const handleTypeBlur = () => {
+    if (!typeRef.current) return
+    applyTypeNormalization(typeRef.current.value, true)
+  }
+
   const validateForm = () => {
     if (!nameRef.current.value) {
       Toast.show({ icon: 'fail', content: '请输入衣物名称', duration: 1200 })
@@ -147,6 +165,7 @@ export default function Add() {
       Toast.show({ icon: 'fail', content: '请输入衣物类型', duration: 1200 })
       return false
     }
+    applyTypeNormalization(typeRef.current.value, true)
     const hasValidType = VALID_TYPES.some((type) => typeRef.current.value.includes(type))
     if (!hasValidType) {
       Toast.show({ icon: 'fail', content: '衣物类型需包含：上衣/下衣/鞋子/配饰', duration: 1800 })
@@ -304,7 +323,13 @@ export default function Add() {
         <div className={styles.detail}>
           <div className={styles.detailType}>
             <label htmlFor="type">衣物类型</label>
-            <input ref={typeRef} type="text" id="type" placeholder="如：上衣/下衣/鞋子/配饰" />
+            <input
+              ref={typeRef}
+              type="text"
+              id="type"
+              placeholder="如：上衣/下衣/鞋子/配饰"
+              onBlur={handleTypeBlur}
+            />
           </div>
           <div className={styles.detailColor}>
             <label htmlFor="color">衣物颜色</label>

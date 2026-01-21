@@ -22,7 +22,7 @@ const {
     getTopClothesByConfig,
     getBotClothesByConfig,
 } = require('../controllers/clothes')
-const { calcBase64Size, ensureLen, clampLen, isProbablyBase64Image } = require('../utils/validate')
+const { calcBase64Size, ensureLen, clampLen, isProbablyBase64Image, normalizeClothesType, hasRequiredClothesType } = require('../utils/validate')
 
 router.prefix('/clothes')
 
@@ -57,6 +57,12 @@ router.post('/uploadCloth', verify(), async (ctx) => {
     try {
         safeName = ensureLen(name, '衣物名称')
         safeType = ensureLen(type, '衣物类型')
+        safeType = normalizeClothesType(safeType).value
+        if (!hasRequiredClothesType(safeType)) {
+            ctx.status = 400
+            ctx.body = { code: 0, msg: '衣物类型需包含：上衣/下衣/鞋子/配饰' }
+            return
+        }
         safeColor = ensureLen(color, '衣物颜色')
         safeStyle = ensureLen(style, '衣物风格')
         safeSeason = ensureLen(season, '适宜季节')
@@ -311,7 +317,14 @@ router.put('/:id', verify(), async (ctx) => {
 
     try {
         if (Object.prototype.hasOwnProperty.call(patch, 'name')) patch.name = ensureLen(patch.name, '衣物名称')
-        if (Object.prototype.hasOwnProperty.call(patch, 'type')) patch.type = ensureLen(patch.type, '衣物类型')
+        if (Object.prototype.hasOwnProperty.call(patch, 'type')) {
+            patch.type = normalizeClothesType(ensureLen(patch.type, '衣物类型')).value
+            if (!hasRequiredClothesType(patch.type)) {
+                ctx.status = 400
+                ctx.body = { code: 0, msg: '衣物类型需包含：上衣/下衣/鞋子/配饰' }
+                return
+            }
+        }
         if (Object.prototype.hasOwnProperty.call(patch, 'color')) patch.color = ensureLen(patch.color, '衣物颜色')
         if (Object.prototype.hasOwnProperty.call(patch, 'style')) patch.style = ensureLen(patch.style, '衣物风格')
         if (Object.prototype.hasOwnProperty.call(patch, 'season')) patch.season = ensureLen(patch.season, '适宜季节')
