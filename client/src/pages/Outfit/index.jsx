@@ -8,7 +8,7 @@ import white from '@/assets/white.jpg'
 import styles from './index.module.less'
 import axios from '@/api'
 import useDebouncedValue from '@/utils/useDebouncedValue'
-import { useClosetStore } from '@/store'
+import { useClosetStore, useMatchStore } from '@/store'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 
 const FILTER_OPTIONS = {
@@ -48,6 +48,7 @@ export default function Outfit() {
     setError,
     reset,
   } = useClosetStore()
+  const markMatchStale = useMatchStore((s) => s.markStale)
 
   const loadClothes = useCallback(async () => {
     setStatus('loading')
@@ -150,6 +151,7 @@ export default function Outfit() {
       await axios.post('/clothes/import', { items })
       Toast.show({ content: '导入完成', duration: 1200 })
       await loadClothes()
+      markMatchStale()
     } catch (err) {
       console.error('导入失败', err)
       Toast.show({ content: '导入失败，请检查文件内容', duration: 1800 })
@@ -167,6 +169,7 @@ export default function Outfit() {
       setVisible(false)
       const nextItems = items.filter((item) => item.cloth_id !== selectedItem.cloth_id)
       setItems(nextItems)
+      markMatchStale()
     } catch (err) {
       console.error('删除衣物失败', err)
       Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })

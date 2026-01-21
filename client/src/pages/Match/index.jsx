@@ -5,11 +5,12 @@ import { useNavigate } from 'react-router-dom'
 
 import axios from '@/api'
 import test from '@/assets/test.jpg'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useMatchStore } from '@/store'
 
 import styles from './index.module.less'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
+const MATCH_CACHE_TTL = 5 * 60 * 1000
 
 const safeParseUserInfo = () => {
   const raw = localStorage.getItem('userInfo')
@@ -31,12 +32,14 @@ export default function Match({ embedded = false }) {
   const [showPreview, setShowPreview] = useState(false) // 是否展示预览图
   const [topClothes, setTopClothes] = useState(null) // 上衣
   const [bottomClothes, setBottomClothes] = useState(null) // 下衣
-  const [topClothesData, setTopClothesData] = useState([]) // 上衣数据
-  const [bottomClothesData, setBottomClothesData] = useState([]) // 下衣数据
+  const { topItems, bottomItems, fetchedAt, ownerId, setClothes, clear } = useMatchStore()
+  const topClothesData = topItems
+  const bottomClothesData = bottomItems
   const [previewImageUrl, setPreviewImageUrl] = useState('') // 预览图URL
   const [userInfo, setUserInfo] = useState(() => authUserInfo || safeParseUserInfo())
   const [userLoading, setUserLoading] = useState(false)
   const [loading, setLoading] = useState(false) // 加载中
+  const currentUserId = userInfo?.id || authUserInfo?.id || null
   const sex = userInfo?.sex || ''
   const characterModelRaw = userInfo?.characterModel || ''
   const characterModel =
@@ -45,6 +48,12 @@ export default function Match({ embedded = false }) {
       : characterModelRaw
   const hasInstantLook = Boolean(topClothes?.image) && Boolean(bottomClothes?.image)
   const materialScrollRef = useRef(null)
+  const cacheForUser =
+    ownerId && currentUserId && String(ownerId) === String(currentUserId)
+  const hasCache =
+    cacheForUser && (topItems.length > 0 || bottomItems.length > 0 || fetchedAt > 0)
+  const cacheFresh =
+    hasCache && fetchedAt > 0 && Date.now() - fetchedAt < MATCH_CACHE_TTL
 
   const clearPreview = () => {
     setShowPreview(false)
@@ -119,6 +128,13 @@ export default function Match({ embedded = false }) {
     }
   }, [authUserInfo])
 
+  useEffect(() => {
+    if (!ownerId || !currentUserId) return
+    if (String(ownerId) !== String(currentUserId)) {
+      clear()
+    }
+  }, [ownerId, currentUserId, clear])
+
 
   // 获取衣服数据
   const getClothesData = useCallback(async () => {
@@ -127,13 +143,12 @@ export default function Match({ embedded = false }) {
         axios.get('/clothes/TopClothes'),
         axios.get('/clothes/BotClothes'),
       ])
-      setTopClothesData(resTop?.data || [])
-      setBottomClothesData(resBot?.data || [])
+      setClothes(resTop?.data || [], resBot?.data || [], currentUserId)
     } catch (err) {
       console.error('获取衣物失败:', err)
       Toast.show({ content: '获取衣物失败，请稍后重试', duration: 1200 })
     }
-  }, [])
+  }, [setClothes, currentUserId])
 
   // 生成预览图
   const handleGenerate = async () => {
@@ -222,8 +237,10 @@ export default function Match({ embedded = false }) {
 
 
   useEffect(() => {
+    if (!currentUserId) return
+    if (cacheFresh) return
     void getClothesData()
-  }, [getClothesData])
+  }, [cacheFresh, getClothesData, currentUserId])
 
 
   return (

@@ -124,3 +124,19 @@ export const useClosetStore = create(
     }
   )
 )
+
+export const useMatchStore = create((set) => ({
+  topItems: [],
+  bottomItems: [],
+  fetchedAt: 0,
+  ownerId: null,
+  setClothes: (topItems = [], bottomItems = [], ownerId = null) =>
+    set({
+      topItems,
+      bottomItems,
+      fetchedAt: Date.now(),
+      ownerId,
+    }),
+  markStale: () => set({ fetchedAt: 0 }),
+  clear: () => set({ topItems: [], bottomItems: [], fetchedAt: 0, ownerId: null }),
+}))
