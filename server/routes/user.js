@@ -12,8 +12,8 @@ const {
     updatePassword,
 } = require('../controllers/user')
 
-const fs = require('fs')
-const path = require('path')
+// const fs = require('fs')  // 不再需要文件系统操作
+// const path = require('path')  // 不再需要路径操作
 
 const { sign, verify, refreshToken } = require('../utils/jwt')
 const { escape } = require('../utils/security')
@@ -212,46 +212,28 @@ router.post('/uploadPhoto', verify(), async (ctx) => {
       return
     }
 
-    const modelDir = path.join(__dirname, '..', 'public', 'uploads', 'models', String(id))
-    await fs.promises.mkdir(modelDir, { recursive: true })
-
-    const ext = fileType === 'jpeg' ? 'jpg' : fileType
-    const fileName = `model-${Date.now()}.${ext}`
-    const filePath = path.join(modelDir, fileName)
-    await fs.promises.writeFile(filePath, buffer)
-
-    const modelUrl = `/uploads/models/${id}/${fileName}`
+    // 直接存储 Base64 数据到数据库，不再保存文件
+    const modelBase64 = `data:image/${fileType};base64,${base64Data}`
 
     let result = false
     try {
-      result = await uploadPhoto(modelUrl, id)
+      result = await uploadPhoto(modelBase64, id)
     } catch (error) {
-      await fs.promises.unlink(filePath).catch(() => {})
+      // 不再需要删除文件（因为没有创建文件）
       throw error
     }
 
     if (result) {
-      if (
-        prevModelUrl &&
-        prevModelUrl !== modelUrl &&
-        typeof prevModelUrl === 'string' &&
-        prevModelUrl.startsWith(`/uploads/models/${id}/`)
-      ) {
-        const publicRoot = path.resolve(__dirname, '..', 'public')
-        const prevFilePath = path.resolve(publicRoot, prevModelUrl.replace(/^\//, ''))
-        if (prevFilePath.startsWith(publicRoot + path.sep)) {
-          await fs.promises.unlink(prevFilePath).catch(() => {})
-        }
-      }
+      // 不再需要删除旧文件（因为数据在数据库中）
       ctx.body = {
         code: 1,
         msg: '\u4eba\u7269\u6a21\u7279\u4e0a\u4f20\u6210\u529f',
-        data: { characterModel: modelUrl },
+        data: { characterModel: modelBase64 },
       }
       return
     }
 
-    await fs.promises.unlink(filePath).catch(() => {})
+    // 如果上传失败，不需要清理文件
     ctx.status = 500
     ctx.body = {
       code: 0,
@@ -298,14 +280,7 @@ router.delete('/characterModel', verify(), async (ctx) => {
       return
     }
 
-    if (typeof prevModelUrl === 'string' && prevModelUrl.startsWith(`/uploads/models/${id}/`)) {
-      const publicRoot = path.resolve(__dirname, '..', 'public')
-      const prevFilePath = path.resolve(publicRoot, prevModelUrl.replace(/^\//, ''))
-      if (prevFilePath.startsWith(publicRoot + path.sep)) {
-        await fs.promises.unlink(prevFilePath).catch(() => {})
-      }
-    }
-
+    // 不再需要删除文件（因为数据存储在数据库中）
     const result = await uploadPhoto(null, id)
     if (result) {
       ctx.body = {
@@ -408,45 +383,28 @@ router.post('/uploadAvatar', verify(), async (ctx) => {
       return
     }
 
-    const avatarDir = path.join(__dirname, '..', 'public', 'uploads', 'avatars', String(id))
-    await fs.promises.mkdir(avatarDir, { recursive: true })
-
-    const ext = fileType === 'jpeg' ? 'jpg' : fileType
-    const fileName = `avatar-${Date.now()}.${ext}`
-    const filePath = path.join(avatarDir, fileName)
-    await fs.promises.writeFile(filePath, buffer)
-
-    const avatarUrl = `/uploads/avatars/${id}/${fileName}`
+    // 直接存储 Base64 数据到数据库，不再保存文件
+    const avatarBase64 = `data:image/${fileType};base64,${base64Data}`
 
     let result = false
     try {
-      result = await uploadAvatar(avatarUrl, id)
+      result = await uploadAvatar(avatarBase64, id)
     } catch (error) {
-      await fs.promises.unlink(filePath).catch(() => {})
+      // 不再需要删除文件（因为没有创建文件）
       throw error
     }
 
     if (result) {
-      if (
-        prevAvatarUrl &&
-        prevAvatarUrl !== avatarUrl &&
-        prevAvatarUrl.startsWith(`/uploads/avatars/${id}/`)
-      ) {
-        const publicRoot = path.resolve(__dirname, '..', 'public')
-        const prevFilePath = path.resolve(publicRoot, prevAvatarUrl.replace(/^\//, ''))
-        if (prevFilePath.startsWith(publicRoot + path.sep)) {
-          await fs.promises.unlink(prevFilePath).catch(() => {})
-        }
-      }
+      // 不再需要删除旧文件（因为数据在数据库中）
       ctx.body = {
         code: 1,
         msg: '\u5934\u50cf\u4e0a\u4f20\u6210\u529f',
-        data: { avatar: avatarUrl },
+        data: { avatar: avatarBase64 },
       }
       return
     }
 
-    await fs.promises.unlink(filePath).catch(() => {})
+    // 如果上传失败，不需要清理文件
     ctx.status = 500
     ctx.body = {
       code: 0,

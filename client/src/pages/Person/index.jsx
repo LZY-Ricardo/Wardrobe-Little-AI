@@ -183,7 +183,18 @@ export default function Person() {
       const res = await axios.get('/user/getUserInfo')
       const data = res?.data || {}
       setUserInfo(data)
-      setAvatar(data?.avatar ? `${API_BASE_URL}${data.avatar}` : '')
+      // 判断是 Base64 格式还是 URL 路径
+      if (data?.avatar) {
+        if (typeof data.avatar === 'string' && data.avatar.startsWith('data:image/')) {
+          // Base64 格式，直接使用
+          setAvatar(data.avatar)
+        } else {
+          // URL 路径，拼接 API_BASE_URL
+          setAvatar(`${API_BASE_URL}${data.avatar}`)
+        }
+      } else {
+        setAvatar('')
+      }
       setSex(data.sex || '') // 设置性别状态
       const characterModel = data?.characterModel || ''
       if (characterModel) {
@@ -293,7 +304,14 @@ export default function Person() {
         })
         const avatarPath = res?.data?.avatar
         if (avatarPath) {
-          setAvatar(`${API_BASE_URL}${avatarPath}?t=${Date.now()}`)
+          // 判断是 Base64 格式还是 URL 路径
+          if (typeof avatarPath === 'string' && avatarPath.startsWith('data:image/')) {
+            // Base64 格式，直接使用
+            setAvatar(avatarPath)
+          } else {
+            // URL 路径，拼接 API_BASE_URL
+            setAvatar(`${API_BASE_URL}${avatarPath}?t=${Date.now()}`)
+          }
         } else if (typeof base64Data === 'string') {
           setAvatar(base64Data)
         }

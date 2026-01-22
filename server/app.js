@@ -1,9 +1,6 @@
 // 引入配置文件（会加载 .env）
 const config = require('./config')
 
-const fs = require('fs')
-const path = require('path')
-
 const Koa = require('koa')
 const app = new Koa()
 const errorHandler = require('./middleware/errorHandler')
@@ -31,29 +28,7 @@ app.use(bodyParser({
   enableTypes: ['json', 'form', 'text']
 })); // 辅助 koa 解析请求体中的数据
 
-// 注册路由
-const uploadsRoot = path.resolve(__dirname, 'public', 'uploads')
-app.use(async (ctx, next) => {
-  if (ctx.method !== 'GET' && ctx.method !== 'HEAD') return next()
-  if (!ctx.path.startsWith('/uploads/')) return next()
-
-  const relativePath = ctx.path.slice('/uploads/'.length)
-  const filePath = path.resolve(uploadsRoot, relativePath)
-  if (!filePath.startsWith(uploadsRoot + path.sep)) {
-    ctx.status = 403
-    return
-  }
-
-  try {
-    const stat = await fs.promises.stat(filePath)
-    if (!stat.isFile()) return next()
-  } catch (error) {
-    return next()
-  }
-
-  ctx.type = path.extname(filePath)
-  ctx.body = fs.createReadStream(filePath)
-})
+// 图片数据现在直接从数据库返回，不再需要静态文件服务
 
 app.use(userRouter.routes());
 app.use(userRouter.allowedMethods());

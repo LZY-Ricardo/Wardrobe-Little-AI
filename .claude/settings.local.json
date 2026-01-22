@@ -5,7 +5,16 @@
       "Skill(cn-commit:*)",
       "Bash(git rev-parse:*)",
       "Bash(python:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__web-reader__webReader",
+      "Bash(mysql:*)",
+      "mcp__zeabur__list-projects",
+      "mcp__zeabur__list-services",
+      "mcp__zeabur__get-service",
+      "mcp__zeabur__get-service-variables",
+      "mcp__zeabur__execute-command",
+      "Bash(git reset:*)",
+      "Bash(git add:*)"
     ]
   }
 }

@@ -7,8 +7,8 @@ CREATE TABLE IF NOT EXISTS user (
   password VARCHAR(255) NOT NULL,
   name VARCHAR(64) DEFAULT NULL,
   sex VARCHAR(16) DEFAULT NULL,
-  avatar VARCHAR(255) DEFAULT NULL,
-  characterModel TEXT DEFAULT NULL,
+  avatar MEDIUMTEXT DEFAULT NULL COMMENT '用户头像（Base64 格式）',
+  characterModel MEDIUMTEXT DEFAULT NULL COMMENT '用户模特照片（Base64 格式）',
   create_time BIGINT NOT NULL,
   update_time BIGINT NOT NULL,
   UNIQUE KEY uniq_username (username)
