@@ -7,6 +7,7 @@ import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
+import { useSuitStore } from '@/store'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
   const img = new Image()
@@ -175,6 +176,8 @@ const isFavorited = (value) => value === 1 || value === true || value === '1' ||
 
 export default function Recommend({ embedded = false }) {
   const location = useLocation()
+  const fetchAllSuits = useSuitStore((s) => s.fetchAllSuits)
+  const invalidateSuitCache = useSuitStore((s) => s.invalidateCache)
   const lastPresetKeyRef = React.useRef('')
   const presetScene =
     typeof location?.state?.presetScene === 'string' ? location.state.presetScene.trim() : ''
@@ -188,20 +191,20 @@ export default function Recommend({ embedded = false }) {
   const [suitSaving, setSuitSaving] = useState({})
   const [savedSuitSignatures, setSavedSuitSignatures] = useState(new Set())
 
-  const fetchSavedSuits = React.useCallback(async () => {
+  const fetchSavedSuits = React.useCallback(async (forceRefresh = false) => {
     try {
-      const res = await axios.get('/suits')
-      const list = Array.isArray(res?.data) ? res.data : []
+      const list = await fetchAllSuits(forceRefresh)
+      const items = Array.isArray(list) ? list : []
       const sigs = new Set(
-        list
+        items
           .map((suit) => toSuitSignature(extractClothIds(suit.items || [])))
           .filter(Boolean)
       )
       setSavedSuitSignatures(sigs)
     } catch (err) {
-      console.warn('加载套装库失败', err)
+      console.warn('Failed to load suits', err)
     }
-  }, [])
+  }, [fetchAllSuits])
 
   React.useEffect(() => {
     void fetchSavedSuits()
@@ -336,6 +339,7 @@ export default function Recommend({ embedded = false }) {
         return next
       })
       Toast.show({ content: '已加入套装库', duration: 1000 })
+      invalidateSuitCache()
     } catch (err) {
       Toast.show({ content: err?.msg || '收藏失败，请重试', duration: 1200 })
     } finally {

@@ -107,7 +107,6 @@ const PREF_PICKER_META = {
 export default function Person() {
   const navigate = useNavigate()
   const clearTokens = useAuthStore((s) => s.clearTokens)
-  const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
   const setAiEntranceHidden = useUiStore((s) => s.setAiEntranceHidden)
   const avatarInputRef = useRef(null)
   const fileInputRef = useRef(null) // 图片上传input
@@ -180,31 +179,45 @@ export default function Person() {
     setUserError('')
     setUserLoading(true)
     try {
+      // Person page needs full user data (including characterModel).
       const authStore = useAuthStore.getState()
-      const userInfo = await authStore.fetchUserInfo(forceRefresh)
+      const data = (await authStore.fetchUserInfo(forceRefresh)) || {}
 
-      if (!userInfo) {
-        throw new Error('获取用户信息失败')
-      }
-
-      setUserInfo(userInfo)
+      setUserInfo(data)
       // 判断是 Base64 格式还是 URL 路径
-      if (userInfo?.avatar) {
-        if (typeof userInfo.avatar === 'string' && userInfo.avatar.startsWith('data:image/')) {
+      if (data?.avatar) {
+        if (typeof data.avatar === 'string' && data.avatar.startsWith('data:image/')) {
           // Base64 格式，直接使用
-          setAvatar(userInfo.avatar)
+          setAvatar(data.avatar)
         } else {
           // URL 路径，拼接 API_BASE_URL
-          setAvatar(`${API_BASE_URL}${userInfo.avatar}`)
+          setAvatar(`${API_BASE_URL}${data.avatar}`)
         }
       } else {
         setAvatar('')
       }
-      setSex(userInfo.sex || '') // 设置性别状态
-      // 注意：userInfo 中没有 characterModel 字段，需要从原始数据中获取
-      // 这里暂时保持原有逻辑
-      setAuthUserInfo(userInfo)
-      const value = JSON.stringify(userInfo)
+      setSex(data.sex || '') // 设置性别状态
+      const characterModel = data?.characterModel || ''
+      if (characterModel) {
+        if (typeof characterModel === 'string' && characterModel.startsWith('/')) {
+          setUploadedImage(`${API_BASE_URL}${characterModel}?t=${Date.now()}`)
+        } else {
+          setUploadedImage(characterModel)
+        }
+      } else {
+        setUploadedImage(null)
+      }
+
+      const persistedUserInfo = {
+        username: data.username,
+        name: data.name,
+        id: data.id,
+        createTime: data.createTime || data.create_time,
+        sex: data.sex,
+        avatar: data.avatar,
+        hasCharacterModel: Boolean(data.characterModel),
+      }
+      const value = JSON.stringify(persistedUserInfo)
       try {
         localStorage.setItem('userInfo', value)
       } catch {
@@ -221,7 +234,7 @@ export default function Person() {
     } finally {
       setUserLoading(false)
     }
-  }, [setAuthUserInfo])
+  }, [])
 
   const fetchAssetStats = useCallback(async (forceRefresh = false) => {
     setAssetError('')

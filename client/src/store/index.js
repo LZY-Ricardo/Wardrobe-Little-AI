@@ -1,16 +1,19 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import axios from 'axios'
+import axios from '@/api'
 
 const normalizeUserInfo = (userInfo) => {
   if (!userInfo || typeof userInfo !== 'object') return null
+  const characterModel = userInfo.characterModel || userInfo.character_model || ''
   return {
     id: userInfo.id,
     username: userInfo.username,
+    name: userInfo.name,
     createTime: userInfo.createTime ?? userInfo.create_time,
     sex: userInfo.sex,
     avatar: userInfo.avatar,
-    hasCharacterModel: Boolean(userInfo.hasCharacterModel || userInfo.characterModel),
+    characterModel,
+    hasCharacterModel: Boolean(userInfo.hasCharacterModel || characterModel),
   }
 }
 
@@ -44,12 +47,17 @@ export const useAuthStore = create(
       fetchUserInfo: async (forceRefresh = false) => {
         const state = get()
         const CACHE_TTL = 3 * 60 * 1000 // 3分钟
+        const needsCharacterModel =
+          state.userInfo?.hasCharacterModel && !state.userInfo?.characterModel
+        const needsName = typeof state.userInfo?.name === 'undefined'
 
         // 如果缓存有效且不强制刷新
         if (!forceRefresh &&
             state.userLastFetchedAt > 0 &&
             Date.now() - state.userLastFetchedAt < CACHE_TTL &&
-            state.userInfo) {
+            state.userInfo &&
+            !needsCharacterModel &&
+            !needsName) {
           return state.userInfo
         }
 
@@ -59,40 +67,61 @@ export const useAuthStore = create(
           const userInfo = res?.data || null
           const normalized = normalizeUserInfo(userInfo)
 
-          set({
-            userInfo: normalized,
-            userLastFetchedAt: Date.now(),
-            userFetchStatus: 'success',
-          })
+          // 只有当 normalized 不为 null 时才更新状态
+          if (normalized) {
+            set({
+              userInfo: normalized,
+              userLastFetchedAt: Date.now(),
+              userFetchStatus: 'success',
+            })
 
-          // 同步到 localStorage (保持兼容性)
-          try {
-            localStorage.setItem('userInfo', JSON.stringify(normalized))
-          } catch (e) {
-            console.warn('persist userInfo failed:', e)
+            // 同步到 localStorage (保持兼容性)
+            try {
+              const { characterModel: _characterModel, ...persistedUserInfo } = normalized
+              localStorage.setItem('userInfo', JSON.stringify(persistedUserInfo))
+            } catch (e) {
+              console.warn('persist userInfo failed:', e)
+            }
+
+            return normalized
+          } else {
+            // 如果 normalized 为 null，说明返回的数据无效
+            // 如果有旧缓存，返回旧缓存；否则抛出错误
+            if (state.userInfo) {
+              set({ userFetchStatus: 'success' })
+              return state.userInfo
+            } else {
+              throw new Error('获取用户信息失败')
+            }
           }
-
-          return normalized
         } catch (error) {
           set({
             userFetchStatus: 'error',
             userFetchError: error.message || '获取用户信息失败'
           })
+          // 如果有旧缓存，返回旧缓存而不是抛出错误
+          if (state.userInfo) {
+            return state.userInfo
+          }
           throw error
         }
       },
       invalidateUserCache: () => set({ userLastFetchedAt: 0 }),
-      getCachedUserInfo: () => get().userInfo,
+      getCachedUserInfo: () => get().userInfo
     }),
     {
       name: 'auth-store',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        userInfo: state.userInfo,
-        userLastFetchedAt: state.userLastFetchedAt,
-      }),
+      partialize: (state) => {
+        const userInfo = state.userInfo ? { ...state.userInfo } : null
+        if (userInfo) delete userInfo.characterModel
+        return {
+          accessToken: state.accessToken,
+          refreshToken: state.refreshToken,
+          userInfo,
+          userLastFetchedAt: state.userLastFetchedAt
+        }
+      }
     }
   )
 )
@@ -186,21 +215,27 @@ export const useClosetStore = create(
         try {
           const res = await axios.get('/clothes/all')
           const data = res?.data || []
+          const validData = Array.isArray(data) ? data : []
+
           set({
-            allClothes: data,
-            items: data,
+            allClothes: validData,
+            items: validData,
             lastFetchedAt: Date.now(),
             status: 'success',
-            hasMore: data.length > 12,
+            hasMore: validData.length > 12,
           })
-          return data
+          return validData
         } catch (error) {
           set({ status: 'error', error: error.message || '获取衣物列表失败' })
+          // 如果有旧缓存，返回旧缓存而不是抛出错误
+          if (state.allClothes.length > 0) {
+            return state.allClothes
+          }
           throw error
         }
       },
       invalidateCache: () => set({ lastFetchedAt: 0 }),
-      getCachedClothes: () => get().allClothes,
+      getCachedClothes: () => get().allClothes
     }),
     {
       name: 'closet-store',
@@ -211,6 +246,68 @@ export const useClosetStore = create(
         filters: state.filters,
         page: state.page,
         hasMore: state.hasMore,
+        lastFetchedAt: state.lastFetchedAt
+      })
+    }
+  )
+)
+
+export const useSuitStore = create(
+  persist(
+    (set, get) => ({
+      suits: [],
+      lastFetchedAt: 0,
+      status: 'idle',
+      error: '',
+      setSuits: (next) =>
+        set((state) => {
+          const value = typeof next === 'function' ? next(state.suits) : next
+          const suits = Array.isArray(value) ? value : []
+          return { suits, lastFetchedAt: Date.now() }
+        }),
+      setStatus: (status) => set({ status }),
+      setError: (error) => set({ error }),
+      fetchAllSuits: async (forceRefresh = false) => {
+        const state = get()
+        const CACHE_TTL = 5 * 60 * 1000
+
+        if (
+          !forceRefresh &&
+          state.lastFetchedAt > 0 &&
+          Date.now() - state.lastFetchedAt < CACHE_TTL &&
+          state.suits.length > 0
+        ) {
+          return state.suits
+        }
+
+        set({ status: 'loading', error: '' })
+        try {
+          const res = await axios.get('/suits')
+          const data = res?.data || []
+          const list = Array.isArray(data) ? data : []
+
+          set({
+            suits: list,
+            lastFetchedAt: Date.now(),
+            status: 'success',
+          })
+          return list
+        } catch (error) {
+          set({ status: 'error', error: error.message || '获取套装库失败' })
+          if (state.suits.length > 0) {
+            return state.suits
+          }
+          throw error
+        }
+      },
+      invalidateCache: () => set({ lastFetchedAt: 0 }),
+      getCachedSuits: () => get().suits,
+    }),
+    {
+      name: 'suit-store',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        suits: state.suits,
         lastFetchedAt: state.lastFetchedAt,
       }),
     }

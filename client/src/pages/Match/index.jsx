@@ -91,10 +91,8 @@ export default function Match({ embedded = false }) {
       }
     } catch (error) {
       console.error('获取用户信息失败:', error);
-      Toast.show({
-        content: '获取用户信息失败，请重新登录',
-        duration: 1200,
-      })
+      // 不再显示 Toast，避免频繁提示
+      // 如果是网络错误或 token 失效，会在其他地方处理
     } finally {
       setUserLoading(false)
     }

@@ -56,13 +56,15 @@ export default function Outfit() {
     setError('')
     try {
       const data = await fetchAllClothes(forceRefresh)
-      setItems(data)
+      const validData = Array.isArray(data) ? data : []
+      setItems(validData)
       setStatus('success')
-      setHasMore(data.length > PAGE_SIZE)
+      setHasMore(validData.length > PAGE_SIZE)
     } catch (err) {
       console.error('获取衣物失败', err)
       setStatus('error')
       setError('获取衣物列表失败，请重试')
+      setItems([])
     }
   }, [fetchAllClothes, setError, setHasMore, setItems, setStatus])
 
@@ -72,7 +74,7 @@ export default function Outfit() {
   }, [loadClothes, reset])
 
   const filteredClothes = useMemo(() => {
-    const list = items || []
+    const list = Array.isArray(items) ? items : []
     const byType = filters.type === '全部' ? list : list.filter((item) => item.type?.includes(filters.type))
     const byColor = filters.color === '全部' ? byType : byType.filter((item) => item.color?.includes(filters.color))
     const bySeason = filters.season === '全部' ? byColor : byColor.filter((item) => item.season?.includes(filters.season))

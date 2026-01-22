@@ -1,10 +1,11 @@
-﻿import React, { useEffect, useMemo, useState } from 'react'
+﻿import React, { useCallback, useEffect, useMemo } from 'react'
 import { Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 import { buildAutoSuitName, isGenericSuitName } from '@/utils/suitName'
+import { useSuitStore } from '@/store'
 import styles from './index.module.less'
 
 const formatTime = (ts) => {
@@ -75,28 +76,22 @@ const SuitCard = ({ suit, onDelete }) => {
 
 export default function Suits({ embedded = false }) {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [suits, setSuits] = useState([])
+  const { suits, status, error, fetchAllSuits, setSuits } = useSuitStore()
 
+  const loading = status === 'loading'
   const hasData = useMemo(() => Array.isArray(suits) && suits.length > 0, [suits])
 
-  const fetchSuits = async () => {
-    setLoading(true)
-    setError('')
+  const fetchSuits = useCallback(async (forceRefresh = false) => {
     try {
-      const res = await axios.get('/suits')
-      setSuits(Array.isArray(res?.data) ? res.data : [])
+      await fetchAllSuits(forceRefresh)
     } catch (err) {
-      setError(err?.msg || err?.message || '获取套装库失败')
-    } finally {
-      setLoading(false)
+      console.warn('Failed to load suits', err)
     }
-  }
+  }, [fetchAllSuits])
 
   useEffect(() => {
     void fetchSuits()
-  }, [])
+  }, [fetchSuits])
 
   const handleDelete = (suit) => {
     Dialog.confirm({
