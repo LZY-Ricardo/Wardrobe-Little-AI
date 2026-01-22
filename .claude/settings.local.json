@@ -5,7 +5,9 @@
       "Skill(cn-commit:*)",
       "Bash(git rev-parse:*)",
       "Bash(python:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "mcp__web-reader__webReader",
+      "Bash(mysql:*)"
     ]
   }
 }
