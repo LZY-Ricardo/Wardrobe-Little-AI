@@ -16,14 +16,29 @@ const inferRequiredType = (text) => {
   return ''
 }
 
+const stripOtherRequiredTypes = (text, matched) => {
+  let next = text
+  REQUIRED_TYPES.forEach((type) => {
+    if (type === matched) return
+    next = next.replace(new RegExp(`\\(${type}\\)`, 'g'), '')
+    next = next.replace(new RegExp(`（${type}）`, 'g'), '')
+    next = next.split(type).join('')
+  })
+  return next.replace(/[\\/|、,，-]\\s*$/g, '').trim()
+}
+
 export const normalizeClothesTypeInput = (rawValue) => {
   const text = String(rawValue ?? '').trim()
   if (!text) return { value: '', added: '' }
 
-  const matched = findRequiredType(text) || inferRequiredType(text)
-  if (!matched || text.includes(matched)) return { value: text, added: '' }
+  const matched = inferRequiredType(text) || findRequiredType(text)
+  if (!matched) return { value: text, added: '' }
 
-  return { value: `${text} / ${matched}`, added: matched }
+  const cleaned = stripOtherRequiredTypes(text, matched)
+  const value = cleaned || matched
+  if (value.includes(matched)) return { value, added: '' }
+
+  return { value: `${value} / ${matched}`, added: matched }
 }
 
 export const REQUIRED_CLOTHES_TYPES = REQUIRED_TYPES
