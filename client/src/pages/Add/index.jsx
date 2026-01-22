@@ -14,7 +14,7 @@ const MIN_FILE_SIZE = 5 * 1024
 const MAX_FILE_SIZE = 5 * 1024 * 1024
 const MAX_STORE_SIZE = 1 * 1024 * 1024
 const COMPRESS_CONFIG = { quality: 0.8, maxWidth: 600, maxHeight: 600 }
-const UPLOAD_TIMEOUT = 60000
+const UPLOAD_TIMEOUT = 90000
 
 export default function Add() {
   const navigate = useNavigate()

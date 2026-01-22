@@ -184,7 +184,7 @@ export default function Match({ embedded = false }) {
         headers: {
           'Content-Type': 'multipart/form-data'
         },
-        timeout: 60000,
+        timeout: 90000,
       })
 
       console.log('生成预览图响应:', res.data);
