@@ -5,7 +5,7 @@ import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { buildCompositeCover } from '@/utils/compositeCover'
-import { useUiStore } from '@/store'
+import { useUiStore, useClosetStore } from '@/store'
 import styles from './index.module.less'
 
 const MIN_ITEMS = 2
@@ -29,8 +29,9 @@ const SuitCreate = () => {
   const loadClothes = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await axios.get('/clothes/all')
-      setItems(Array.isArray(res?.data) ? res.data : [])
+      const { fetchAllClothes } = useClosetStore.getState()
+      const data = await fetchAllClothes()
+      setItems(Array.isArray(data) ? data : [])
     } catch (err) {
       Toast.show({ content: err?.msg || '获取衣物失败', duration: 1200 })
     } finally {

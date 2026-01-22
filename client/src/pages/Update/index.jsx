@@ -7,7 +7,7 @@ import axios from '@/api'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
 import { getErrorMessage } from '@/utils/errorMessage'
-import { useMatchStore } from '@/store'
+import { useMatchStore, useClosetStore } from '@/store'
 
 const VALID_TYPES = REQUIRED_CLOTHES_TYPES
 const MIN_FILE_SIZE = 5 * 1024
@@ -240,6 +240,7 @@ export default function Update() {
 
       Toast.show({ icon: 'success', content: '更新成功', duration: 1200 })
       markMatchStale()
+      useClosetStore.getState().invalidateCache()
       setTimeout(() => navigate(-1), 800)
     } catch (error) {
       if (error.name === 'AbortError') {

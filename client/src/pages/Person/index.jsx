@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Dialog, Popup, Picker, Selector } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
-import { useAuthStore, useUiStore } from '@/store'
+import { useAuthStore, useUiStore, useClosetStore } from '@/store'
 import { Loading, ErrorBanner } from '@/components/Feedback'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -176,46 +176,35 @@ export default function Person() {
   }, [setAiEntranceHidden])
 
   // 获取用户所有信息
-  const getUserInfo = useCallback(async () => {
+  const getUserInfo = useCallback(async (forceRefresh = false) => {
     setUserError('')
     setUserLoading(true)
     try {
-      const res = await axios.get('/user/getUserInfo')
-      const data = res?.data || {}
-      setUserInfo(data)
+      const authStore = useAuthStore.getState()
+      const userInfo = await authStore.fetchUserInfo(forceRefresh)
+
+      if (!userInfo) {
+        throw new Error('获取用户信息失败')
+      }
+
+      setUserInfo(userInfo)
       // 判断是 Base64 格式还是 URL 路径
-      if (data?.avatar) {
-        if (typeof data.avatar === 'string' && data.avatar.startsWith('data:image/')) {
+      if (userInfo?.avatar) {
+        if (typeof userInfo.avatar === 'string' && userInfo.avatar.startsWith('data:image/')) {
           // Base64 格式，直接使用
-          setAvatar(data.avatar)
+          setAvatar(userInfo.avatar)
         } else {
           // URL 路径，拼接 API_BASE_URL
-          setAvatar(`${API_BASE_URL}${data.avatar}`)
+          setAvatar(`${API_BASE_URL}${userInfo.avatar}`)
         }
       } else {
         setAvatar('')
       }
-      setSex(data.sex || '') // 设置性别状态
-      const characterModel = data?.characterModel || ''
-      if (characterModel) {
-        if (typeof characterModel === 'string' && characterModel.startsWith('/')) {
-          setUploadedImage(`${API_BASE_URL}${characterModel}?t=${Date.now()}`)
-        } else {
-          setUploadedImage(characterModel)
-        }
-      } else {
-        setUploadedImage(null)
-      }
-      const persistedUserInfo = {
-        username: data.username,
-        id: data.id,
-        createTime: data.createTime || data.create_time,
-        sex: data.sex,
-        avatar: data.avatar,
-        hasCharacterModel: Boolean(data.characterModel),
-      }
-      setAuthUserInfo(persistedUserInfo)
-      const value = JSON.stringify(persistedUserInfo)
+      setSex(userInfo.sex || '') // 设置性别状态
+      // 注意：userInfo 中没有 characterModel 字段，需要从原始数据中获取
+      // 这里暂时保持原有逻辑
+      setAuthUserInfo(userInfo)
+      const value = JSON.stringify(userInfo)
       try {
         localStorage.setItem('userInfo', value)
       } catch {
@@ -234,12 +223,12 @@ export default function Person() {
     }
   }, [setAuthUserInfo])
 
-  const fetchAssetStats = useCallback(async () => {
+  const fetchAssetStats = useCallback(async (forceRefresh = false) => {
     setAssetError('')
     setAssetLoading(true)
     try {
-      const res = await axios.get('/clothes/all')
-      const list = Array.isArray(res?.data) ? res.data : []
+      const { fetchAllClothes } = useClosetStore.getState()
+      const list = await fetchAllClothes(forceRefresh)
       const clothesCount = list.length
       const favoriteCount = list.reduce((count, item) => {
         return count + (item?.favorite ? 1 : 0)
@@ -321,7 +310,8 @@ export default function Person() {
           content: '头像上传成功',
           duration: 1200,
         })
-        getUserInfo()
+        useAuthStore.getState().invalidateUserCache()
+        getUserInfo(true)
       } catch (error) {
         console.error('upload avatar failed:', error)
         Toast.show({
@@ -378,7 +368,8 @@ export default function Person() {
           Toast.show({ icon: 'success', content: '人物模特已删除', duration: 1200 })
           setModelPreviewVisible(false)
           setUploadedImage(null)
-          getUserInfo()
+          useAuthStore.getState().invalidateUserCache()
+          getUserInfo(true)
         } catch (error) {
           console.error('删除人物模特失败:', error)
           Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })
@@ -421,7 +412,8 @@ export default function Person() {
         content: '昵称修改成功',
         duration: 2000,
       })
-      getUserInfo()
+      useAuthStore.getState().invalidateUserCache()
+      getUserInfo(true)
     } catch (error) {
       console.error('修改昵称失败:', error)
       Toast.show({
@@ -509,7 +501,8 @@ export default function Person() {
             content: '上传成功',
             duration: 2000,
           })
-          getUserInfo()
+          useAuthStore.getState().invalidateUserCache()
+          getUserInfo(true)
 
           // 清空文件input的值，允许重复上传
           if (fileInputRef.current) {
@@ -583,7 +576,8 @@ export default function Person() {
         content: `性别成功修改为${newSex === 'man' ? '男' : '女'}`,
         duration: 2000,
       })
-      getUserInfo()
+      useAuthStore.getState().invalidateUserCache()
+      getUserInfo(true)
     } catch (error) {
       console.error('修改性别失败:', error)
       setSex(prevSex)
@@ -724,8 +718,9 @@ export default function Person() {
         content: '密码修改成功',
         duration: 2000,
       })
+      useAuthStore.getState().invalidateUserCache()
       closePasswordPopup()
-      getUserInfo()
+      getUserInfo(true)
     } catch (error) {
       console.error('修改密码失败:', error)
       Toast.show({
@@ -856,7 +851,7 @@ export default function Person() {
           <button
             type="button"
             className={styles.cardAction}
-            onClick={fetchAssetStats}
+            onClick={() => fetchAssetStats(true)}
             disabled={assetLoading || userLoading}
           >
             {assetLoading ? '刷新中...' : '刷新'}

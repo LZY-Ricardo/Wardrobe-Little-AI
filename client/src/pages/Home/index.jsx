@@ -5,7 +5,7 @@ import SvgIcon from '@/components/SvgIcon'
 import Icon from '@/components/Icon'
 import DarkModeToggle from '@/components/DarkModeToggle'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
-import { useAuthStore } from '@/store'
+import { useAuthStore, useClosetStore } from '@/store'
 import WeatherIcon from '@/components/WeatherIcon'
 import styles from './index.module.less'
 import { defaultWeather } from '@/config/homeConfig'
@@ -136,8 +136,9 @@ export default function Home() {
       setStatus('loading')
       setError('')
       try {
-        const res = await axios.get('/clothes/all')
-        setClothesData(res?.data || [])
+        const { fetchAllClothes } = useClosetStore.getState()
+        const data = await fetchAllClothes()
+        setClothesData(data || [])
         setStatus('success')
       } catch (err) {
         console.error('获取衣物数据失败', err)

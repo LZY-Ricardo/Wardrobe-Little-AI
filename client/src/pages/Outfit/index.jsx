@@ -47,15 +47,15 @@ export default function Outfit() {
     error,
     setError,
     reset,
+    fetchAllClothes,
   } = useClosetStore()
   const markMatchStale = useMatchStore((s) => s.markStale)
 
-  const loadClothes = useCallback(async () => {
+  const loadClothes = useCallback(async (forceRefresh = false) => {
     setStatus('loading')
     setError('')
     try {
-      const res = await axios.get('/clothes/all')
-      const data = res?.data || []
+      const data = await fetchAllClothes(forceRefresh)
       setItems(data)
       setStatus('success')
       setHasMore(data.length > PAGE_SIZE)
@@ -64,7 +64,7 @@ export default function Outfit() {
       setStatus('error')
       setError('获取衣物列表失败，请重试')
     }
-  }, [setError, setHasMore, setItems, setStatus])
+  }, [fetchAllClothes, setError, setHasMore, setItems, setStatus])
 
   useEffect(() => {
     loadClothes()
@@ -170,6 +170,8 @@ export default function Outfit() {
       const nextItems = items.filter((item) => item.cloth_id !== selectedItem.cloth_id)
       setItems(nextItems)
       markMatchStale()
+      // 失效衣物缓存
+      useClosetStore.getState().invalidateCache()
     } catch (err) {
       console.error('删除衣物失败', err)
       Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })

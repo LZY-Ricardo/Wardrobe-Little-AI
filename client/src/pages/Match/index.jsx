@@ -79,33 +79,15 @@ export default function Match({ embedded = false }) {
           ? '已选下衣，再点选一件上衣，即刻预览搭配效果'
           : '搭配已就绪，点击下方按钮生成预览图'
 
-  const fetchUserInfo = useCallback(async () => {
+  const fetchUserInfo = useCallback(async (forceRefresh = false) => {
     setUserLoading(true)
     try {
-      const res = await axios.get('/user/getUserInfo')
-      const nextUser = res?.data || null
+      const authStore = useAuthStore.getState()
+      const nextUser = await authStore.fetchUserInfo(forceRefresh)
+
       if (nextUser) {
         setUserInfo(nextUser)
         setAuthUserInfo(nextUser)
-        const persistedUserInfo = {
-          username: nextUser.username,
-          id: nextUser.id,
-          createTime: nextUser.createTime || nextUser.create_time,
-          sex: nextUser.sex,
-          avatar: nextUser.avatar,
-          hasCharacterModel: Boolean(nextUser.characterModel),
-        }
-        const value = JSON.stringify(persistedUserInfo)
-        try {
-          localStorage.setItem('userInfo', value)
-        } catch {
-          try {
-            localStorage.removeItem('userInfo')
-            localStorage.setItem('userInfo', value)
-          } catch (retryError) {
-            console.warn('persist userInfo failed:', retryError)
-          }
-        }
       }
     } catch (error) {
       console.error('获取用户信息失败:', error);
