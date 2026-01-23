@@ -263,7 +263,7 @@ export const useSuitStore = create(
         set((state) => {
           const value = typeof next === 'function' ? next(state.suits) : next
           const suits = Array.isArray(value) ? value : []
-          return { suits, lastFetchedAt: Date.now() }
+          return { suits, lastFetchedAt: Date.now(), status: 'success', error: '' }
         }),
       setStatus: (status) => set({ status }),
       setError: (error) => set({ error }),
@@ -277,19 +277,27 @@ export const useSuitStore = create(
           Date.now() - state.lastFetchedAt < CACHE_TTL &&
           state.suits.length > 0
         ) {
+          if (state.status !== 'success') set({ status: 'success', error: '' })
           return state.suits
         }
 
         set({ status: 'loading', error: '' })
         try {
           const res = await axios.get('/suits')
-          const data = res?.data || []
-          const list = Array.isArray(data) ? data : []
+          const payload = res?.data ?? res
+          const list = Array.isArray(payload)
+            ? payload
+            : Array.isArray(payload?.data)
+              ? payload.data
+              : Array.isArray(payload?.suits)
+                ? payload.suits
+                : []
 
           set({
             suits: list,
             lastFetchedAt: Date.now(),
             status: 'success',
+            error: '',
           })
           return list
         } catch (error) {
@@ -307,7 +315,6 @@ export const useSuitStore = create(
       name: 'suit-store',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        suits: state.suits,
         lastFetchedAt: state.lastFetchedAt,
       }),
     }
