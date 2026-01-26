@@ -3,8 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import styles from './index.module.less'
 import logo from '@/assets/tlogin.png'
-import { Input, Button, Toast } from 'antd-mobile'
-import { UserOutline, LockOutline } from 'antd-mobile-icons'
+import { Button, Toast } from 'antd-mobile'
 import DarkModeToggle from '@/components/DarkModeToggle'
 
 export default function Register() {
@@ -105,31 +104,29 @@ export default function Register() {
         </div>
 
         <div className={styles.form}>
-          <Input
+          <input
             className={styles.textInput}
+            type="text"
             placeholder="用户名"
-            clearable
-            prefix={<UserOutline />}
             value={username}
-            onChange={(val) => setUsername(val)}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="off"
           />
-          <Input
+          <input
             className={styles.textInput}
+            type="password"
             placeholder="密码"
-            clearable
-            type="password"
-            prefix={<LockOutline />}
             value={password}
-            onChange={(val) => setPassword(val)}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="new-password"
           />
-          <Input
+          <input
             className={styles.textInput}
-            placeholder="确认密码"
-            clearable
             type="password"
-            prefix={<LockOutline />}
+            placeholder="确认密码"
             value={confirmPassword}
-            onChange={(val) => setConfirmPassword(val)}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            autoComplete="new-password"
           />
         </div>
 

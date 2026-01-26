@@ -1,34 +1,30 @@
-﻿import React, { useEffect, useState } from 'react'
+﻿import React, { useState, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import axios from '@/api'
 import styles from './index.module.less'
 import logo from '@/assets/tlogin.png'
-import { Form, Input, Button, Toast } from 'antd-mobile'
-import { EyeInvisibleOutline, EyeOutline, UserOutline, LockOutline } from 'antd-mobile-icons'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { Button, Toast } from 'antd-mobile'
+import { EyeInvisibleOutline, EyeOutline } from 'antd-mobile-icons'
 import DarkModeToggle from '@/components/DarkModeToggle'
-import axios from '@/api'
 import { useAuthStore } from '@/store'
 
 export default function Login() {
   const [visible, setVisible] = useState(false)
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const { state } = useLocation()
   const navigate = useNavigate()
-  const [form] = Form.useForm()
   const setTokens = useAuthStore((s) => s.setTokens)
   const setUserInfo = useAuthStore((s) => s.setUserInfo)
 
   useEffect(() => {
-    form.resetFields()
     if (state?.username) {
-      form.setFieldsValue({
-        username: state.username,
-        password: state.password,
-      })
+      setUsername(state.username)
+      setPassword(state.password || '')
     }
-  }, [state, form])
+  }, [state])
 
   const onLogin = async () => {
-    const values = form.getFieldsValue()
-    const { username, password } = values
     if (!username) {
       Toast.show({ content: '请输入用户名', duration: 1000 })
       return
@@ -91,36 +87,29 @@ export default function Login() {
           </div>
         </div>
 
-        <Form layout="vertical" className={styles.form} form={form} autoComplete="off">
-          <Form.Item name="username" rules={[{ message: '请输入用户名' }]} className={styles.formItem}>
-            <Input
+        <div className={styles.form}>
+          <input
+            className={styles.textInput}
+            type="text"
+            placeholder="用户名"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="off"
+          />
+          <div className={styles.passwordInput}>
+            <input
               className={styles.textInput}
-              placeholder="用户名"
-              clearable
-              autoComplete="off"
-              prefix={<UserOutline />}
-            />
-          </Form.Item>
-          <Form.Item name="password" rules={[{ message: '请输入密码' }]} className={styles.formItem}>
-            <Input
-              className={styles.textInput}
-              placeholder="密码"
-              clearable
               type={visible ? 'text' : 'password'}
+              placeholder="密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               autoComplete="new-password"
-              prefix={<LockOutline />}
-              suffix={
-                <div className={styles.eye}>
-                  {visible ? (
-                    <EyeOutline onClick={() => setVisible(false)} />
-                  ) : (
-                    <EyeInvisibleOutline onClick={() => setVisible(true)} />
-                  )}
-                </div>
-              }
             />
-          </Form.Item>
-        </Form>
+            <div className={styles.eye} onClick={() => setVisible(!visible)}>
+              {visible ? <EyeOutline /> : <EyeInvisibleOutline />}
+            </div>
+          </div>
+        </div>
 
         <Button block className={styles.primaryButton} onClick={onLogin}>
           登录
