@@ -238,6 +238,19 @@ export default function Person() {
 
   const fetchAssetStats = useCallback(async (forceRefresh = false) => {
     setAssetError('')
+    if (!forceRefresh) {
+      const { getCachedClothes } = useClosetStore.getState()
+      const cached = getCachedClothes()
+      const list = Array.isArray(cached) ? cached : []
+      const clothesCount = list.length
+      const favoriteCount = list.reduce((count, item) => {
+        return count + (item?.favorite ? 1 : 0)
+      }, 0)
+      setAssetStats({ clothesCount, favoriteCount })
+      setAssetLoading(false)
+      return
+    }
+
     setAssetLoading(true)
     try {
       const { fetchAllClothes } = useClosetStore.getState()
@@ -1310,7 +1323,6 @@ export default function Person() {
     </div>
   )
 }
-
 
 
 
