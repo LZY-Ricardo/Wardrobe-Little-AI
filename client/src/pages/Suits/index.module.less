@@ -1,72 +1,238 @@
-﻿.suits {
-  min-height: 100vh;
-  background: #f7f8fa;
-  padding: 16px 14px 100px;
+.suits {
+    --suits-accent: #2f54eb;
+    --suits-accent-bg: rgba(47, 84, 235, 0.12);
+    --suits-accent-border: rgba(47, 84, 235, 0.22);
+    --shadow-card-sm: 0 2px 8px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+    --shadow-card-md: 0 8px 24px rgba(15, 23, 42, 0.08), 0 2px 8px rgba(15, 23, 42, 0.04);
+    --shadow-card-lg: 0 16px 48px rgba(15, 23, 42, 0.12), 0 4px 12px rgba(15, 23, 42, 0.06);
+    --shadow-card-hover: 0 20px 56px rgba(15, 23, 42, 0.14), 0 6px 16px rgba(15, 23, 42, 0.08);
+    --glow-primary: 0 0 0 1px rgba(47, 84, 235, 0.08), 0 4px 16px rgba(47, 84, 235, 0.12);
 
-  .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
+    min-height: 100vh;
+    background: #f7f8fa;
+    padding: 16px 14px 100px;
+    position: relative;
+    overflow: hidden;
 
-    .headerTitle {
-      font-size: 18px;
-      font-weight: 700;
-      color: #111;
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background:
+            radial-gradient(ellipse 80% 50% at 50% -20%, rgba(47, 84, 235, 0.06), transparent),
+            radial-gradient(circle at 20% 80%, rgba(114, 98, 253, 0.04) 0%, transparent 50%),
+            radial-gradient(circle at 80% 20%, rgba(47, 84, 235, 0.03) 0%, transparent 50%),
+            radial-gradient(circle at 40% 40%, rgba(47, 84, 235, 0.025) 0%, transparent 50%);
+        opacity: 1;
+        pointer-events: none;
+        z-index: 0;
+        animation: subtleShift 20s ease-in-out infinite alternate;
     }
 
-    .headerAction {
-      padding: 8px 12px;
-      border: none;
-      border-radius: 12px;
-      background: linear-gradient(135deg, #2f54eb, #7262fd);
-      color: #fff;
-      font-size: 14px;
+    @keyframes subtleShift {
+        0% {
+            opacity: 0.8;
+        }
+        100% {
+            opacity: 1;
+        }
     }
-  }
 
-  .body {
-    min-height: 60vh;
-  }
+    .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+        position: relative;
+        z-index: 1;
+        padding: 4px 0;
+
+        .headerTitle {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+            letter-spacing: -0.02em;
+        }
+
+        .headerAction {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #2f54eb 0%, #7262fd 100%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow:
+                0 4px 12px rgba(47, 84, 235, 0.25),
+                0 2px 6px rgba(47, 84, 235, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+
+            &::before {
+                content: '';
+                position: absolute;
+                inset: 0;
+                background: linear-gradient(
+                    135deg,
+                    rgba(255, 255, 255, 0.2) 0%,
+                    transparent 50%
+                );
+                opacity: 0;
+                transition: opacity 0.25s ease;
+            }
+
+            &:hover {
+                background: linear-gradient(135deg, #2650d8 0%, #6356e8 100%);
+                transform: translateY(-2px);
+                box-shadow:
+                    0 6px 16px rgba(47, 84, 235, 0.30),
+                    0 3px 8px rgba(47, 84, 235, 0.20),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+                &::before {
+                    opacity: 1;
+                }
+            }
+
+            &:active {
+                transform: translateY(0);
+                box-shadow:
+                    0 2px 6px rgba(47, 84, 235, 0.25),
+                    inset 0 1px 2px rgba(0, 0, 0, 0.1);
+            }
+        }
+    }
+
+    .body {
+        min-height: 60vh;
+        position: relative;
+        z-index: 1;
+    }
 }
 
 .cardList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    position: relative;
+    z-index: 1;
 }
 
 .card {
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 6px 20px rgba(17, 38, 146, 0.06);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px) saturate(180%);
+    border-radius: 16px;
+    box-shadow: var(--shadow-card-md);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    transition: all 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 16px;
+        background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.4) 0%,
+            rgba(255, 255, 255, 0) 50%,
+            rgba(255, 255, 255, 0) 100%
+        );
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        z-index: 1;
+    }
+
+    &:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-card-hover);
+        border-color: rgba(47, 84, 235, 0.12);
+
+        &::before {
+            opacity: 1;
+        }
+    }
+
+    &:active {
+        transform: translateY(-2px);
+    }
 }
 
 .cardCover {
-  position: relative;
-  width: 100%;
-  height: 200px;
-  overflow: hidden;
-  background: #f5f5f5;
-
-  img {
+    position: relative;
     width: 100%;
-    height: 100%;
-    object-fit: contain;
-    object-position: center;
-  }
+    height: 200px;
+    overflow: hidden;
+    background: linear-gradient(
+        135deg,
+        rgba(15, 23, 42, 0.02) 0%,
+        rgba(15, 23, 42, 0.04) 100%
+    );
+
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.1) 0%,
+            transparent 40%,
+            transparent 60%,
+            rgba(0, 0, 0, 0.02) 100%
+        );
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        object-position: center;
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    &:hover img {
+        transform: scale(1.05);
+    }
 }
 
 .cardDelete {
-  border: none;
-  background: #f5f5f5;
-  color: #ff4d4f;
-  padding: 6px 10px;
-  border-radius: 10px;
-  font-size: 12px;
+    border: 1px solid rgba(239, 68, 68, 0.20);
+    background: rgba(239, 68, 68, 0.08);
+    color: #ef4444;
+    padding: 6px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow:
+        0 1px 3px rgba(239, 68, 68, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+
+    &:hover {
+        background: rgba(239, 68, 68, 0.12);
+        border-color: rgba(239, 68, 68, 0.30);
+        transform: translateY(-1px);
+        box-shadow:
+            0 2px 6px rgba(239, 68, 68, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    &:active {
+        transform: translateY(0);
+    }
 }
 
 .cardHeaderRow {
@@ -77,47 +243,78 @@
 }
 
 .cardTitleText {
-  flex: 1;
-  min-width: 0;
-  font-size: 16px;
-  font-weight: 800;
-  color: #111827;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
 }
 
 .cardMetaRow {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: #6b7280;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
 }
 
 .cardBody {
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.98) 0%,
+        rgba(255, 255, 255, 1) 100%
+    );
+    border-top: 1px solid rgba(15, 23, 42, 0.04);
+    position: relative;
+
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 14px;
+        right: 14px;
+        height: 1px;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(15, 23, 42, 0.06) 20%,
+            rgba(15, 23, 42, 0.08) 50%,
+            rgba(15, 23, 42, 0.06) 80%,
+            transparent
+        );
+    }
 }
 
 .cardSubtitle {
-  color: #374151;
-  font-size: 13px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    color: #475569;
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
 }
 
 .metaScene {
-  background: #eef2ff;
-  color: #2f54eb;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-weight: 600;
+    background: rgba(47, 84, 235, 0.10);
+    color: #2f54eb;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-weight: 600;
+    border: 1px solid rgba(47, 84, 235, 0.15);
+    box-shadow:
+        0 1px 3px rgba(47, 84, 235, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .metaCount,
@@ -133,155 +330,454 @@
 }
 
 .thumb {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: #f3f4f6;
-  flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(
+        135deg,
+        rgba(15, 23, 42, 0.02) 0%,
+        rgba(15, 23, 42, 0.04) 100%
+    );
+    flex: 0 0 auto;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow:
+        0 2px 6px rgba(15, 23, 42, 0.04),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 
-  img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
+    &:hover {
+        transform: translateY(-2px);
+        box-shadow:
+            0 4px 10px rgba(15, 23, 42, 0.08),
+            inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        border-color: rgba(47, 84, 235, 0.15);
+    }
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    &:hover img {
+        transform: scale(1.08);
+    }
 }
 
 .thumbPlaceholder {
-  width: 100%;
-  height: 100%;
+    width: 100%;
+    height: 100%;
+    background: rgba(15, 23, 42, 0.03);
 }
 
 .cardPlaceholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  color: rgba(17, 24, 39, 0.7);
-  font-size: 14px;
-  font-weight: 700;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(
+        135deg,
+        rgba(15, 23, 42, 0.02) 0%,
+        rgba(15, 23, 42, 0.04) 100%
+    );
+    color: rgba(15, 23, 42, 0.6);
+    font-size: 14px;
+    font-weight: 600;
 }
 
 .cardEmpty {
-  font-size: 12px;
-  color: #999;
+    font-size: 12px;
+    color: #94a3b8;
+    font-weight: 500;
 }
 
 .emptyWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin-top: 40px;
-
-  .emptyActions {
     display: flex;
-    gap: 10px;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    margin-top: 40px;
+    padding: 40px 20px;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(8px) saturate(180%);
+    border-radius: 16px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    box-shadow: var(--shadow-card-sm);
 
-    button {
-      border: none;
-      border-radius: 12px;
-      padding: 10px 14px;
-      background: #111827;
-      color: #fff;
+    .emptyActions {
+        display: flex;
+        gap: 10px;
+
+        button {
+            border: none;
+            border-radius: 12px;
+            padding: 10px 18px;
+            background: linear-gradient(135deg, #2f54eb 0%, #7262fd 100%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow:
+                0 4px 12px rgba(47, 84, 235, 0.25),
+                0 2px 6px rgba(47, 84, 235, 0.15),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+            &:hover {
+                background: linear-gradient(135deg, #2650d8 0%, #6356e8 100%);
+                transform: translateY(-2px);
+                box-shadow:
+                    0 6px 16px rgba(47, 84, 235, 0.30),
+                    0 3px 8px rgba(47, 84, 235, 0.20),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+            }
+
+            &:active {
+                transform: translateY(0);
+            }
+        }
     }
-  }
 }
 
 .inlineAction {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 12px;
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+    position: relative;
+    z-index: 1;
 
-  button {
-    padding: 8px 12px;
-    border: none;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #2f54eb, #7262fd);
-    color: #fff;
-    font-size: 14px;
-  }
+    button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #2f54eb 0%, #7262fd 100%);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow:
+            0 4px 12px rgba(47, 84, 235, 0.25),
+            0 2px 6px rgba(47, 84, 235, 0.15),
+            inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+
+        &:hover {
+            background: linear-gradient(135deg, #2650d8 0%, #6356e8 100%);
+            transform: translateY(-2px);
+            box-shadow:
+                0 6px 16px rgba(47, 84, 235, 0.30),
+                0 3px 8px rgba(47, 84, 235, 0.20),
+                inset 0 1px 0 rgba(255, 255, 255, 0.3);
+        }
+
+        &:active {
+            transform: translateY(0);
+        }
+    }
 }
 
 .fab {
-  position: fixed;
-  right: 18px;
-  bottom: calc(var(--bottom-nav-height, 50px) + 20px);
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #2f54eb, #7262fd);
-  color: #fff;
-  font-size: 28px;
-  box-shadow: 0 10px 20px rgba(47, 84, 235, 0.25);
-  z-index: 7000;
+    position: fixed;
+    right: 18px;
+    bottom: calc(var(--bottom-nav-height, 50px) + 20px);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(135deg, #2f54eb 0%, #7262fd 100%);
+    color: #fff;
+    font-size: 28px;
+    box-shadow:
+        0 8px 24px rgba(47, 84, 235, 0.35),
+        0 4px 12px rgba(47, 84, 235, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    z-index: 7000;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            135deg,
+            rgba(255, 255, 255, 0.25) 0%,
+            transparent 50%
+        );
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        border-radius: 50%;
+    }
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: -4px;
+        border-radius: 50%;
+        background: transparent;
+        border: 2px solid rgba(47, 84, 235, 0.3);
+        opacity: 0;
+        transition: all 0.3s ease;
+    }
+
+    &:hover {
+        transform: translateY(-4px) scale(1.05);
+        box-shadow:
+            0 12px 32px rgba(47, 84, 235, 0.45),
+            0 6px 16px rgba(47, 84, 235, 0.30),
+            inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+        &::before {
+            opacity: 1;
+        }
+
+        &::after {
+            opacity: 1;
+            inset: -6px;
+        }
+    }
+
+    &:active {
+        transform: translateY(-2px) scale(1.02);
+        box-shadow:
+            0 6px 16px rgba(47, 84, 235, 0.35),
+            0 3px 8px rgba(47, 84, 235, 0.25),
+            inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    }
 }
 
 [data-theme='dark'] {
-  .suits {
-    background: var(--bg-body);
-  }
+    .suits {
+        --suits-accent: var(--accent-primary);
+        --suits-accent-bg: rgba(96, 165, 250, 0.18);
+        --suits-accent-border: rgba(96, 165, 250, 0.28);
+        --shadow-card-sm: 0 2px 8px rgba(0, 0, 0, 0.20), 0 1px 3px rgba(0, 0, 0, 0.30);
+        --shadow-card-md: 0 8px 24px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
+        --shadow-card-lg: 0 16px 48px rgba(0, 0, 0, 0.30), 0 4px 12px rgba(0, 0, 0, 0.20);
+        --shadow-card-hover: 0 20px 56px rgba(0, 0, 0, 0.35), 0 6px 16px rgba(0, 0, 0, 0.25);
+        --glow-primary: 0 0 0 1px rgba(96, 165, 250, 0.12), 0 4px 16px rgba(96, 165, 250, 0.18);
 
-  .card {
-    background: var(--bg-surface);
-    box-shadow: none;
-  }
+        background: var(--bg-body);
+        transition: background-color 0.3s ease;
 
-  .cardCover {
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04));
-    img {
-      background: var(--bg-surface);
+        &::before {
+            background:
+                radial-gradient(ellipse 80% 50% at 50% -20%, rgba(96, 165, 250, 0.08), transparent),
+                radial-gradient(circle at 20% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 40% 40%, rgba(96, 165, 250, 0.04) 0%, transparent 50%);
+            opacity: 0.6;
+        }
     }
-  }
 
-  .cardTitleText,
-  .cardSubtitle {
-    color: var(--text-primary);
-  }
+    .header {
+        .headerTitle {
+            color: #f1f5f9;
+        }
 
-  .cardMetaRow,
-  .metaCount,
-  .metaTime {
-    color: var(--text-secondary);
-  }
+        .headerAction {
+            background: linear-gradient(135deg, rgba(47, 84, 235, 0.85) 0%, rgba(114, 98, 253, 0.85) 100%);
 
-  .cardDelete {
-    background: rgba(255, 255, 255, 0.08);
-    color: #ff8080;
-  }
+            &:hover {
+                background: linear-gradient(135deg, rgba(47, 84, 235, 0.95) 0%, rgba(114, 98, 253, 0.95) 100%);
+            }
+        }
+    }
 
-  .thumb {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-subtle);
-  }
+    .card {
+        background: rgba(30, 41, 59, 0.85);
+        backdrop-filter: blur(12px) saturate(180%);
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: var(--shadow-card-md);
 
-  .cardPlaceholder {
-    color: var(--text-secondary);
-  }
+        &::before {
+            background: linear-gradient(
+                135deg,
+                rgba(255, 255, 255, 0.08) 0%,
+                rgba(255, 255, 255, 0) 50%,
+                rgba(255, 255, 255, 0) 100%
+            );
+        }
 
-  .header {
-    color: var(--text-primary);
-  }
+        &:hover {
+            border-color: rgba(96, 165, 250, 0.18);
+            box-shadow: var(--shadow-card-hover);
+        }
+    }
 
-  .headerAction {
-    background: linear-gradient(135deg, rgba(47, 84, 235, 0.75), rgba(114, 98, 253, 0.75));
-    color: #fff;
-  }
+    .cardCover {
+        background: linear-gradient(
+            135deg,
+            rgba(15, 23, 42, 0.4) 0%,
+            rgba(15, 23, 42, 0.6) 100%
+        );
 
-  .metaScene {
-    background: rgba(47, 84, 235, 0.2);
-    color: #dbe4ff;
-  }
+        &::before {
+            background: linear-gradient(
+                180deg,
+                rgba(255, 255, 255, 0.05) 0%,
+                transparent 40%,
+                transparent 60%,
+                rgba(0, 0, 0, 0.1) 100%
+            );
+        }
+    }
 
-  .metaCount,
-  .metaTime {
-    color: var(--text-secondary);
-  }
+    .cardBody {
+        background: linear-gradient(
+            180deg,
+            rgba(30, 41, 59, 0.95) 0%,
+            rgba(15, 23, 42, 0.98) 100%
+        );
+        border-top-color: rgba(255, 255, 255, 0.06);
 
-  .cardMetaRow {
-    color: var(--text-secondary);
-  }
+        &::before {
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.08) 20%,
+                rgba(255, 255, 255, 0.10) 50%,
+                rgba(255, 255, 255, 0.08) 80%,
+                transparent
+            );
+        }
+    }
+
+    .cardTitleText {
+        color: #f1f5f9;
+    }
+
+    .cardSubtitle {
+        color: #cbd5e1;
+    }
+
+    .cardMetaRow,
+    .metaCount,
+    .metaTime {
+        color: #94a3b8;
+    }
+
+    .metaScene {
+        background: rgba(96, 165, 250, 0.18);
+        color: #dbe4ff;
+        border-color: rgba(96, 165, 250, 0.25);
+        box-shadow:
+            0 1px 3px rgba(96, 165, 250, 0.12),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .cardDelete {
+        background: rgba(239, 68, 68, 0.15);
+        color: #f87171;
+        border-color: rgba(239, 68, 68, 0.30);
+
+        &:hover {
+            background: rgba(239, 68, 68, 0.22);
+            border-color: rgba(239, 68, 68, 0.40);
+        }
+    }
+
+    .thumb {
+        background: rgba(15, 23, 42, 0.8);
+        border-color: rgba(255, 255, 255, 0.10);
+        box-shadow:
+            0 2px 6px rgba(0, 0, 0, 0.20),
+            inset 0 1px 0 rgba(255, 255, 255, 0.08);
+
+        &:hover {
+            border-color: rgba(96, 165, 250, 0.20);
+        }
+    }
+
+    .thumbPlaceholder {
+        background: rgba(15, 23, 42, 0.6);
+    }
+
+    .cardPlaceholder {
+        color: #94a3b8;
+    }
+
+    .cardEmpty {
+        color: #64748b;
+    }
+
+    .emptyWrap {
+        background: rgba(30, 41, 59, 0.6);
+        backdrop-filter: blur(12px) saturate(180%);
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: var(--shadow-card-sm);
+
+        .emptyActions button {
+            background: linear-gradient(135deg, rgba(47, 84, 235, 0.85) 0%, rgba(114, 98, 253, 0.85) 100%);
+
+            &:hover {
+                background: linear-gradient(135deg, rgba(47, 84, 235, 0.95) 0%, rgba(114, 98, 253, 0.95) 100%);
+            }
+        }
+    }
+
+    .inlineAction button {
+        background: linear-gradient(135deg, rgba(47, 84, 235, 0.85) 0%, rgba(114, 98, 253, 0.85) 100%);
+
+        &:hover {
+            background: linear-gradient(135deg, rgba(47, 84, 235, 0.95) 0%, rgba(114, 98, 253, 0.95) 100%);
+        }
+    }
+
+    .fab {
+        background: linear-gradient(135deg, rgba(47, 84, 235, 0.90) 0%, rgba(114, 98, 253, 0.90) 100%);
+        box-shadow:
+            0 8px 24px rgba(47, 84, 235, 0.45),
+            0 4px 12px rgba(0, 0, 0, 0.30),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15);
+
+        &:hover {
+            box-shadow:
+                0 12px 32px rgba(47, 84, 235, 0.55),
+                0 6px 16px rgba(0, 0, 0, 0.40),
+                inset 0 1px 0 rgba(255, 255, 255, 0.20);
+        }
+
+        &:active {
+            box-shadow:
+                0 6px 16px rgba(47, 84, 235, 0.45),
+                0 3px 8px rgba(0, 0, 0, 0.35),
+                inset 0 1px 2px rgba(0, 0, 0, 0.1);
+        }
+
+        &::after {
+            border-color: rgba(96, 165, 250, 0.4);
+        }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .card {
+        transition: none !important;
+    }
+
+    .card:hover {
+        transform: none !important;
+    }
+
+    .thumb {
+        transition: none !important;
+    }
+
+    .thumb:hover {
+        transform: none !important;
+    }
+
+    .headerAction,
+    .cardDelete,
+    .inlineAction button,
+    .emptyActions button,
+    .fab {
+        transition: none !important;
+    }
 }
