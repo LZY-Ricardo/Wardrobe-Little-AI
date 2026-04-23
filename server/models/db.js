@@ -9,6 +9,8 @@ const pool = mysql.createPool({
   port: config.db.port,
 })
 
+const promisePool = pool.promise()
+
 const query = (sql, params = []) =>
   new Promise((resolve, reject) => {
     pool.query(sql, params, (err, results) => {
@@ -17,8 +19,24 @@ const query = (sql, params = []) =>
     })
   })
 
-module.exports = {
-  pool,
-  query,
+const withTransaction = async (work) => {
+  const connection = await promisePool.getConnection()
+  try {
+    await connection.beginTransaction()
+    const result = await work(connection)
+    await connection.commit()
+    return result
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
 }
 
+module.exports = {
+  pool,
+  promisePool,
+  query,
+  withTransaction,
+}

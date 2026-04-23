@@ -14,6 +14,10 @@ const Add = React.lazy(() => import('../pages/Add'))
 const Update = React.lazy(() => import('../pages/Update'))
 const AiChat = React.lazy(() => import('../pages/AiChat'))
 const SuitCreate = React.lazy(() => import('../pages/SuitCreate'))
+const RecommendationHistory = React.lazy(() => import('../pages/RecommendationHistory'))
+const OutfitLogs = React.lazy(() => import('../pages/OutfitLogs'))
+const ProfileInsights = React.lazy(() => import('../pages/ProfileInsights'))
+const WardrobeAnalytics = React.lazy(() => import('../pages/WardrobeAnalytics'))
 
 const isAuthed = () => {
   const token = useAuthStore.getState().accessToken || localStorage.getItem('access_token')
@@ -116,6 +120,38 @@ const routes = [
     element: (
       <ProtectedRoute>
         {withLayout(<AiChat />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/recommendations/history',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<RecommendationHistory />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/outfit-logs',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<OutfitLogs />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/profile-insights',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<ProfileInsights />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/wardrobe-analytics',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<WardrobeAnalytics />)}
       </ProtectedRoute>
     ),
   },

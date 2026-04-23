@@ -8,6 +8,7 @@ import white from '@/assets/white.jpg'
 import styles from './index.module.less'
 import axios from '@/api'
 import useDebouncedValue from '@/utils/useDebouncedValue'
+import { getTodayInChina } from '@/utils/date'
 import { useClosetStore, useMatchStore } from '@/store'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 
@@ -177,6 +178,25 @@ export default function Outfit() {
     } catch (err) {
       console.error('删除衣物失败', err)
       Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })
+    }
+  }
+
+  const handleCreateOutfitLog = async (cloth) => {
+    const clothId = cloth?.cloth_id
+    if (!clothId) return
+    try {
+      await axios.post('/outfit-logs', {
+        logDate: getTodayInChina(),
+        scene: '日常',
+        source: 'closet',
+        note: cloth?.name ? `从衣橱记录：${cloth.name}` : '从衣橱记录',
+        items: [clothId],
+      })
+      Toast.show({ icon: 'success', content: '已加入穿搭记录', duration: 1000 })
+      setVisible(false)
+    } catch (err) {
+      console.error('加入穿搭记录失败', err)
+      Toast.show({ icon: 'fail', content: err?.msg || '加入失败，请重试', duration: 1200 })
     }
   }
 
@@ -481,6 +501,13 @@ export default function Outfit() {
                 </div>
 
                 <div className={styles['delete-button-container']}>
+                  <button
+                    type="button"
+                    className={styles['log-button']}
+                    onClick={() => void handleCreateOutfitLog(selectedItem)}
+                  >
+                    记录穿搭
+                  </button>
                   <button
                     type="button"
                     className={styles['favorite-button']}

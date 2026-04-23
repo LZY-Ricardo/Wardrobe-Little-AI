@@ -20,11 +20,11 @@ const stripOtherRequiredTypes = (text, matched) => {
   let next = text
   REQUIRED_TYPES.forEach((type) => {
     if (type === matched) return
-    next = next.replace(new RegExp(`\(${type}\)`, 'g'), '')
+    next = next.replace(new RegExp(`\\(${type}\\)`, 'g'), '')
     next = next.replace(new RegExp(`\uFF08${type}\uFF09`, 'g'), '')
     next = next.split(type).join('')
   })
-  return next.replace(/[\/|\u3001,\uff0c-]\s*$/g, '').trim()
+  return next.replace(/[/|\u3001,\uff0c-]\s*$/g, '').trim()
 }
 
 export const normalizeClothesTypeInput = (rawValue) => {

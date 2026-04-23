@@ -1487,6 +1487,34 @@
             }
         }
 
+        .log-button {
+            background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+            color: #ffffff;
+            border: none;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:
+                0 2px 8px rgba(15, 23, 42, 0.28),
+                0 1px 3px rgba(15, 23, 42, 0.18),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+
+            &:hover {
+                background: linear-gradient(135deg, #1e293b 0%, #475569 100%);
+                transform: translateY(-2px);
+                box-shadow:
+                    0 6px 16px rgba(15, 23, 42, 0.34),
+                    0 2px 6px rgba(15, 23, 42, 0.2);
+            }
+
+            &:active {
+                transform: translateY(0);
+            }
+        }
+
         .delete-button {
             background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
             color: #ffffff;

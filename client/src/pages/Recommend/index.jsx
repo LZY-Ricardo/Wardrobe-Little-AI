@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
@@ -7,6 +7,7 @@ import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
+import { getTodayInChina } from '@/utils/date'
 import { useSuitStore } from '@/store'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
@@ -176,6 +177,7 @@ const isFavorited = (value) => value === 1 || value === true || value === '1' ||
 
 export default function Recommend({ embedded = false }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const fetchAllSuits = useSuitStore((s) => s.fetchAllSuits)
   const invalidateSuitCache = useSuitStore((s) => s.invalidateCache)
   const lastPresetKeyRef = React.useRef('')
@@ -190,6 +192,7 @@ export default function Recommend({ embedded = false }) {
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
   const [suitSaving, setSuitSaving] = useState({})
   const [savedSuitSignatures, setSavedSuitSignatures] = useState(new Set())
+  const [latestRecommendationId, setLatestRecommendationId] = useState(null)
 
   const fetchSavedSuits = React.useCallback(async (forceRefresh = false) => {
     try {
@@ -219,10 +222,33 @@ export default function Recommend({ embedded = false }) {
     generateSceneSuits(value)
   }
 
-  const generateSceneSuits = async (value) => {
+  const buildHistoryPayload = React.useCallback((value, suits = []) => ({
+    recommendationType: 'scene',
+    scene: value,
+    triggerSource: embedded ? 'match-hub' : 'recommend-page',
+    suits: suits.map((item, index) => ({
+      id: item?.id ?? index,
+      scene: item?.scene || value,
+      source: item?.source || 'llm',
+      description: item?.description || item?.reason || '',
+      items: Array.isArray(item?.items)
+        ? item.items.map((cloth) => ({
+            cloth_id: cloth?.cloth_id,
+            name: cloth?.name || '',
+            type: cloth?.type || '',
+            color: cloth?.color || '',
+            style: cloth?.style || '',
+            season: cloth?.season || '',
+          }))
+        : [],
+    })),
+  }), [embedded])
+
+  const generateSceneSuits = React.useCallback(async (value) => {
     setLoading(true)
     setError('')
     setServiceUnavailable(false)
+    setLatestRecommendationId(null)
     try {
       const res = await axios.post('/scene/generateSceneSuits', { scene: value })
       const list = normalizeSuits(res?.data ?? res, value)
@@ -230,6 +256,13 @@ export default function Recommend({ embedded = false }) {
         setSceneSuits([])
         setError('暂无推荐结果，换个场景试试')
         return
+      }
+      try {
+        const saved = await axios.post('/recommendations', buildHistoryPayload(value, list))
+        const recommendationId = saved?.data?.id || null
+        setLatestRecommendationId(recommendationId)
+      } catch (historyError) {
+        console.warn('保存推荐历史失败:', historyError)
       }
       const withCovers = await attachCompositeCover(list)
       setSceneSuits(withCovers)
@@ -249,7 +282,7 @@ export default function Recommend({ embedded = false }) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [buildHistoryPayload])
 
   const applyFavoritePatch = (patch = {}) => {
     const keys = Object.keys(patch)
@@ -333,6 +366,16 @@ export default function Recommend({ embedded = false }) {
         source: 'recommend',
         items: clothIds,
       })
+      if (latestRecommendationId) {
+        try {
+          await axios.put(`/recommendations/${latestRecommendationId}/adopt`, {
+            adopted: 1,
+            saved_as_suit: 1,
+          })
+        } catch (adoptError) {
+          console.warn('更新推荐采纳状态失败:', adoptError)
+        }
+      }
       setSavedSuitSignatures((prev) => {
         const next = new Set(prev)
         if (signature) next.add(signature)
@@ -351,13 +394,35 @@ export default function Recommend({ embedded = false }) {
     }
   }
 
+  const createOutfitLogFromSuit = async (suit) => {
+    const clothIds = extractClothIds(suit?.items)
+    if (!clothIds.length) {
+      Toast.show({ content: '该推荐缺少可记录的单品', duration: 1200 })
+      return
+    }
+    try {
+      await axios.post('/outfit-logs', {
+        recommendationId: latestRecommendationId,
+        logDate: getTodayInChina(),
+        scene: suit?.scene || scene,
+        source: 'recommendation',
+        note: suit?.description || '',
+        items: clothIds,
+      })
+      Toast.show({ content: '已记录到穿搭历史', duration: 1000 })
+    } catch (err) {
+      console.error('记录穿搭失败:', err)
+      Toast.show({ content: err?.msg || '记录失败，请重试', duration: 1200 })
+    }
+  }
+
   React.useEffect(() => {
     if (!presetScene) return
     if (lastPresetKeyRef.current === location.key) return
     lastPresetKeyRef.current = location.key
     setScene(presetScene)
     void generateSceneSuits(presetScene)
-  }, [location.key, presetScene])
+  }, [generateSceneSuits, location.key, presetScene])
 
   const renderContent = () => {
     if (loading) {
@@ -418,6 +483,15 @@ export default function Recommend({ embedded = false }) {
                 </div>
               </div>
               <div className={styles['item-message']}>{item.description}</div>
+              <div className={styles['item-actions-inline']}>
+                <button
+                  type="button"
+                  className={styles['secondary-action']}
+                  onClick={() => void createOutfitLogFromSuit(item)}
+                >
+                  记录穿搭
+                </button>
+              </div>
               {Boolean(item.items?.length) && (
                 <div className={styles['item-list']}>
                   {item.items.map((cloth, idx) => (
@@ -480,6 +554,13 @@ export default function Recommend({ embedded = false }) {
         />
         <button onClick={handleBtnClick} disabled={loading || serviceUnavailable}>
           {loading ? '生成中...' : '生成推荐'}
+        </button>
+        <button
+          type="button"
+          className={styles['history-button']}
+          onClick={() => navigate('/recommendations/history')}
+        >
+          历史
         </button>
       </div>
 

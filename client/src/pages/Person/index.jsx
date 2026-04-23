@@ -908,6 +908,18 @@ export default function Person() {
           <button type="button" className={styles.quickButton} onClick={() => navigate('/recommend')}>
             推荐
           </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/recommendations/history')}>
+            推荐历史
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/outfit-logs')}>
+            穿搭记录
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/profile-insights')}>
+            偏好画像
+          </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/wardrobe-analytics')}>
+            衣橱分析
+          </button>
         </div>
       </div>
 
@@ -1323,10 +1335,6 @@ export default function Person() {
     </div>
   )
 }
-
-
-
-
 
 
 

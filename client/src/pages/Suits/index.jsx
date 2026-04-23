@@ -101,7 +101,7 @@ export default function Suits({ embedded = false }) {
           await axios.delete(`/suits/${suit.suit_id}`)
           Toast.show({ content: '删除成功', duration: 1000 })
           setSuits((prev) => prev.filter((item) => item.suit_id !== suit.suit_id))
-        } catch (err) {
+        } catch {
           Toast.show({ content: '删除失败，请重试', duration: 1200 })
         }
       },
