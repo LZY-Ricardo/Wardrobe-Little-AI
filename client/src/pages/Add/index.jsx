@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react'
+﻿import React, { useRef, useState, useEffect, useCallback } from 'react'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Dialog, Toast } from 'antd-mobile'
@@ -16,6 +16,22 @@ const MAX_STORE_SIZE = 1 * 1024 * 1024
 const COMPRESS_CONFIG = { quality: 0.8, maxWidth: 600, maxHeight: 600 }
 const UPLOAD_TIMEOUT = 90000
 
+const ANALYSIS_PHASES = [
+  { message: '正在上传图片...', duration: 0 },
+  { message: 'AI 正在识别衣物类型...', duration: 5 },
+  { message: '分析颜色和风格中...', duration: 15 },
+  { message: '匹配材质和季节...', duration: 25 },
+  { message: '即将完成...', duration: 35 },
+]
+
+const ANALYSIS_TIPS = [
+  '光线充足的照片识别效果更好',
+  '单件衣物的识别准确率更高',
+  '简洁背景有助于 AI 分析',
+  '分析完成后可手动修改结果',
+  '衣物正面朝上拍摄效果更佳',
+]
+
 export default function Add() {
   const navigate = useNavigate()
   const markMatchStale = useMatchStore((s) => s.markStale)
@@ -28,6 +44,12 @@ export default function Add() {
   const [analysisUnavailable, setAnalysisUnavailable] = useState(false)
   const [uploadController, setUploadController] = useState(null)
   const [analysisController, setAnalysisController] = useState(null)
+  const [analysisPhaseIndex, setAnalysisPhaseIndex] = useState(0)
+  const [analysisElapsed, setAnalysisElapsed] = useState(0)
+  const [analysisTipIndex, setAnalysisTipIndex] = useState(0)
+  const [analysisMode, setAnalysisMode] = useState('coze') // 'coze' | 'vision'
+  const timerRef = useRef(null)
+  const tipTimerRef = useRef(null)
 
   const nameRef = useRef(null)
   const fileRef = useRef(null)
@@ -36,6 +58,34 @@ export default function Add() {
   const styleRef = useRef(null)
   const seasonRef = useRef(null)
   const materialRef = useRef(null)
+
+  const startAnalysisTimer = useCallback(() => {
+    const startTime = Date.now()
+    setAnalysisPhaseIndex(0)
+    setAnalysisElapsed(0)
+    setAnalysisTipIndex(Math.floor(Math.random() * ANALYSIS_TIPS.length))
+
+    timerRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000)
+      setAnalysisElapsed(elapsed)
+      const phase = ANALYSIS_PHASES.findIndex((p, i) => {
+        const next = ANALYSIS_PHASES[i + 1]
+        return !next || elapsed < next.duration
+      })
+      if (phase !== -1) setAnalysisPhaseIndex(phase)
+    }, 1000)
+
+    tipTimerRef.current = setInterval(() => {
+      setAnalysisTipIndex((prev) => (prev + 1) % ANALYSIS_TIPS.length)
+    }, 6000)
+  }, [])
+
+  const stopAnalysisTimer = useCallback(() => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    if (tipTimerRef.current) { clearInterval(tipTimerRef.current); tipTimerRef.current = null }
+  }, [])
+
+  useEffect(() => () => stopAnalysisTimer(), [stopAnalysisTimer])
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0]
@@ -91,8 +141,9 @@ export default function Add() {
       return
     }
 
-    setStatus('小助手分析中，请稍候...')
+    setStatus('analyzing')
     setAnalysisUnavailable(false)
+    startAnalysisTimer()
 
     const controller = new AbortController()
     setAnalysisController(controller)
@@ -104,7 +155,8 @@ export default function Add() {
       const formData = new FormData()
       formData.append('image', file)
 
-      const res = await axios.post('/clothes/analyze', formData, {
+      const endpoint = analysisMode === 'vision' ? '/clothes/analyze-vision' : '/clothes/analyze'
+      const res = await axios.post(endpoint, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
         signal: controller.signal,
         timeout: UPLOAD_TIMEOUT,
@@ -115,6 +167,9 @@ export default function Add() {
       }
 
       const data = JSON.parse(res.data)
+      if (res.meta?.elapsed) {
+        console.log(`[分析耗时] 模式: ${analysisMode}, 服务端耗时: ${res.meta.elapsed}`)
+      }
       const normalizedType = normalizeClothesTypeInput(data.type || '')
       typeRef.current.value = normalizedType.value
       colorRef.current.value = data.color || ''
@@ -134,6 +189,7 @@ export default function Add() {
     } finally {
       setStatus('')
       setAnalysisController(null)
+      stopAnalysisTimer()
     }
   }
 
@@ -299,7 +355,21 @@ export default function Add() {
                 <span>正在压缩图片...</span>
               </div>
             )}
-            {status && <div className={styles.statusOverlay}>{status}</div>}
+            {status === 'analyzing' && (
+              <div className={styles.analysisOverlay}>
+                <div className={styles.analysisContent}>
+                  <div className={styles.analysisSpinner}></div>
+                  <div className={styles.analysisMessage}>
+                    {ANALYSIS_PHASES[analysisPhaseIndex]?.message}
+                  </div>
+                  <div className={styles.analysisTimer}>{analysisElapsed}s</div>
+                  <div className={styles.analysisTip}>
+                    <span className={styles.tipIcon}>💡</span>
+                    {ANALYSIS_TIPS[analysisTipIndex]}
+                  </div>
+                </div>
+              </div>
+            )}
           </label>
           <input
             ref={fileRef}
@@ -316,8 +386,23 @@ export default function Add() {
         </div>
 
         <div className={styles.analyzeBtn}>
-          <Button color="success" onClick={analyzeClothes} disabled={!imageUrl || compressing}>
-            分析衣物
+          <div className={styles.modeSwitch}>
+            <span
+              className={analysisMode === 'coze' ? styles.modeActive : styles.modeInactive}
+              onClick={() => !status && setAnalysisMode('coze')}
+            >标准</span>
+            <span
+              className={analysisMode === 'vision' ? styles.modeActive : styles.modeInactive}
+              onClick={() => !status && setAnalysisMode('vision')}
+            >快速</span>
+          </div>
+          <Button
+            color="success"
+            onClick={analyzeClothes}
+            disabled={!imageUrl || compressing || !!status}
+            loading={status === 'analyzing'}
+          >
+            {status === 'analyzing' ? '分析中...' : '分析衣物'}
           </Button>
           {analysisController ? (
             <Button color="warning" onClick={cancelAnalysis} style={{ marginLeft: 8 }}>

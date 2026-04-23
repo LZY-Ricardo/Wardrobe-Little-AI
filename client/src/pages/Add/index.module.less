@@ -327,6 +327,40 @@
             margin-top: 16px;
             display: flex;
             justify-content: center;
+            align-items: center;
+            gap: 10px;
+
+            .modeSwitch {
+                display: flex;
+                border-radius: 8px;
+                overflow: hidden;
+                border: 1px solid rgba(15, 23, 42, 0.10);
+                background: rgba(15, 23, 42, 0.02);
+            }
+
+            .modeActive {
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 600;
+                background: #1677ff;
+                color: #fff;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+
+            .modeInactive {
+                padding: 4px 10px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #94a3b8;
+                cursor: pointer;
+                transition: all 0.2s;
+
+                &:hover {
+                    color: #64748b;
+                    background: rgba(15, 23, 42, 0.04);
+                }
+            }
         }
 
         .detail {
@@ -466,6 +500,86 @@
     box-shadow:
         0 8px 32px rgba(15, 23, 42, 0.20),
         inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.analysisOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    animation: fadeIn 0.3s ease;
+
+    .analysisContent {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 16px;
+    }
+
+    .analysisSpinner {
+        width: 36px;
+        height: 36px;
+        border: 3px solid rgba(22, 119, 255, 0.15);
+        border-top-color: #60a5fa;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        margin-bottom: 4px;
+        box-shadow: 0 0 16px rgba(96, 165, 250, 0.25);
+    }
+
+    .analysisMessage {
+        color: #f1f5f9;
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        animation: phaseFadeIn 0.4s ease;
+    }
+
+    .analysisTimer {
+        color: rgba(148, 163, 184, 0.7);
+        font-size: 13px;
+        font-weight: 500;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .analysisTip {
+        color: rgba(203, 213, 225, 0.6);
+        font-size: 12px;
+        font-weight: 400;
+        margin-top: 4px;
+        text-align: center;
+        line-height: 1.5;
+        max-width: 200px;
+        animation: tipFadeIn 0.5s ease;
+
+        .tipIcon {
+            margin-right: 4px;
+        }
+    }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes phaseFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes tipFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 /* dark theme */

@@ -1,6 +1,7 @@
 const Router = require('@koa/router')
 const router = new Router()
 const { analyzeClothes, generatePreview } = require('../controllers/clothesApi');
+const { analyzeClothesVision } = require('../controllers/clothesVision');
 const multer = require('@koa/multer');
 const upload = multer({ 
     storage: multer.memoryStorage(),
@@ -28,8 +29,11 @@ router.prefix('/clothes')
 
 const MAX_IMAGE_BYTES = 1 * 1024 * 1024
 
-// 分析衣物
+// 分析衣物（Coze 工作流）
 router.post('/analyze', upload.single('image'), analyzeClothes);
+
+// 分析衣物（SiliconFlow 视觉模型，测试用）
+router.post('/analyze-vision', upload.single('image'), analyzeClothesVision);
 
 // 上传衣物
 router.post('/uploadCloth', verify(), async (ctx) => {
