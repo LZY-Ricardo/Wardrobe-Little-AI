@@ -106,12 +106,22 @@ const buildAdviceTags = (tempValue, weatherText) => {
   return Array.from(new Set(tags)).slice(0, 4)
 }
 
+const GEO_STATUS = {
+  IDLE: 'idle',
+  REQUESTING: 'requesting',
+  DENIED: 'denied',
+  UNAVAILABLE: 'unavailable',
+  ERROR: 'error',
+  WEATHER_ERROR: 'weather_error',
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const [clothesData, setClothesData] = useState([])
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
-  const [weather, setWeather] = useState(defaultWeather)
+  const [weather, setWeather] = useState(null)
+  const [geoStatus, setGeoStatus] = useState(GEO_STATUS.IDLE)
 
   const closetStats = useMemo(() => {
     const list = Array.isArray(clothesData) ? clothesData : []
@@ -157,6 +167,9 @@ export default function Home() {
               },
             })
           : await axios.get('/weather/today')
+        if (res?.data?.needsGeolocation) {
+          return null
+        }
         if (res?.data) {
           setWeather({
             city: res.data.city || defaultWeather.city,
@@ -168,8 +181,8 @@ export default function Home() {
         }
         return res?.data || null
       } catch (err) {
-        console.warn('天气接口不可用，使用兜底数据', err)
-        setWeather(defaultWeather)
+        console.warn('天气接口不可用', err)
+        if (coords) setGeoStatus(GEO_STATUS.WEATHER_ERROR)
         return null
       }
     }
@@ -190,17 +203,19 @@ export default function Home() {
 
     const requestGeo = async () => {
       if (cachedCoords) return
-      if (!isGeoSupported() || !isSecureGeoContext()) return
+      if (!isGeoSupported() || !isSecureGeoContext()) {
+        setGeoStatus(GEO_STATUS.UNAVAILABLE)
+        return
+      }
       if (!hasLoginSession()) return
 
       const permissionState = await getGeoPermissionState()
       logWeatherGeo('[weather] 定位请求已触发', { permissionState })
-      const askedAt =
-        typeof cached?.askedAt === 'number' ? cached.askedAt : cached?.asked ? Date.now() : 0
 
       if (permissionState === 'denied') {
+        setGeoStatus(GEO_STATUS.DENIED)
         writeSessionJson(WEATHER_GEO_CACHE_KEY, {
-          askedAt: askedAt || Date.now(),
+          askedAt: Date.now(),
           coords: null,
           coordsAt: null,
           lastErrorCode: 1,
@@ -209,8 +224,13 @@ export default function Home() {
         return
       }
 
+      const askedAt =
+        typeof cached?.askedAt === 'number' ? cached.askedAt : cached?.asked ? Date.now() : 0
+
       const shouldRequest = permissionState === 'granted' || !askedAt
       if (!shouldRequest) return
+
+      setGeoStatus(GEO_STATUS.REQUESTING)
 
       const nextAskedAt = askedAt || Date.now()
       writeSessionJson(WEATHER_GEO_CACHE_KEY, {
@@ -231,6 +251,7 @@ export default function Home() {
           longitude: position.coords.longitude,
         }
         logWeatherGeo('[weather] 定位成功', coords)
+        setGeoStatus(GEO_STATUS.IDLE)
         writeSessionJson(WEATHER_GEO_CACHE_KEY, {
           askedAt: nextAskedAt,
           coords,
@@ -253,6 +274,11 @@ export default function Home() {
 
       const onError = (geoError) => {
         logWeatherGeo('[weather] 定位失败', { code: geoError?.code, message: geoError?.message })
+        if (geoError?.code === 1) {
+          setGeoStatus(GEO_STATUS.DENIED)
+        } else {
+          setGeoStatus(GEO_STATUS.ERROR)
+        }
         writeSessionJson(WEATHER_GEO_CACHE_KEY, {
           askedAt: nextAskedAt,
           coords: null,
@@ -293,6 +319,78 @@ export default function Home() {
 
     void requestGeo()
   }, [])
+
+  const handleRetryGeo = () => {
+    writeSessionJson(WEATHER_GEO_CACHE_KEY, null)
+    setGeoStatus(GEO_STATUS.REQUESTING)
+
+    const onSuccess = async (position) => {
+      const coords = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      }
+      logWeatherGeo('[weather] 重试定位成功', coords)
+      writeSessionJson(WEATHER_GEO_CACHE_KEY, {
+        askedAt: Date.now(),
+        coords,
+        coordsAt: Date.now(),
+        lastErrorCode: null,
+        lastErrorAt: null,
+      })
+      setGeoStatus(GEO_STATUS.IDLE)
+      await fetchWeather(coords)
+    }
+
+    const onError = (geoError) => {
+      logWeatherGeo('[weather] 重试定位失败', { code: geoError?.code, message: geoError?.message })
+      if (geoError?.code === 1) {
+        setGeoStatus(GEO_STATUS.DENIED)
+      } else {
+        setGeoStatus(GEO_STATUS.ERROR)
+      }
+    }
+
+    if (!isGeoSupported() || !isSecureGeoContext()) {
+      setGeoStatus(GEO_STATUS.UNAVAILABLE)
+      return
+    }
+
+    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
+      enableHighAccuracy: false,
+      timeout: 15000,
+      maximumAge: 0,
+    })
+  }
+
+  const fetchWeather = async (coords) => {
+    try {
+      const res = coords
+        ? await axios.get('/weather/today', {
+            params: {
+              lat: coords.latitude,
+              lon: coords.longitude,
+            },
+          })
+        : await axios.get('/weather/today')
+      if (res?.data?.needsGeolocation) {
+        return null
+      }
+      if (res?.data) {
+        setWeather({
+          city: res.data.city || defaultWeather.city,
+          temp: res.data.temp || defaultWeather.temp,
+          text: res.data.text || defaultWeather.text,
+          weatherCode: typeof res.data.weatherCode === 'number' ? res.data.weatherCode : defaultWeather.weatherCode,
+          isDay: typeof res.data.isDay === 'boolean' ? res.data.isDay : defaultWeather.isDay,
+        })
+      }
+      return res?.data || null
+    } catch (err) {
+      console.warn('天气接口不可用', err)
+      if (coords) setGeoStatus(GEO_STATUS.WEATHER_ERROR)
+      return null
+    }
+  }
 
   const quickEntries = useMemo(
     () => [
@@ -390,66 +488,114 @@ export default function Home() {
     <div className={styles.home}>
       <div className={styles.header}>
         <div className={styles['header-title']}>首页</div>
-        <div className={styles['header-weather']}>
-          <WeatherIcon
-            weatherCode={weather.weatherCode}
-            isDay={weather.isDay}
-            text={weather.text}
-            className={styles['weather-icon']}
-          />
-          {weather.city} · {weather.temp} · {weather.text}
-        </div>
+        {weather ? (
+          <div className={styles['header-weather']}>
+            <WeatherIcon
+              weatherCode={weather.weatherCode}
+              isDay={weather.isDay}
+              text={weather.text}
+              className={styles['weather-icon']}
+            />
+            {weather.city} · {weather.temp} · {weather.text}
+          </div>
+        ) : (
+          <div className={styles['header-weather-pending']}>
+            {geoStatus === GEO_STATUS.REQUESTING ? '定位中...' : '未获取定位'}
+          </div>
+        )}
         <div className={styles['header-actions']}>
           <DarkModeToggle />
         </div>
       </div>
 
       <div className={styles.content}>
-        <div className={styles['today-card']}>
-          <div className={styles['today-top']}>
-            <div>
-              <div className={styles['today-title']}>今日建议</div>
-              <div className={styles['today-subtitle']}>
-                {weather.city} · {weather.temp} · {weather.text}
+        {weather ? (
+          <div className={styles['today-card']}>
+            <div className={styles['today-top']}>
+              <div>
+                <div className={styles['today-title']}>今日建议</div>
+                <div className={styles['today-subtitle']}>
+                  {weather.city} · {weather.temp} · {weather.text}
+                </div>
+              </div>
+              <div className={styles['today-tags']}>
+                {adviceTags.map((tag) => (
+                  <span key={tag} className={styles['today-tag']}>
+                    {tag}
+                  </span>
+                ))}
               </div>
             </div>
-            <div className={styles['today-tags']}>
-              {adviceTags.map((tag) => (
-                <span key={tag} className={styles['today-tag']}>
-                  {tag}
-                </span>
+
+            <div className={styles['today-desc']}>{adviceText}</div>
+
+            <div className={styles['today-scenes']}>
+              {sceneShortcuts.map((scene) => (
+                <button
+                  key={scene}
+                  type="button"
+                  className={styles['scene-chip']}
+                  onClick={() => navigate('/recommend', { state: { presetScene: scene } })}
+                >
+                  {scene}
+                </button>
               ))}
             </div>
-          </div>
 
-          <div className={styles['today-desc']}>{adviceText}</div>
-
-          <div className={styles['today-scenes']}>
-            {sceneShortcuts.map((scene) => (
+            <div className={styles['today-actions']}>
               <button
-                key={scene}
                 type="button"
-                className={styles['scene-chip']}
-                onClick={() => navigate('/recommend', { state: { presetScene: scene } })}
+                className={styles['btn-primary']}
+                onClick={() => (clothesData?.length ? navigate('/recommend') : navigate('/add'))}
               >
-                {scene}
+                {clothesData?.length ? '去场景推荐' : '去添加衣物'}
               </button>
-            ))}
+              <button type="button" className={styles['btn-secondary']} onClick={() => navigate('/match')}>
+                去搭配中心
+              </button>
+            </div>
           </div>
-
-          <div className={styles['today-actions']}>
-            <button
-              type="button"
-              className={styles['btn-primary']}
-              onClick={() => (clothesData?.length ? navigate('/recommend') : navigate('/add'))}
-            >
-              {clothesData?.length ? '去场景推荐' : '去添加衣物'}
-            </button>
-            <button type="button" className={styles['btn-secondary']} onClick={() => navigate('/match')}>
-              去搭配中心
-            </button>
+        ) : (
+          <div className={styles['geo-prompt-card']}>
+            <div className={styles['geo-prompt-icon']}>
+              <SvgIcon iconName="icon-zhinengkefu" className={styles['geo-prompt-svg']} />
+            </div>
+            <div className={styles['geo-prompt-title']}>
+              {geoStatus === GEO_STATUS.DENIED
+                ? '定位权限已被拒绝'
+                : geoStatus === GEO_STATUS.UNAVAILABLE
+                  ? '当前环境不支持定位'
+                  : geoStatus === GEO_STATUS.WEATHER_ERROR
+                    ? '天气服务暂时不可用'
+                    : geoStatus === GEO_STATUS.ERROR
+                      ? '定位失败，请重试'
+                      : geoStatus === GEO_STATUS.REQUESTING
+                        ? '正在获取您的位置...'
+                        : '开启定位获取天气建议'}
+            </div>
+            <div className={styles['geo-prompt-desc']}>
+              {geoStatus === GEO_STATUS.DENIED
+                ? '请在浏览器设置中允许本站访问您的位置，然后刷新页面。'
+                : geoStatus === GEO_STATUS.UNAVAILABLE
+                  ? '请在 HTTPS 环境或 localhost 下访问以使用定位功能。'
+                  : geoStatus === GEO_STATUS.WEATHER_ERROR
+                    ? '定位已成功，但获取天气信息失败，请稍后重试。'
+                    : geoStatus === GEO_STATUS.REQUESTING
+                      ? '浏览器正在请求定位权限，请在弹窗中点击"允许"。'
+                      : '需要获取您的位置才能提供当地天气和穿搭建议。'}
+            </div>
+            {geoStatus !== GEO_STATUS.DENIED && geoStatus !== GEO_STATUS.UNAVAILABLE && (
+              <button
+                type="button"
+                className={styles['geo-prompt-btn']}
+                onClick={handleRetryGeo}
+                disabled={geoStatus === GEO_STATUS.REQUESTING}
+              >
+                {geoStatus === GEO_STATUS.REQUESTING ? '定位中...' : '开启定位'}
+              </button>
+            )}
           </div>
-        </div>
+        )}
 
         <div className={styles.section}>
           <div className={styles['section-title']}>快捷入口</div>

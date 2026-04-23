@@ -602,6 +602,100 @@
                 transform: scale(0.98);
             }
         }
+
+        .header-weather-pending {
+            font-size: 14px;
+            color: #94a3b8;
+            font-weight: 500;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: rgba(15, 23, 42, 0.04);
+            border: 1px dashed rgba(15, 23, 42, 0.12);
+        }
+
+        .geo-prompt-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px) saturate(180%);
+            border: 1px solid rgba(22, 119, 255, 0.12);
+            box-shadow: var(--shadow-md);
+            border-radius: 20px;
+            padding: 32px 24px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+            &:hover {
+                box-shadow: var(--shadow-hover);
+                border-color: rgba(22, 119, 255, 0.18);
+            }
+        }
+
+        .geo-prompt-icon {
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            background: rgba(22, 119, 255, 0.08);
+            border: 1px solid rgba(22, 119, 255, 0.15);
+            box-shadow: 0 2px 8px rgba(22, 119, 255, 0.12);
+        }
+
+        .geo-prompt-svg {
+            font-size: 28px;
+            color: #1677ff;
+        }
+
+        .geo-prompt-title {
+            font-weight: 700;
+            font-size: 17px;
+            color: #0f172a;
+            line-height: 24px;
+        }
+
+        .geo-prompt-desc {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.6;
+            max-width: 280px;
+            font-weight: 500;
+        }
+
+        .geo-prompt-btn {
+            margin-top: 4px;
+            padding: 10px 28px;
+            border-radius: 12px;
+            border: none;
+            background: linear-gradient(135deg, #1677ff 0%, #0284c7 100%);
+            color: #fff;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow:
+                0 4px 12px rgba(22, 119, 255, 0.30),
+                0 2px 6px rgba(22, 119, 255, 0.20);
+
+            &:hover:not(:disabled) {
+                transform: translateY(-2px);
+                box-shadow:
+                    0 6px 16px rgba(22, 119, 255, 0.38),
+                    0 2px 6px rgba(22, 119, 255, 0.22);
+            }
+
+            &:active:not(:disabled) {
+                transform: translateY(0);
+            }
+
+            &:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+            }
+        }
     }
 }
 
@@ -863,6 +957,53 @@
 
         &:hover {
             color: #93c5fd;
+        }
+    }
+
+    .home .header-weather-pending {
+        color: #64748b;
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .home .content .geo-prompt-card {
+        background: rgba(30, 41, 59, 0.85);
+        backdrop-filter: blur(12px) saturate(180%);
+        border-color: rgba(96, 165, 250, 0.15);
+
+        &:hover {
+            border-color: rgba(96, 165, 250, 0.25);
+        }
+    }
+
+    .home .content .geo-prompt-icon {
+        background: rgba(96, 165, 250, 0.12);
+        border-color: rgba(96, 165, 250, 0.20);
+        box-shadow: 0 2px 8px rgba(96, 165, 250, 0.18);
+    }
+
+    .home .content .geo-prompt-svg {
+        color: #60a5fa;
+    }
+
+    .home .content .geo-prompt-title {
+        color: #f1f5f9;
+    }
+
+    .home .content .geo-prompt-desc {
+        color: #94a3b8;
+    }
+
+    .home .content .geo-prompt-btn {
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 100%);
+        box-shadow:
+            0 4px 12px rgba(96, 165, 250, 0.30),
+            0 2px 6px rgba(96, 165, 250, 0.20);
+
+        &:hover:not(:disabled) {
+            box-shadow:
+                0 6px 16px rgba(96, 165, 250, 0.38),
+                0 2px 6px rgba(96, 165, 250, 0.22);
         }
     }
 }
