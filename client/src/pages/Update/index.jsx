@@ -188,7 +188,7 @@ export default function Update() {
 
       Toast.show({ icon: 'success', content: '分析完成', duration: 1200 })
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (axios.isCancel(error) || error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
         Toast.show({ icon: 'fail', content: '已取消分析', duration: 1000 })
       } else {
         console.error('分析衣物错误:', error)
@@ -293,7 +293,7 @@ export default function Update() {
       useClosetStore.getState().invalidateCache()
       setTimeout(() => navigate(-1), 800)
     } catch (error) {
-      if (error.name === 'AbortError') {
+      if (axios.isCancel(error) || error.name === 'AbortError' || error.code === 'ERR_CANCELED') {
         Toast.show({ icon: 'fail', content: '已取消更新', duration: 1200 })
       } else {
         console.error('更新衣物失败:', error)
