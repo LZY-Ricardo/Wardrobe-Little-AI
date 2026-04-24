@@ -1,5 +1,5 @@
 ﻿import React, { useState } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
@@ -177,12 +177,14 @@ const isFavorited = (value) => value === 1 || value === true || value === '1' ||
 
 export default function Recommend({ embedded = false }) {
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const fetchAllSuits = useSuitStore((s) => s.fetchAllSuits)
   const invalidateSuitCache = useSuitStore((s) => s.invalidateCache)
   const lastPresetKeyRef = React.useRef('')
   const presetScene =
-    typeof location?.state?.presetScene === 'string' ? location.state.presetScene.trim() : ''
+    searchParams.get('presetScene')?.trim() ||
+    (typeof location?.state?.presetScene === 'string' ? location.state.presetScene.trim() : '')
 
   const [scene, setScene] = useState('')
   const [sceneSuits, setSceneSuits] = useState([])
@@ -418,11 +420,11 @@ export default function Recommend({ embedded = false }) {
 
   React.useEffect(() => {
     if (!presetScene) return
-    if (lastPresetKeyRef.current === location.key) return
-    lastPresetKeyRef.current = location.key
+    if (lastPresetKeyRef.current === presetScene) return
+    lastPresetKeyRef.current = presetScene
     setScene(presetScene)
     void generateSceneSuits(presetScene)
-  }, [generateSceneSuits, location.key, presetScene])
+  }, [generateSceneSuits, presetScene])
 
   const renderContent = () => {
     if (loading) {
@@ -490,6 +492,27 @@ export default function Recommend({ embedded = false }) {
                   onClick={() => void createOutfitLogFromSuit(item)}
                 >
                   记录穿搭
+                </button>
+                <button
+                  type="button"
+                  className={styles['secondary-action']}
+                  onClick={() =>
+                    navigate('/unified-agent', {
+                      state: {
+                        presetTask: `继续处理当前${item.scene || scene || '推荐'}结果`,
+                        latestResult: {
+                          taskType: 'recommendation',
+                          summary: item.description,
+                          result: {
+                            suits: [item],
+                            recommendationHistoryId: latestRecommendationId,
+                          },
+                        },
+                      },
+                    })
+                  }
+                >
+                  交给 Agent
                 </button>
               </div>
               {Boolean(item.items?.length) && (

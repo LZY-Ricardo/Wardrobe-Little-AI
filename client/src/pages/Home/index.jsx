@@ -535,7 +535,7 @@ export default function Home() {
                   key={scene}
                   type="button"
                   className={styles['scene-chip']}
-                  onClick={() => navigate('/recommend', { state: { presetScene: scene } })}
+                  onClick={() => navigate(`/match?tab=recommend&presetScene=${encodeURIComponent(scene)}`)}
                 >
                   {scene}
                 </button>

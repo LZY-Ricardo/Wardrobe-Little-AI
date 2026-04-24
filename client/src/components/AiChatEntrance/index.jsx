@@ -64,7 +64,7 @@ export default function AiChatEntrance() {
 
     if (autoCollapseTimerRef.current) window.clearTimeout(autoCollapseTimerRef.current)
     autoCollapseTimerRef.current = null
-    navigate('/aichat')
+    navigate('/unified-agent')
   }
 
   return (

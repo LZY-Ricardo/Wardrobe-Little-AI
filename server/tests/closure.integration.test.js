@@ -1,7 +1,7 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
 
-const { query } = require('../models/db')
+const { pool, query } = require('../models/db')
 const { getTodayInChina } = require('../utils/date')
 const {
   createRecommendationHistory,
@@ -151,4 +151,10 @@ test('closure flow keeps recommendation state, profile insight and analytics con
       await query('DELETE FROM user WHERE id = ?', [userId])
     }
   }
+})
+
+test.after(async () => {
+  try {
+    await pool.promise().end()
+  } catch {}
 })

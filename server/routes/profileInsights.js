@@ -5,6 +5,7 @@ const {
   getProfileInsight,
   refreshProfileInsight,
   gatherSourceData,
+  updateConfirmationPreferences,
   buildWardrobeAnalytics,
 } = require('../controllers/profileInsights')
 
@@ -21,6 +22,12 @@ router.get('/', async (ctx) => {
 router.post('/refresh', async (ctx) => {
   const data = await refreshProfileInsight(ctx.userId)
   ctx.body = { code: 1, data, msg: '刷新成功' }
+})
+
+router.post('/preferences', async (ctx) => {
+  const body = ctx.request.body || {}
+  const data = await updateConfirmationPreferences(ctx.userId, body)
+  ctx.body = { code: 1, data, msg: '更新成功' }
 })
 
 router.get('/analytics', async (ctx) => {

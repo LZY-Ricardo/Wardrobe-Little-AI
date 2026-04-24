@@ -16,6 +16,8 @@ const suitsRouter = require('./routes/suits')
 const recommendationsRouter = require('./routes/recommendations')
 const outfitLogsRouter = require('./routes/outfitLogs')
 const profileInsightsRouter = require('./routes/profileInsights')
+const agentRouter = require('./routes/agent')
+const unifiedAgentRouter = require('./routes/unifiedAgent')
 const { bodyParser } = require('@koa/bodyparser');
 const cors = require('@koa/cors')
 
@@ -51,6 +53,10 @@ app.use(outfitLogsRouter.routes());
 app.use(outfitLogsRouter.allowedMethods());
 app.use(profileInsightsRouter.routes());
 app.use(profileInsightsRouter.allowedMethods());
+app.use(agentRouter.routes());
+app.use(agentRouter.allowedMethods());
+app.use(unifiedAgentRouter.routes());
+app.use(unifiedAgentRouter.allowedMethods());
 app.listen(config.port, () => {
   console.log(`Server is running on port ${config.port}`)
 })

@@ -920,6 +920,9 @@ export default function Person() {
           <button type="button" className={styles.quickButton} onClick={() => navigate('/wardrobe-analytics')}>
             衣橱分析
           </button>
+          <button type="button" className={styles.quickButton} onClick={() => navigate('/unified-agent')}>
+            Agent
+          </button>
         </div>
       </div>
 
@@ -1335,6 +1338,4 @@ export default function Person() {
     </div>
   )
 }
-
-
 

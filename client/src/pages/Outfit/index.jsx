@@ -510,6 +510,20 @@ export default function Outfit() {
                   </button>
                   <button
                     type="button"
+                    className={styles['log-button']}
+                    onClick={() =>
+                      navigate('/unified-agent', {
+                        state: {
+                          presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
+                          selectedCloth: selectedItem,
+                        },
+                      })
+                    }
+                  >
+                    交给 Agent
+                  </button>
+                  <button
+                    type="button"
                     className={styles['favorite-button']}
                     disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
                     onClick={() => void toggleFavorite(selectedItem)}

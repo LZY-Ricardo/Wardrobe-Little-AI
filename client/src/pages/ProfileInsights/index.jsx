@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Button } from 'antd-mobile'
+import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
 import { ErrorBanner, Loading, Empty } from '@/components/Feedback'
+import { useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 
 const renderTags = (items = [], emptyText = '暂无') => {
@@ -20,10 +21,12 @@ const renderTags = (items = [], emptyText = '暂无') => {
 }
 
 export default function ProfileInsights() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [savingPreferences, setSavingPreferences] = useState(false)
 
   const loadData = useCallback(async (forceRefresh = false) => {
     setStatus('loading')
@@ -51,6 +54,23 @@ export default function ProfileInsights() {
     setRefreshing(false)
   }
 
+  const handlePreferenceToggle = async () => {
+    if (!data) return
+    setSavingPreferences(true)
+    try {
+      const res = await axios.post('/profile-insights/preferences', {
+        lowRiskNoConfirm: !data.confirmationPreferences?.lowRiskNoConfirm,
+      })
+      setData(res?.data || null)
+      Toast.show({ content: '确认偏好已更新', duration: 1000 })
+    } catch (err) {
+      console.error('更新确认偏好失败:', err)
+      Toast.show({ content: err?.msg || '更新失败，请重试', duration: 1200 })
+    } finally {
+      setSavingPreferences(false)
+    }
+  }
+
   if (status === 'loading') return <Loading text="生成偏好画像中..." />
   if (status === 'error') return <ErrorBanner message={error} onAction={() => loadData()} />
   if (!data) return <Empty description="暂无画像数据" />
@@ -65,6 +85,20 @@ export default function ProfileInsights() {
         <Button size="small" color="primary" loading={refreshing} onClick={handleRefresh}>
           刷新画像
         </Button>
+        <Button
+          size="small"
+          fill="outline"
+          onClick={() =>
+            navigate('/unified-agent', {
+              state: {
+                presetTask: '根据我的偏好画像给我一些建议',
+                latestProfile: data,
+              },
+            })
+          }
+        >
+          交给 Agent
+        </Button>
       </div>
 
       <div className={styles.summaryCard}>
@@ -72,6 +106,12 @@ export default function ProfileInsights() {
         <div className={styles.summaryText}>{data.summary || '继续使用系统后，这里会生成更完整的画像。'}</div>
         <div className={styles.updateTime}>
           更新时间：{data.updateTime ? new Date(data.updateTime).toLocaleString() : '--'}
+        </div>
+        <div className={styles.preferenceRow}>
+          <span>低风险操作免确认</span>
+          <Button size="mini" color="primary" loading={savingPreferences} onClick={handlePreferenceToggle}>
+            {data.confirmationPreferences?.lowRiskNoConfirm ? '已开启' : '未开启'}
+          </Button>
         </div>
       </div>
 

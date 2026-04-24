@@ -105,9 +105,50 @@ const getProfileInsight = async (userId, { forceRefresh = false } = {}) => {
   return refreshProfileInsight(userId)
 }
 
+const updateConfirmationPreferences = async (userId, patch = {}) => {
+  const current = await getProfileInsight(userId, {})
+  const nextPreferences = {
+    lowRiskNoConfirm: Boolean(
+      Object.prototype.hasOwnProperty.call(patch, 'lowRiskNoConfirm')
+        ? patch.lowRiskNoConfirm
+        : current?.confirmationPreferences?.lowRiskNoConfirm
+    ),
+  }
+  const now = Date.now()
+
+  await query(
+    `INSERT INTO user_style_profile (
+      user_id, preferred_colors, preferred_styles, frequent_scenes, frequent_seasons,
+      liked_reason_tags, confirmation_preferences, summary, update_time
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      confirmation_preferences = VALUES(confirmation_preferences),
+      update_time = VALUES(update_time)`,
+    [
+      userId,
+      JSON.stringify(current?.preferredColors || []),
+      JSON.stringify(current?.preferredStyles || []),
+      JSON.stringify(current?.frequentScenes || []),
+      JSON.stringify(current?.frequentSeasons || []),
+      JSON.stringify(current?.likedReasonTags || []),
+      JSON.stringify(nextPreferences),
+      current?.summary || '',
+      now,
+    ]
+  )
+
+  return {
+    ...(current || {}),
+    userId,
+    confirmationPreferences: nextPreferences,
+    updateTime: now,
+  }
+}
+
 module.exports = {
   gatherSourceData,
   getProfileInsight,
   refreshProfileInsight,
+  updateConfirmationPreferences,
   buildWardrobeAnalytics,
 }

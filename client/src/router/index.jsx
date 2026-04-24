@@ -18,6 +18,8 @@ const RecommendationHistory = React.lazy(() => import('../pages/RecommendationHi
 const OutfitLogs = React.lazy(() => import('../pages/OutfitLogs'))
 const ProfileInsights = React.lazy(() => import('../pages/ProfileInsights'))
 const WardrobeAnalytics = React.lazy(() => import('../pages/WardrobeAnalytics'))
+const Agent = React.lazy(() => import('../pages/Agent'))
+const UnifiedAgent = React.lazy(() => import('../pages/UnifiedAgent'))
 
 const isAuthed = () => {
   const token = useAuthStore.getState().accessToken || localStorage.getItem('access_token')
@@ -152,6 +154,22 @@ const routes = [
     element: (
       <ProtectedRoute>
         {withLayout(<WardrobeAnalytics />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/agent',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<Agent />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/unified-agent',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<UnifiedAgent />)}
       </ProtectedRoute>
     ),
   },

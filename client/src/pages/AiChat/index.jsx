@@ -6,7 +6,7 @@ import { Toast } from 'antd-mobile'
 import ReactMarkdown from 'react-markdown'
 import rehypeRaw from 'rehype-raw'
 import remarkGfm from 'remark-gfm'
-import { useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/store'
 
 const STREAM_TIMEOUT = 120000
@@ -38,6 +38,10 @@ const QUICK_PROMPTS = [
 ]
 
 export default function AiChat() {
+  return <Navigate to="/unified-agent" replace />
+}
+
+export function LegacyAiChatUnused() {
   const inputRef = useRef(null)
   const controllerRef = useRef(null)
   const messagesRef = useRef([])
