@@ -23,6 +23,12 @@ const safeParseUserInfo = () => {
   }
 }
 
+const PROGRESS_STAGES = [
+  { label: '正在上传图片...', sub: '准备你的衣物和模特照片', duration: 3000 },
+  { label: 'AI 正在生成搭配预览...', sub: '这可能需要一点时间', duration: 6000 },
+  { label: '即将完成...', sub: '搭配效果马上呈现', duration: Infinity },
+]
+
 export default function Match({ embedded = false }) {
   const navigate = useNavigate()
   const authUserInfo = useAuthStore((s) => s.userInfo)
@@ -39,6 +45,7 @@ export default function Match({ embedded = false }) {
   const [userInfo, setUserInfo] = useState(() => authUserInfo || safeParseUserInfo())
   const [userLoading, setUserLoading] = useState(false)
   const [loading, setLoading] = useState(false) // 加载中
+  const [progressStage, setProgressStage] = useState(0)
   const currentUserId = userInfo?.id || authUserInfo?.id || null
   const sex = userInfo?.sex || ''
   const characterModelRaw = userInfo?.characterModel || ''
@@ -133,32 +140,21 @@ export default function Match({ embedded = false }) {
   // 生成预览图
   const handleGenerate = async () => {
     if (!topClothes?.image || !bottomClothes?.image) {
-      Toast.show({
-        content: '请选择上衣和下衣',
-        duration: 1000,
-      })
+      Toast.show({ content: '请选择上衣和下衣', duration: 1000 })
       return
     }
     if (sex !== 'man' && sex !== 'woman') {
-      Toast.show({
-        content: '请您先设置性别',
-        duration: 1000,
-      })
+      Toast.show({ content: '请您先设置性别', duration: 1000 })
       navigate('/person')
       return
     }
     if (!characterModel) {
-      Toast.show({
-        content: '请您先设置人物模特',
-        duration: 1000,
-      })
+      Toast.show({ content: '请您先设置人物模特', duration: 1000 })
       navigate('/person')
       return
     }
 
-    // 调用后端接口 生成预览图
     try {
-      // 将 base64 转换成 Blob 再转换为 File
       const top = await fetch(topClothes.image)
       const bottom = await fetch(bottomClothes.image)
       const model = await fetch(characterModel)
@@ -171,7 +167,6 @@ export default function Match({ embedded = false }) {
       const bottomFile = new File([bottomBlob], 'bottom.jpg', { type: 'image/jpeg' })
       const modelFile = new File([modelBlob], 'model.jpg', { type: 'image/jpeg' })
 
-      // 创建FormData对象
       const formData = new FormData()
       formData.append('top', topFile)
       formData.append('bottom', bottomFile)
@@ -179,37 +174,33 @@ export default function Match({ embedded = false }) {
       formData.append('characterModel', modelFile)
 
       setLoading(true)
+      setProgressStage(0)
+
+      // 驱动进度阶段自动推进
+      const stageTimers = []
+      PROGRESS_STAGES.forEach((stage, i) => {
+        if (i === 0 || stage.duration === Infinity) return
+        const delay = PROGRESS_STAGES.slice(0, i).reduce((sum, s) => sum + s.duration, 0)
+        stageTimers.push(setTimeout(() => setProgressStage(i), delay))
+      })
 
       const res = await axios.post('/clothes/genPreview', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 90000,
       })
 
-      console.log('生成预览图响应:', res.data);
+      stageTimers.forEach(clearTimeout)
 
-      // 检查响应是否成功
       if (res && res.code === 1 && res.data) {
-        setPreviewImageUrl(res.data);
-        setShowPreview(true);
-        Toast.show({
-          content: '预览图生成成功！',
-          duration: 1000,
-        });
+        setPreviewImageUrl(res.data)
+        setShowPreview(true)
+        Toast.show({ content: '预览图生成成功！', duration: 1000 })
       } else {
-        Toast.show({
-          content: '预览图生成失败，请重试',
-          duration: 1000,
-        });
+        Toast.show({ content: '预览图生成失败，请重试', duration: 1000 })
       }
-
     } catch (error) {
-      console.log('生成预览图错误:', error);
-      Toast.show({
-        content: '预览图生成失败，请重试',
-        duration: 1000,
-      });
+      console.log('生成预览图错误:', error)
+      Toast.show({ content: '预览图生成失败，请重试', duration: 1000 })
     } finally {
       setLoading(false)
     }
@@ -228,7 +219,23 @@ export default function Match({ embedded = false }) {
     <div className={styles.match}>
 
       <div className={styles['match-loading']} style={{ display: (loading || userLoading) ? 'flex' : 'none' }}>
-        <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>{userLoading ? '正在获取用户信息...' : '正在生成中...'}</Loading>
+        {userLoading ? (
+          <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>正在获取用户信息...</Loading>
+        ) : (
+          <div className={styles['progress-panel']}>
+            <div className={styles['progress-spinner']}>
+              <Loading size="32px" color='#3f45ff' />
+            </div>
+            <div className={styles['progress-label']}>{PROGRESS_STAGES[progressStage]?.label}</div>
+            <div className={styles['progress-sub']}>{PROGRESS_STAGES[progressStage]?.sub}</div>
+            <div className={styles['progress-bar-track']}>
+              <div
+                className={styles['progress-bar-fill']}
+                style={{ width: `${Math.min(90, ((progressStage + 1) / PROGRESS_STAGES.length) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {embedded ? null : (

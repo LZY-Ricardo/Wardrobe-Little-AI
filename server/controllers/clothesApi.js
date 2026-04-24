@@ -151,76 +151,34 @@ const generatePreview = async (ctx) => {
             return
         }
 
-        const { topFile_id, bottomFile_id, modelFile_id, workflowResponse } = await cozeBreaker.exec(async () => {
-            // 1. 上传图片到coze 获取file_id
-            // 上传上装图片 获取file_id
-            const topFormData = new FormData()
-            topFormData.append('file', topFile.buffer, {
-                filename: topFile.originalname,
-                contentType: topFile.mimetype
-            });
-            const topUploadResponse = await axios.post(uploadUrl, topFormData, {
-                timeout: COZE_TIMEOUT_MS,
-                proxy: false,
-                headers: {
-                    'Authorization': `Bearer ${patToken}`,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-            if (topUploadResponse.data.code !== 0) {
-                const err = new Error('上装图片上传失败')
-                err.status = 502
-                throw err
+        const { workflowResponse } = await cozeBreaker.exec(async () => {
+            // 1. 并行上传 3 张图片到 Coze
+            const uploadHeaders = {
+                'Authorization': `Bearer ${patToken}`,
+                'Content-Type': 'multipart/form-data'
             }
-            const topFile_id = topUploadResponse.data.data.id;
-
-            // 上传下装图片 获取file_id
-            const bottomFormData = new FormData()
-            bottomFormData.append('file', bottomFile.buffer, {
-                filename: bottomFile.originalname,
-                contentType: bottomFile.mimetype
-            });
-            const bottomUploadResponse = await axios.post(uploadUrl, bottomFormData, {
-                timeout: COZE_TIMEOUT_MS,
-                proxy: false,
-                headers: {
-                    'Authorization': `Bearer ${patToken}`,
-                    'Content-Type': 'multipart/form-data'
-                }
-            });
-            if (bottomUploadResponse.data.code !== 0) {
-                const err = new Error('下装图片上传失败')
-                err.status = 502
-                throw err
+            const buildFormData = (file) => {
+                const fd = new FormData()
+                fd.append('file', file.buffer, { filename: file.originalname, contentType: file.mimetype })
+                return fd
             }
-            const bottomFile_id = bottomUploadResponse.data.data.id;
-
-            // 上传模特图片 获取file_id
-            const modelFormData = new FormData()
-            modelFormData.append('file', modelFile.buffer, {
-                filename: modelFile.originalname,
-                contentType: modelFile.mimetype
-            });
-            const modelUploadResponse = await axios.post(uploadUrl, modelFormData, {
-                timeout: COZE_TIMEOUT_MS,
-                proxy: false,
-                headers: {
-                    'Authorization': `Bearer ${patToken}`,
-                    'Content-Type': 'multipart/form-data'
+            const uploadOne = async (file, label) => {
+                const res = await axios.post(uploadUrl, buildFormData(file), {
+                    timeout: COZE_TIMEOUT_MS, proxy: false, headers: uploadHeaders
+                })
+                if (res.data.code !== 0) {
+                    const err = new Error(`${label}上传失败`)
+                    err.status = 502
+                    throw err
                 }
-            });
-            if (modelUploadResponse.data.code !== 0) {
-                const err = new Error('模特图片上传失败')
-                err.status = 502
-                throw err
+                return res.data.data.id
             }
-            const modelFile_id = modelUploadResponse.data.data.id;
-        
-        console.log('上装图片上传成功:', topFile_id);
-        console.log('下装图片上传成功:', bottomFile_id);
-        console.log('模特图片上传成功:', modelFile_id);
-        console.log('-----------------------------------------------');
-
+            const [topFile_id, bottomFile_id, modelFile_id] = await Promise.all([
+                uploadOne(topFile, '上装图片'),
+                uploadOne(bottomFile, '下装图片'),
+                uploadOne(modelFile, '模特图片'),
+            ])
+            console.log('图片上传完成:', { topFile_id, bottomFile_id, modelFile_id });
 
             // 2. 调用 coze 工作流
             const workflowResponse = await axios.post(workflowUrl, {
@@ -245,9 +203,8 @@ const generatePreview = async (ctx) => {
                 throw err
             }
             console.log('工作流响应数据:', workflowResponse.data.data);
-            console.log('-----------------------------------------------');
 
-            return { topFile_id, bottomFile_id, modelFile_id, workflowResponse }
+            return { workflowResponse }
         })
 
         // 解析返回结果
