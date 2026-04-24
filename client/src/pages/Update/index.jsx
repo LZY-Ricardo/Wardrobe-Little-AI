@@ -47,7 +47,6 @@ export default function Update() {
   const [uploadController, setUploadController] = useState(null)
   const [analysisController, setAnalysisController] = useState(null)
   const [analysisPhaseIndex, setAnalysisPhaseIndex] = useState(0)
-  const [analysisElapsed, setAnalysisElapsed] = useState(0)
   const [analysisTipIndex, setAnalysisTipIndex] = useState(0)
   const [analysisMode, setAnalysisMode] = useState('coze')
   const timerRef = useRef(null)
@@ -65,12 +64,10 @@ export default function Update() {
   const startAnalysisTimer = useCallback(() => {
     const startTime = Date.now()
     setAnalysisPhaseIndex(0)
-    setAnalysisElapsed(0)
     setAnalysisTipIndex(Math.floor(Math.random() * ANALYSIS_TIPS.length))
 
     timerRef.current = setInterval(() => {
       const elapsed = Math.floor((Date.now() - startTime) / 1000)
-      setAnalysisElapsed(elapsed)
       const phase = ANALYSIS_PHASES.findIndex((p, i) => {
         const next = ANALYSIS_PHASES[i + 1]
         return !next || elapsed < next.duration
@@ -369,7 +366,12 @@ export default function Update() {
                   <div className={styles.analysisMessage}>
                     {ANALYSIS_PHASES[analysisPhaseIndex]?.message}
                   </div>
-                  <div className={styles.analysisTimer}>{analysisElapsed}s</div>
+                  <div className={styles.analysisBarTrack}>
+                    <div
+                      className={styles.analysisBarFill}
+                      style={{ width: `${Math.min(95, ((analysisPhaseIndex + 1) / ANALYSIS_PHASES.length) * 100)}%` }}
+                    />
+                  </div>
                   <div className={styles.analysisTip}>
                     <span className={styles.tipIcon}>💡</span>
                     {ANALYSIS_TIPS[analysisTipIndex]}

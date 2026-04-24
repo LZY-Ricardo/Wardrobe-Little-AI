@@ -586,11 +586,19 @@
         animation: phaseFadeIn 0.4s ease;
     }
 
-    .analysisTimer {
-        color: rgba(148, 163, 184, 0.7);
-        font-size: 13px;
-        font-weight: 500;
-        font-variant-numeric: tabular-nums;
+    .analysisBarTrack {
+        width: 140px;
+        height: 4px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.12);
+        overflow: hidden;
+    }
+
+    .analysisBarFill {
+        height: 100%;
+        border-radius: 2px;
+        background: linear-gradient(90deg, #60a5fa, #818cf8);
+        transition: width 0.6s ease;
     }
 
     .analysisTip {
