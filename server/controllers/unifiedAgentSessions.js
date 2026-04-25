@@ -1,27 +1,14 @@
 ﻿const { query, withTransaction } = require('../models/db')
 const { deriveSessionTitle } = require('./unifiedAgent.helpers')
+const {
+  hydrateMessage,
+  normalizeConfirmationStatus,
+  normalizeMessageMeta,
+  normalizeMessageType,
+} = require('./unifiedAgentMessageMeta')
 
 const isUnknownMetaJsonColumnError = (error) =>
   String(error?.message || '').includes("Unknown column 'meta_json'")
-
-const parseMessageMeta = (raw) => {
-  if (!raw) return null
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return parsed && typeof parsed === 'object' ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-const hydrateMessage = (message) => {
-  if (!message) return message
-  const meta = parseMessageMeta(message.meta_json)
-  return {
-    ...message,
-    attachments: Array.isArray(meta?.attachments) ? meta.attachments : [],
-  }
-}
 
 const buildPreviewContentSql = () => `
   CASE
@@ -130,11 +117,12 @@ const appendMessage = async (userId, sessionId, payload = {}) => {
   const now = Date.now()
   const role = String(payload.role || 'user').trim() || 'user'
   const content = String(payload.content || '').trim()
-  const messageType = String(payload.messageType || 'chat').trim() || 'chat'
-  const metaJson = payload.meta ? JSON.stringify(payload.meta) : null
+  const messageType = normalizeMessageType(payload.messageType || 'chat')
+  const normalizedMeta = normalizeMessageMeta(payload.meta)
+  const metaJson = normalizedMeta ? JSON.stringify(normalizedMeta) : null
   const taskId = payload.taskId || null
   const toolName = String(payload.toolName || '').trim()
-  const confirmationStatus = String(payload.confirmationStatus || '').trim()
+  const confirmationStatus = normalizeConfirmationStatus(payload.confirmationStatus)
 
   if (!content) {
     const error = new Error('消息内容不能为空')

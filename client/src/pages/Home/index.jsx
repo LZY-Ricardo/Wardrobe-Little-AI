@@ -140,6 +140,18 @@ export default function Home() {
   const tempValue = useMemo(() => parseTempValue(weather?.temp), [weather?.temp])
   const adviceText = useMemo(() => buildAdviceText(tempValue, weather?.text), [tempValue, weather?.text])
   const adviceTags = useMemo(() => buildAdviceTags(tempValue, weather?.text), [tempValue, weather?.text])
+  const latestWeatherContext = useMemo(() => {
+    if (!weather) return null
+    return {
+      city: weather.city || '',
+      temp: weather.temp || '',
+      text: weather.text || '',
+      weatherCode: weather.weatherCode ?? null,
+      isDay: weather.isDay ?? null,
+      adviceText,
+      adviceTags,
+    }
+  }, [adviceTags, adviceText, weather])
 
   useEffect(() => {
     const fetchClothes = async () => {
@@ -479,6 +491,19 @@ export default function Home() {
           <button type="button" className={styles['link-btn']} onClick={() => navigate('/outfit')}>
             去管理衣橱
           </button>
+          <button
+            type="button"
+            className={styles['link-btn']}
+            onClick={() =>
+              navigate('/unified-agent', {
+                state: {
+                  presetTask: '结合我当前的天气、衣橱和使用情况，直接给我一个今天的穿搭建议',
+                },
+              })
+            }
+          >
+            交给 Agent
+          </button>
         </div>
       </div>
     )
@@ -550,8 +575,19 @@ export default function Home() {
               >
                 {clothesData?.length ? '去场景推荐' : '去添加衣物'}
               </button>
-              <button type="button" className={styles['btn-secondary']} onClick={() => navigate('/match')}>
-                去搭配中心
+              <button
+                type="button"
+                className={styles['btn-secondary']}
+                onClick={() =>
+                  navigate('/unified-agent', {
+                    state: {
+                      presetTask: '结合当前天气和我的衣橱，直接告诉我今天怎么穿',
+                      latestWeather: latestWeatherContext,
+                    },
+                  })
+                }
+              >
+                交给 Agent
               </button>
             </div>
           </div>

@@ -85,6 +85,48 @@ export default function Match({ embedded = false }) {
         : !topClothes && bottomClothes
           ? '已选下衣，再点选一件上衣，即刻预览搭配效果'
           : '搭配已就绪，点击下方按钮生成预览图'
+  const currentLookClothes = [topClothes, bottomClothes].filter(Boolean)
+  const canHandOffLook = currentLookClothes.length >= 2
+
+  const openAgentForCurrentLook = useCallback(() => {
+    if (!canHandOffLook) {
+      Toast.show({ content: '请先选择上衣和下衣', duration: 1000 })
+      return
+    }
+
+    const itemIds = currentLookClothes
+      .map((item) => Number(item?.cloth_id || 0))
+      .filter((id) => Number.isInteger(id) && id > 0)
+
+    if (itemIds.length < 2) {
+      Toast.show({ content: '当前搭配缺少可保存的衣物信息', duration: 1200 })
+      return
+    }
+
+    const itemNames = currentLookClothes
+      .map((item) => item?.name || item?.type || '')
+      .filter(Boolean)
+
+    navigate('/unified-agent', {
+      state: {
+        presetTask: `继续处理我当前选中的这套搭配：${itemNames.join(' + ')}`,
+        manualSuitDraft: {
+          name: itemNames.join(' + '),
+          scene: '搭配中心',
+          description: itemNames.join(' + '),
+          source: 'match-page',
+          items: itemIds,
+        },
+        manualOutfitLogDraft: {
+          logDate: new Date().toISOString().slice(0, 10),
+          scene: '搭配中心',
+          source: 'match-page',
+          note: itemNames.join(' + '),
+          items: itemIds,
+        },
+      },
+    })
+  }, [canHandOffLook, currentLookClothes, navigate])
 
   const fetchUserInfo = useCallback(async (forceRefresh = false) => {
     setUserLoading(true)
@@ -516,6 +558,11 @@ export default function Match({ embedded = false }) {
               }}
             >
               清空
+            </button>
+          </div>
+          <div className={styles['match-content-agent']}>
+            <button type="button" className={styles['agent-btn']} onClick={openAgentForCurrentLook}>
+              交给 Agent
             </button>
           </div>
           <div className={styles['match-content-generate']}>

@@ -13,7 +13,8 @@ const {
   updateAgentSessionMemory,
 } = require('../controllers/unifiedAgentRuntime')
 const { deleteSession, renameSession } = require('../controllers/unifiedAgentSessions')
-const { setSseHeaders } = require('../utils/sseHelpers')
+const { setSseHeaders, writeSse, endSse } = require('../utils/sseHelpers')
+const { buildErrorEvent } = require('../utils/unifiedAgentSseEvents')
 
 router.prefix('/unified-agent')
 router.use(verify())
@@ -117,6 +118,8 @@ router.post('/sessions/:id/chat', async (ctx) => {
     const data = await sendUnifiedAgentMessage(ctx.userId, sessionId, input, {
       latestTask: ctx.request.body?.latestTask || null,
       attachments,
+      clientContext: ctx.request.body?.clientContext || null,
+      enableAutonomousTools: true,
     })
     ctx.body = { code: 1, data, msg: '发送成功' }
   } catch (error) {
@@ -150,10 +153,20 @@ router.post('/sessions/:id/chat-stream', async (ctx) => {
     await sendUnifiedAgentMessageStream(ctx.userId, sessionId, input, ctx, {
       latestTask: ctx.request.body?.latestTask || null,
       attachments,
+      clientContext: ctx.request.body?.clientContext || null,
+      enableAutonomousTools: true,
       isClientGone: () => clientGone,
     })
   } catch (error) {
-    if (!ctx.res.headersSent) {
+    console.error('[unified-agent] chat-stream failed:', error)
+    if (ctx.res.headersSent) {
+      try {
+        writeSse(ctx.res, buildErrorEvent(error.message || '发送消息失败'))
+        endSse(ctx.res)
+      } catch {
+        // ignore secondary stream write failures
+      }
+    } else {
       ctx.res.writeHead(500, { 'Content-Type': 'application/json' })
       ctx.res.end(JSON.stringify({ code: 0, msg: error.message || '发送消息失败' }))
     }

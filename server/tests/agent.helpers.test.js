@@ -34,6 +34,36 @@ test('summarizeAgentResult summarizes recommendation result', () => {
   assert.equal(summary, '生成了 2 套推荐')
 })
 
+test('summarizeAgentResult summarizes suit detail result', () => {
+  const summary = summarizeAgentResult({
+    taskType: 'suit_detail',
+    result: {
+      selectedSuit: {
+        name: '通勤套装',
+        scene: '通勤',
+        item_count: 3,
+      },
+    },
+  })
+
+  assert.equal(summary, '已找到“通勤套装”的详细信息，场景：通勤，单品数：3')
+})
+
+test('summarizeAgentResult summarizes outfit log detail result', () => {
+  const summary = summarizeAgentResult({
+    taskType: 'outfit_log_detail',
+    result: {
+      selectedOutfitLog: {
+        log_date: '2026-04-25',
+        scene: '通勤',
+        items: [{}, {}],
+      },
+    },
+  })
+
+  assert.equal(summary, '已找到“2026-04-25”这条穿搭记录，场景：通勤，单品数：2')
+})
+
 test('buildAgentExecutionPreview builds recommendation steps', () => {
   const preview = buildAgentExecutionPreview({
     input: '帮我推荐一套通勤穿搭',

@@ -234,6 +234,81 @@
   word-break: break-word;
 }
 
+.reasoningBlock {
+  margin-top: 8px;
+}
+
+.reasoningToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.reasoningCollapsed {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.reasoningExpanded {
+  max-height: 5000px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.2s ease;
+}
+
+.reasoningContent {
+  max-height: 240px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  overflow-y: auto;
+  border: 1px solid rgba(99, 102, 241, 0.08);
+  border-radius: 14px;
+  background: rgba(99, 102, 241, 0.04);
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.assistantStatus {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.assistantStatusFailed {
+  color: #be123c;
+}
+
+.assistantStatusCancelled {
+  color: #c2410c;
+}
+
+.messageActionRow {
+  margin-top: 12px;
+}
+
+.messageActionButton {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.08);
+  color: #6d28d9;
+  font-size: 13px;
+  font-weight: 600;
+}
+
 .markdownContent {
   white-space: normal;
 }
@@ -373,17 +448,43 @@
   margin-top: 8px;
 }
 
-.messageImageWrap {
+.messageImagesGrid {
+  display: grid;
+  gap: 6px;
   margin-bottom: 10px;
+
+  &[data-count="1"] {
+    grid-template-columns: 1fr;
+  }
+
+  &[data-count="2"] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  &[data-count="3"] {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  &[data-count="4"] {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .messageImage {
   display: block;
-  max-width: 180px;
   width: 100%;
-  border-radius: 16px;
+  border-radius: 12px;
   object-fit: cover;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.16);
+
+  .messageImagesGrid[data-count="1"] & {
+    max-width: 200px;
+  }
+
+  .messageImagesGrid[data-count="3"] &,
+  .messageImagesGrid[data-count="4"] & {
+    aspect-ratio: 1;
+  }
 }
 
 .retryButton {
@@ -395,6 +496,99 @@
   padding: 0;
 }
 
+.toolDetailBlock {
+  margin-top: 8px;
+}
+
+.toolToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: none;
+  background: none;
+  color: #94a3b8;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+
+  &:active {
+    color: #64748b;
+  }
+}
+
+.toolTimeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.toolChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.toolChipLabel,
+.toolChipStatus {
+  line-height: 1;
+}
+
+.toolChipRunning {
+  background: rgba(79, 70, 229, 0.08);
+  color: #4338ca;
+}
+
+.toolChipSuccess {
+  background: rgba(22, 163, 74, 0.1);
+  color: #15803d;
+}
+
+.toolChipFailed {
+  background: rgba(225, 29, 72, 0.1);
+  color: #be123c;
+}
+
+.toolChipStaged {
+  background: rgba(249, 115, 22, 0.12);
+  color: #c2410c;
+}
+
+.toolSummaryCard {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.toolSummaryTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.toolSummaryList {
+  margin-top: 8px;
+}
+
+.toolSummaryItem {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.toolSummaryItem + .toolSummaryItem {
+  margin-top: 4px;
+}
+
 .confirmCard {
   margin-top: 4px;
   padding: 18px;
@@ -403,7 +597,20 @@
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }
 
+.confirmBadge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(249, 115, 22, 0.12);
+  color: #c2410c;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .confirmTitle {
+  margin-top: 12px;
   font-size: 16px;
   font-weight: 700;
   color: #0f172a;
@@ -414,6 +621,106 @@
   font-size: 14px;
   line-height: 1.7;
   color: #475569;
+}
+
+.confirmMetaRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #f8fafc;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.confirmMetaLabel {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.confirmMetaValue {
+  color: #0f172a;
+  text-align: right;
+  font-weight: 600;
+}
+
+.confirmDetails {
+  margin-top: 12px;
+  border-radius: 16px;
+  background: #f8fafc;
+  padding: 10px 12px;
+}
+
+.confirmDetailRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.confirmDetailRow + .confirmDetailRow {
+  margin-top: 4px;
+}
+
+.confirmDetailLabel {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.confirmDetailValue {
+  color: #0f172a;
+  text-align: right;
+  font-weight: 600;
+}
+
+.confirmDetailList {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.confirmDetailItem {
+  border-radius: 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+}
+
+.confirmDetailItemTitle {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.confirmDetailItemLine {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
+}
+
+.confirmRiskBlock {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #fff7ed;
+}
+
+.confirmRiskLabel {
+  font-size: 12px;
+  font-weight: 700;
+  color: #c2410c;
+}
+
+.confirmRiskText {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #9a3412;
 }
 
 .confirmActions {
@@ -452,54 +759,85 @@
   background: linear-gradient(180deg, rgba(243, 246, 251, 0) 0%, #f3f6fb 22%, #f3f6fb 100%);
 }
 
-.pendingImageCard {
-  display: flex;
+.jumpToLatestButton {
+  position: absolute;
+  right: 16px;
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+  z-index: 6;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin: 0 12px 8px;
-  padding: 10px 12px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-}
-
-.pendingImagePreview {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  object-fit: cover;
-  flex: none;
-}
-
-.pendingImageMeta {
-  flex: 1;
-  min-width: 0;
-}
-
-.pendingImageTitle {
-  font-size: 13px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.pendingImageName {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.pendingImageRemove {
-  width: 28px;
-  height: 28px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
   border: none;
   border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
-  font-size: 18px;
+  background: rgba(17, 24, 39, 0.92);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
+}
+
+.jumpToLatestIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 12px;
   line-height: 1;
+}
+
+.pendingImagesBar {
+  display: flex;
+  gap: 8px;
+  margin: 0 12px 8px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.pendingThumbWrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+}
+
+.pendingThumb {
+  width: 100%;
+  height: 100%;
+  border-radius: 10px;
+  object-fit: cover;
+}
+
+.pendingThumbRemove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
 }
 
 .composer {
@@ -553,6 +891,10 @@
   color: #fff;
   font-size: 18px;
   font-weight: 700;
+}
+
+.sendButtonStop {
+  background: #f97316;
 }
 
 

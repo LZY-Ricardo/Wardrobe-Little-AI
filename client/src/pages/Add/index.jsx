@@ -348,6 +348,32 @@ export default function Add() {
       <div className={styles.container}>
         {fromAgent ? <div className={styles.sourceHint}>来自 Agent 选图</div> : null}
 
+        {imageUrl ? (
+          <div style={{ paddingBottom: 12 }}>
+            <Button
+              block
+              fill="outline"
+              onClick={() =>
+                navigate('/unified-agent', {
+                  state: {
+                    presetTask: '帮我分析这张衣物图片，并在确认后帮我录入衣橱',
+                    prefillImages: [
+                      {
+                        type: 'image',
+                        mimeType: 'image/jpeg',
+                        name: 'add-page-image.jpg',
+                        dataUrl: imageUrl,
+                      },
+                    ],
+                  },
+                })
+              }
+            >
+              交给 Agent
+            </Button>
+          </div>
+        ) : null}
+
         <div className={styles.name}>
           <label htmlFor="name">衣物名称</label>
           <input ref={nameRef} type="text" id="name" placeholder="请输入衣物名称" />

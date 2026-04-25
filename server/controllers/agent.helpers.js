@@ -40,6 +40,38 @@ const classifyAgentTask = (text = '') => {
 }
 
 const summarizeAgentResult = ({ taskType, result }) => {
+  if (taskType === 'cloth_detail') {
+    const cloth = result?.selectedCloth || result || {}
+    const name = String(cloth?.name || '这件衣物').trim()
+    const detailParts = [
+      cloth?.type ? `类型：${cloth.type}` : '',
+      cloth?.color ? `颜色：${cloth.color}` : '',
+      cloth?.style ? `风格：${cloth.style}` : '',
+      cloth?.season ? `季节：${cloth.season}` : '',
+      cloth?.material ? `材质：${cloth.material}` : '',
+    ].filter(Boolean)
+    return clampLen(`已找到“${name}”的详细信息${detailParts.length ? `，${detailParts.join('，')}` : ''}`, 255)
+  }
+  if (taskType === 'suit_detail') {
+    const suit = result?.selectedSuit || result || {}
+    const name = String(suit?.name || '这套搭配').trim()
+    const itemCount = Number(suit?.item_count || suit?.items?.length || 0)
+    const detailParts = [
+      suit?.scene ? `场景：${suit.scene}` : '',
+      itemCount ? `单品数：${itemCount}` : '',
+    ].filter(Boolean)
+    return clampLen(`已找到“${name}”的详细信息${detailParts.length ? `，${detailParts.join('，')}` : ''}`, 255)
+  }
+  if (taskType === 'outfit_log_detail') {
+    const log = result?.selectedOutfitLog || result || {}
+    const name = String(log?.log_date || '这条穿搭记录').trim()
+    const itemCount = Number(log?.item_count || log?.items?.length || 0)
+    const detailParts = [
+      log?.scene ? `场景：${log.scene}` : '',
+      itemCount ? `单品数：${itemCount}` : '',
+    ].filter(Boolean)
+    return clampLen(`已找到“${name}”这条穿搭记录${detailParts.length ? `，${detailParts.join('，')}` : ''}`, 255)
+  }
   if (taskType === 'closet_query') {
     return `查询到 ${(result?.total || 0)} 件衣物`
   }
@@ -51,6 +83,9 @@ const summarizeAgentResult = ({ taskType, result }) => {
   }
   if (taskType === 'analytics') {
     return `统计了 ${result?.totalClothes || 0} 件衣物与 ${result?.recommendationSummary?.total || 0} 次推荐`
+  }
+  if (taskType === 'create_cloth') {
+    return clampLen(result?.summary || `待保存衣物：${result?.draftCloth?.name || '识别衣物'}`, 255)
   }
   return '暂时无法解析该任务'
 }
@@ -93,6 +128,33 @@ const buildAgentExecutionPreview = ({ input = '', classification = {}, requiresC
       intent: '衣橱查询',
       why: '需要先读取当前账号的衣橱数据，再按条件筛选返回结果。',
       steps: ['读取当前衣橱数据', '按查询条件筛选衣物', '返回衣物列表摘要'],
+      canAutoRun: true,
+    }
+  }
+
+  if (taskType === 'cloth_detail') {
+    return {
+      intent: '查看衣物详情',
+      why: '你正在查看当前衣物的详细信息。',
+      steps: ['读取当前衣物上下文', '查询该衣物的详细字段', '返回衣物详情摘要'],
+      canAutoRun: true,
+    }
+  }
+
+  if (taskType === 'suit_detail') {
+    return {
+      intent: '查看套装详情',
+      why: '你正在查看当前套装的详细信息。',
+      steps: ['读取当前套装上下文', '查询该套装的详细字段', '返回套装详情摘要'],
+      canAutoRun: true,
+    }
+  }
+
+  if (taskType === 'outfit_log_detail') {
+    return {
+      intent: '查看穿搭记录详情',
+      why: '你正在查看当前穿搭记录的详细信息。',
+      steps: ['读取当前穿搭记录上下文', '查询该记录的详细字段', '返回穿搭记录详情摘要'],
       canAutoRun: true,
     }
   }
@@ -151,11 +213,65 @@ const buildAgentExecutionPreview = ({ input = '', classification = {}, requiresC
     }
   }
 
+  if (taskType === 'update_cloth_fields') {
+    return {
+      intent: '更新衣物信息',
+      why: '你正在要求修改当前衣物的基础字段信息。',
+      steps: ['读取当前衣物上下文', '生成待确认修改摘要', '等待你确认后写入衣物信息'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
+  if (taskType === 'delete_cloth') {
+    return {
+      intent: '删除衣物',
+      why: '你正在要求删除当前衣物记录。',
+      steps: ['读取当前衣物上下文', '生成待确认删除摘要', '等待你确认后删除衣物记录'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
+  if (taskType === 'delete_suit') {
+    return {
+      intent: '删除套装',
+      why: '你正在要求删除当前套装记录。',
+      steps: ['读取当前套装上下文', '生成待确认删除摘要', '等待你确认后删除套装记录'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
+  if (taskType === 'delete_outfit_log') {
+    return {
+      intent: '删除穿搭记录',
+      why: '你正在要求删除当前穿搭记录。',
+      steps: ['读取当前穿搭记录上下文', '生成待确认删除摘要', '等待你确认后删除穿搭记录'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
+  if (taskType === 'update_user_sex') {
+    return {
+      intent: '更新性别',
+      why: '你正在要求修改当前账号的性别设置。',
+      steps: ['解析目标性别', '生成待确认修改摘要', '等待你确认后写入用户资料'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
   if (taskType === 'update_confirmation_preferences') {
     return {
       intent: '更新确认偏好',
       why: '你正在调整 Agent 对低风险写操作的确认策略。',
       steps: ['读取当前确认偏好', '判断是否需要确认', '写入新的确认偏好'],
+      canAutoRun: !requiresConfirmation,
+    }
+  }
+
+  if (taskType === 'create_cloth') {
+    return {
+      intent: '保存衣物到衣橱',
+      why: '你正在要求把当前识别到的衣物保存到衣橱中。',
+      steps: ['分析当前图片', '生成衣物草稿', '等待你确认后写入衣橱'],
       canAutoRun: !requiresConfirmation,
     }
   }

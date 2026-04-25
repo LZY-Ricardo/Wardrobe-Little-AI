@@ -1,268 +1,307 @@
-# 工具调用（Tool Calling）实施步骤（面向本项目：Koa + React + Ollama）
+# Unified Agent Tool Calling Architecture
 
-> 目标：让 `/aichat` 的 AI 助手不只“聊天”，而是能**基于用户真实数据与项目接口**给出可执行指导（衣橱/场景推荐/搭配预览排查/用户资料等），并显著降低“泛泛而谈/幻觉”。
+> 目标：让 Clothora 的 unified-agent 成为统一业务代理入口，由 LLM 自主决定调用哪些工具，而 runtime 负责执行护栏、确认拦截与状态回写。
 
-## 0. 当前项目背景（简述）
+## 1. 当前架构结论
 
-- 前端：`client/src/pages/AiChat/index.jsx` 通过 SSE 调用后端 `/chat` 并流式展示。
-- 后端：`server/routes/chat.js` 将消息转发到本地 Ollama `/api/chat`（流式），并已具备：
-  - 注入 system prompt（项目使用指导 + 穿搭知识）
-  - 角色规范化（`bot` → `assistant`）
-  - 鉴权（JWT `verify()`）
-  - 历史裁剪与超时配置（env）
-  - `/help` 快捷命令
+当前真实接口（`/unified-agent` 与兼容 `/chat`）已采用：
 
-工具调用要做的是：在服务端 **“先规划是否需要工具→执行工具→再让大模型用工具结果回答”**，前端仍保持只调 `/chat`，不增加复杂度。
+- **LLM 主导工具选择**
+- **runtime 负责工具执行与护栏**
+- **写操作统一进入确认流**
 
----
+也就是说，用户输入文本、图片或图文组合后：
 
-## 1. 定义“工具调用”的最小闭环（MVP）
+1. unified-agent 构造系统提示、会话摘要、长期偏好摘要和当前对象上下文
+2. 将工具目录注入给 LLM
+3. LLM 自主决定：
+   - 是否调用工具
+   - 调用哪些工具
+   - 工具调用顺序
+   - 什么时候结束并输出最终回复
+4. runtime 负责：
+   - 工具白名单
+   - 参数解析与校验
+   - 最大轮数限制
+   - 错误兜底
+   - 写操作确认
+   - 任务历史与消息持久化
 
-### 1.1 建议先做的工具（优先级从高到低）
+## 2. 工具目录
 
-> 注意：工具应该返回**最小必要数据**（尤其不要把 base64 图片塞给大模型）。
+当前 unified-agent 可被 LLM 决策调用的工具分为三类：
 
-1) `get_user_profile`
-- 用途：回答“为什么 match 不能生成/为什么推荐失败/我需要先设置什么”等问题
-- 数据来源：`ctx.userId` + 现有用户信息查询（等价于 `/user/getUserInfo`）
-- 返回建议字段：`{ id, username, sex, characterModel, hasPhoto }`
+### 2.1 读取类工具
 
-2) `list_clothes`
-- 用途：回答“我的衣橱里有哪些？缺什么？按场景怎么选？”以及给出基于衣橱的搭配建议
-- 数据来源：`getAllClothes(user_id)`（等价于 `/clothes/all`）
-- 返回建议字段：`[{ cloth_id, name, type, color, style, season, material, favorite }]`
-- 支持参数：`limit`、`type`、`style`、`season`、`favoriteOnly`
+- `get_user_profile`
+- `get_profile_insight`
+- `get_wardrobe_analytics`
+- `list_clothes`
+- `get_cloth_detail`
+- `generate_scene_suits`
+- `analyze_image`
 
-3) `generate_scene_suits`
-- 用途：把“场景推荐”能力接到聊天里（用户在聊天里说“商务场景给我推荐”）
-- 数据来源：当前已实现优先离线本地规则（无需 Coze）；Ollama 负责解释与补充建议。
-- 返回建议字段：标准化后的 `{ suits: [...] }`，并保证可解析
-- 失败降级：衣橱为空返回 `{ error: "EMPTY_CLOSET" }` 并引导先上传；规则无法组成套装时退化为单品推荐。
+特点：
 
-4) `get_project_help`（可选/未实现）
-- 用途：当用户问“这个项目有什么功能/怎么用”时，返回**可信的项目功能索引**（避免模型编造）
-- 数据来源：静态文本（可复用 `server/utils/aichatPrompt.js` 的项目概览块），或后续升级为 RAG
+- 可直接执行
+- 返回最小必要字段
+- 结果回填给模型继续推理或直接回答
 
-### 1.2 工具调用的统一协议（建议固定 JSON）
+### 2.2 写入类工具（需确认）
 
-为了不依赖 Ollama 是否原生支持 function calling，建议采用“结构化输出 + 解析”的通用协议：
+- `create_cloth`
+- `update_cloth_fields`
+- `set_cloth_favorite`
+- `delete_cloth`
+- `delete_suit`
+- `delete_outfit_log`
+- `save_suit`
+- `create_outfit_log`
+- `update_user_sex`
+- `update_confirmation_preferences`
 
-**规划阶段（planner）输出：**
+特点：
+
+- LLM 可以决定“要调用哪个写工具”
+- runtime 不直接落库，而是桥接到既有确认模型
+- 删除类操作始终确认
+- 低风险动作可继续复用免确认偏好
+
+## 3. 会话上下文注入
+
+为了让 LLM 能处理“这件 / 这双 / 刚刚那套 / 当前记录”这种表达，runtime 会在 tool loop 前注入标准化上下文块：
+
+- 当前衣物上下文
+- 当前套装上下文
+- 当前穿搭记录上下文
+- 当前推荐结果上下文
+- 会话摘要
+- 长期偏好摘要
+
+这样 LLM 可以直接基于上下文决定：
+
+- 查看详情
+- 修改字段
+- 删除对象
+- 保存推荐为套装
+- 记录推荐为穿搭
+
+## 4. 图片链路
+
+图片不再被视为“特殊 workflow 入口”，而是统一纳入工具目录中的 `analyze_image`：
+
+1. LLM 看到图片与用户目标
+2. 自主决定是否调用 `analyze_image`
+3. 获取分析结果后继续决定：
+   - 直接回答图片相关问题
+   - 生成衣物草稿并发起 `create_cloth`
+   - 要求用户补字段澄清
+
+兼容层中仍保留旧的图片工作流，但真实 autonomous 模式不会优先走旧链路。
+
+## 5. Runtime 护栏
+
+runtime 的职责边界如下：
+
+### 5.1 允许的能力
+
+- 只执行工具目录中登记过的工具
+- 接受 LLM 的多轮工具调用
+- 将工具结果结构化回填给模型
+- 在需要时终止并返回待确认任务
+
+### 5.2 不允许的能力
+
+- 不允许模型直接访问数据库
+- 不允许模型绕过确认直接执行高风险写操作
+- 不允许未知工具名执行
+- 不允许无限轮工具调用
+
+### 5.3 错误恢复
+
+当出现以下情况时，会话不会直接失败：
+
+- 未知工具
+- 坏参数
+- 写工具待确认构造失败
+- 图片分析失败
+- 普通工具执行报错
+
+这些错误会被包装为 tool result 回填给模型，由模型继续澄清或给出兜底回复。
+
+## 6. 统一消息协议
+
+为了让数据库恢复、SSE 流式过程和前端渲染保持一致，unified-agent 现在使用一套收口后的消息协议。
+
+更贴近实现细节的共享契约说明见：
+
+- [Unified Agent Shared Contract](./unified-agent-shared-contract.md)
+
+### 6.1 `agent_messages` 关键字段
+
+每条消息的持久化最小字段如下：
+
+- `role`
+  - `user`
+  - `assistant`
+- `content`
+  - 最终展示文本
+  - 用户图片消息会保存为 `[图片消息]` 或包含 `用户说明：...`
+- `message_type`
+  - `chat`
+  - `image`
+  - `multimodal`
+  - `task_result`
+  - `confirm_request`
+  - `confirm_result`
+- `confirmation_status`
+  - `''`
+  - `pending`
+  - `confirmed`
+  - `cancelled`
+- `task_id`
+  - 对应任务历史 id，可为空
+- `tool_name`
+  - 兼容旧链路保留字段
+- `meta_json`
+  - 结构化展示元数据
+
+其中：
+
+- `appendMessage` 在写库前会对 `message_type`、`confirmation_status`、`meta_json` 做归一化
+- `hydrateMessage` 在读库后会再次做协议级清洗，保证历史脏数据不会直接泄露到前端
+
+### 6.2 `meta_json` 协议
+
+`meta_json` 只保留以下受支持字段：
+
 ```json
 {
-  "action": "tool",
-  "tool": "list_clothes",
-  "arguments": { "limit": 30, "favoriteOnly": true },
-  "reason": "用户想基于衣橱做推荐"
-}
-```
-
-或不需要工具：
-```json
-{ "action": "none", "reason": "..." }
-```
-
-> 强约束：planner 只允许输出 JSON，不允许额外解释文本；服务端对 JSON 做严格校验，失败则降级为普通聊天回答。
-
----
-
-## 2. 服务端实现步骤（推荐方案：服务端编排，前端不变）
-
-### 2.1 新增“工具注册表”（白名单 + schema + 执行器）
-
-新增文件建议：
-- `server/utils/toolRegistry.js`
-
-内容结构建议：
-1) `TOOLS`：工具定义数组（name/description/parameters JSON Schema）
-2) `executeTool(name, args, ctx)`：只允许白名单工具执行
-3) 参数校验：先简单手写校验（MVP），后续再引入 jsonschema/ajv（如确有需要）
-
-伪代码示例（结构）：
-```js
-// server/utils/toolRegistry.js
-const TOOLS = [
-  {
-    name: 'list_clothes',
-    description: '获取当前用户衣橱列表（可筛选）',
-    parameters: {
-      type: 'object',
-      properties: {
-        limit: { type: 'integer', minimum: 1, maximum: 60 },
-        favoriteOnly: { type: 'boolean' },
-        type: { type: 'string' },
-        season: { type: 'string' },
-        style: { type: 'string' },
-      },
-    },
+  "attachments": [
+    {
+      "type": "image",
+      "mimeType": "image/jpeg",
+      "name": "shoe.jpg",
+      "dataUrl": "data:image/jpeg;base64,..."
+    }
+  ],
+  "reasoningContent": "先分析图片，再决定是否需要写入工具",
+  "actionButton": {
+    "label": "打开编辑衣物",
+    "to": "/update",
+    "pageKey": "editCloth",
+    "pageLabel": "编辑衣物",
+    "reason": "继续补充品牌、季节、材质等信息",
+    "variant": "secondary",
+    "state": {
+      "cloth_id": 12,
+      "name": "白色运动鞋"
+    }
   },
-  // ...
-]
-
-async function executeTool(name, args, ctx) {
-  // 1) 白名单
-  // 2) 参数校验（最小）
-  // 3) 只返回必要字段（数据最小化）
+  "pendingConfirmation": {
+    "confirmId": "confirm_xxx",
+    "summary": "准备保存到衣橱",
+    "scope": "cloth_id=12",
+    "risk": "将新增一件衣物",
+    "actionLabel": "保存到衣橱",
+    "targetPage": {
+      "key": "wardrobe",
+      "label": "虚拟衣柜",
+      "to": "/outfit"
+    },
+    "details": {
+      "name": "白色运动鞋",
+      "type": "鞋类",
+      "color": "白色",
+      "season": "春秋"
+    }
+  },
+  "toolCalls": [
+    {
+      "name": "analyze_image",
+      "label": "图片分析",
+      "status": "success",
+      "at": 1745560000000
+    }
+  ],
+  "toolResultsSummary": [
+    "识别到一双白色运动鞋"
+  ]
 }
-
-module.exports = { TOOLS, executeTool }
 ```
 
-### 2.2 在 `/chat` 内实现“两段式调用”
+约束说明：
 
-目标：保持当前 SSE 流式输出不变，但在后端内部做编排。
+- 只保留白名单字段，未知字段会被丢弃
+- 仅保留可 JSON 序列化的 plain object / array / primitive
+- 文本、数组长度、嵌套深度都有上限，避免 meta 无限膨胀
+- `actionButton` 至少需要 `label + to`
+- `pendingConfirmation` 至少需要 `confirmId`
+- `toolCalls` 至少需要 `name` 或 `label`
 
-#### Step A：规划（planner，非流式）
-1) 取最近 1-3 条用户消息（减少 token 与不确定性）
-2) system prompt：明确告诉模型“只能输出 JSON 计划”
-3) 调用 Ollama：`stream:false`，可尝试 `format:'json'`（如可用）
-4) 解析 JSON：
-   - 无法解析 → 降级到普通对话（不走工具）
-   - `action:none` → 不调用工具，直接进入普通回答
-   - `action:tool` → 进入 Step B
+### 6.3 SSE 事件协议
 
-#### Step B：执行工具（tool runner）
-1) 使用 `ctx.userId` 做鉴权上下文
-2) 执行 `executeTool(tool, arguments, ctx)`
-3) 处理超时/异常：
-   - 可返回 `{ error: "...", detail: "..." }`
-   - 不抛出未捕获异常，避免 SSE 中断
+流式接口 `/unified-agent/sessions/:id/chat-stream` 当前会发送这些事件：
 
-#### Step C：生成最终回答（answer，流式）
-1) 构造 messages：
-   - `system`：你当前用于“项目导览 + 穿搭建议”的 system prompt
-   - `user`：用户原问题（或 recent history）
-   - `assistant`：可选插入“我正在调用工具...”的提示（也可直接 SSE 输出一段提示）
-   - `tool_result`：用固定格式注入（例如以 `【TOOL_RESULT】...` 包住 JSON）
-2) 让模型“基于工具结果回答”，并强约束：
-   - 引用工具结果时要说明依据（例如“根据你的衣橱里有：…”）
-   - 不要编造工具未返回的字段
-3) 调用 Ollama：`stream:true`，并继续 SSE 转发给前端（复用你现有实现）
+- `meta`
+  - 会话层元信息，例如标题
+- `reasoning`
+  - 增量思考文本
+- `content`
+  - 增量回复正文
+- `tool_call_started`
+  - 工具开始执行
+  - `meta.toolCalls[0]` 会带 `label/status=running`
+- `tool_call_completed`
+  - 工具结束
+  - `meta.toolCalls[0]` 会带 `label/status=success|failed`
+  - `summary` 为工具结果摘要
+- `task_result`
+  - 本轮进入任务结果或待确认结果
+  - `message` 为已落库 assistant 消息
+- `message_saved`
+  - 普通 assistant 回复完成并持久化
+  - `message` 为已落库 assistant 消息
+- `error`
+  - 流式阶段错误
 
-> 最关键点：**工具结果注入格式要稳定**，例如：
-```text
-【TOOL_RESULT name=list_clothes】
-{...json...}
-【/TOOL_RESULT】
-```
-这样不依赖 Ollama 是否支持 `role:tool`，兼容性更强。
+原则上：
 
-### 2.3 数据最小化与隐私
+- SSE 是“过程层协议”
+- `agent_messages` 是“落库层协议”
+- 前端最终展示统一以落库后的 `message + meta` 为准
 
-强建议：
-- `list_clothes` 默认不返回 `image/base64`
-- 只返回“推荐决策需要”的字段；必要时提供 `hasImage: true/false`
-- 对 `username` 这类字段也尽量少回传（除非用于解释流程）
+## 7. 兼容层现状
 
-### 2.4 风险控制（务必做）
+以下旧逻辑仍然存在，但不再承担真实 autonomous 主路径职责：
 
-- 白名单：禁止任意函数执行
-- 参数校验：避免 prompt injection 让模型构造危险参数（例如试图访问文件、拼 SQL）
-- 超时：工具执行与 Ollama 调用都设置 timeout，并在 SSE 内给出友好提示
-- 限流/并发：`/chat` 建议最少做“同一用户同时仅允许 1 个生成中请求”（后续再做全局限流）
+- `runAgentWorkflow`
+- `resolveWriteActionOptions`
+- `classifyAgentTask`
 
----
+它们目前的角色是：
 
-## 3. 前端配合（可选，MVP 可不改）
+- 支持旧测试与兼容模式
+- 为逐步收敛提供过渡
 
-MVP：前端仍只展示流式文本即可（你现在已经可用）。
+真实接口下，主路径已经是统一 tool loop。
 
-增强项（建议第二阶段）：
-- 展示“工具调用中…”的 UI 状态（例如一个小 badge）
-- 展示“依据：衣橱/个人信息/场景推荐接口”的引用提示
-- 给用户一个开关：是否允许 AI 读取衣橱数据（隐私提示）
+## 8. 验收标准
 
----
+视为“全量自主工具调用”达成的标准：
 
-## 4. 分阶段落地路线图（建议按顺序做）
+- 纯文本请求由 LLM 自主决定读工具 / 写工具 / 不调用工具
+- 图片请求由 LLM 自主决定是否先分析图片
+- 推荐后的保存套装 / 记录穿搭由 LLM 自主触发
+- 当前对象上下文操作由 LLM 自主决定
+- 所有写操作仍受确认护栏约束
+- 参数错误或工具错误不会炸会话
 
-### Phase 1（1-2 天）：工具调用 MVP
-- [x] 工具注册表 + 2 个工具：`get_user_profile`、`list_clothes`
-- [x] `/chat` 两段式：planner（非流式）→ tool → answer（结合 SSE 流式输出）
-- [x] 失败降级：planner 解析失败 → 走普通聊天
-- [x] 数据最小化（不回传图片）
+## 9. 后续建议
 
-### Phase 2（2-4 天）：补齐“场景推荐”与“项目导览”
-- [x] `generate_scene_suits` 工具接入（优先离线规则；衣橱为空降级提示）
-- [ ] `get_project_help` 工具（静态，可选）→ 后续升级为 RAG
+接下来最值得继续推进的是：
 
-### Phase 3（持续）：体验与安全
-- [ ] 统一 traceId/日志，记录工具调用耗时与失败原因
-- [ ] per-user 并发控制、限流、黑名单
-- [ ] 前端展示工具调用状态
-
----
-
-## 5. 你可以直接照抄的“planner prompt”模板（示例）
-
-> 放在服务端常量里即可（不要太长）
-
-```text
-你是一个“工具调用规划器”。你只能输出 JSON，禁止输出任何额外文本。
-
-可用工具：
-1) get_user_profile({})：获取当前登录用户信息（sex/characterModel 等）
-2) list_clothes({limit?, favoriteOnly?, type?, season?, style?})：获取衣橱衣物列表
-3) generate_scene_suits({scene, limit?})：基于衣橱生成场景推荐（离线规则；不返回图片）
-4) get_project_help({})：项目功能与页面导航（可选/未实现）
-
-规则：
-- 如果用户的问题需要依赖“用户真实数据”或“项目真实状态”，选择 action=tool。
-- 如果只需要穿搭常识解释/项目概念解释，选择 action=answer。
-- 当选择 action=tool 时，只能选择一个最关键的工具（MVP 先单工具），arguments 必须最小化。
-
-输出格式（二选一）：
-{ "action":"tool", "tool":"...", "arguments":{...}, "reason":"..." }
-或
-{ "action": "none", "reason": "..." }
-```
-
----
-
-## 6. 验收清单（建议你按这个冒烟）
-
-- [ ] 询问项目功能：AI 不编造页面，能给 `/outfit`、`/add`、`/recommend`、`/match` 的清晰路径
-- [ ] 询问“我衣橱里有什么”：AI 会触发 `list_clothes`，并给出概览/缺口建议
-- [ ] 询问“商务场景怎么穿（基于我的衣橱）”：若衣橱少，AI 会提示先上传；若有衣橱，能引用衣物属性给建议
-- [ ] 断网/超时：AI 会友好提示，不会卡死 SSE
-
----
-
-## 7. 常见坑（提前规避）
-
-- planner 输出经常夹带解释文本 → 必须强约束“只输出 JSON”，并做健壮解析/降级。
-- 工具结果太大 → 要限制 `limit` 与字段，避免上下文爆炸与响应变慢。
-- 图片/base64 入上下文 → 必须禁止或改成 `hasImage`。
-- 用户多次点击发送导致并发 → 需要“同一用户单并发”或前端禁用按钮（你前端已有一定限制）。
-
----
-
-## 8. 下一步建议（你确认后我可以直接实现）
-
-如果你希望我继续把这套“工具调用 MVP”真正写进代码，我建议从：
-1) `list_clothes` + `get_user_profile` 两个工具开始
-2) `/chat` 内加入 planner/runner/answer 三段式编排
-3) 前端仅加一个“显示工具调用状态”的小提示（可选）
-
-
----
-
-## 9. 写操作工具（已实现，需二次确认）
-
-为了避免误操作，写操作工具不会由 planner 自动触发，只能通过显式命令发起；服务端返回确认码后，用户再次确认才会执行。
-
-### 9.1 可用命令
-- `/favorite <cloth_id> on|off`：收藏/取消收藏衣物
-- `/delete <cloth_id>`：删除衣物
-- `/update <cloth_id> {"name":"...","color":"..."}`：更新衣物字段（不支持图片）
-- `/sex man|woman`：更新性别设置（支持输入 男/女，会归一化为 man/woman）
-- `取消` 或 `/cancel`：取消待确认操作
-
-### 9.2 二次确认流程
-1) 发送写操作命令 → 服务端返回“⚠️ 危险操作检测”与确认码
-2) 在有效期内回复：`确认 <确认码>`（或 `/confirm <确认码>`）→ 才执行写操作
-3) 确认码不匹配/已过期 → 拒绝执行；需要重新发起命令获取新确认码
-
-### 9.3 开关与有效期
-- `CHAT_WRITE_TOOL_ENABLED=0`：关闭写操作命令入口
-- `CHAT_WRITE_CONFIRM_TTL_MS`：确认码有效期（默认 5 分钟）
+1. 前端展示更完整的工具调用状态与确认卡片
+2. 逐步删除兼容层中的旧关键词分流
+3. 为 SSE 增加 traceId / stepId，方便排查一轮 autonomous tool loop
+4. 为 `genPreview` 等更复杂能力补充标准工具定义

@@ -13,6 +13,23 @@
   padding-bottom: 0;
 }
 
+.headerTop {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.agentButton {
+  border: 1px solid rgba(47, 84, 235, 0.14);
+  background: #fff;
+  color: #2f54eb;
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px rgba(17, 38, 146, 0.06);
+}
+
 .tabs {
   background: #fff;
   border-radius: 14px;
@@ -46,6 +63,13 @@
 [data-theme='dark'] {
   .header {
     background: var(--bg-surface);
+  }
+
+  .agentButton {
+    background: var(--chip-bg);
+    color: #e5e9ff;
+    border-color: rgba(114, 98, 253, 0.28);
+    box-shadow: none;
   }
 
   .tabs {

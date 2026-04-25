@@ -135,9 +135,34 @@ const SuitCreate = () => {
     <div className={styles.create}>
       <div className={styles.header}>
         <div className={styles.title}>新建套装</div>
-        <button type="button" className={styles.backBtn} onClick={() => navigate(-1)}>
-          返回
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            type="button"
+            className={styles.agentBtn}
+            disabled={selectedCount < MIN_ITEMS}
+            onClick={() =>
+              navigate('/unified-agent', {
+                state: {
+                  presetTask: `帮我把这些单品保存成${scene || '新'}套装`,
+                  latestResult: {
+                    manualSuitDraft: {
+                      name: name.trim(),
+                      scene: scene.trim(),
+                      description: description.trim(),
+                      items: extractClothIds(selected),
+                      source: 'agent',
+                    },
+                  },
+                },
+              })
+            }
+          >
+            交给 Agent
+          </button>
+          <button type="button" className={styles.backBtn} onClick={() => navigate(-1)}>
+            返回
+          </button>
+        </div>
       </div>
 
       <div className={styles.form}>

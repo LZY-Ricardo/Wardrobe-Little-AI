@@ -331,6 +331,25 @@ export default function Update() {
         </div>
       </div>
 
+      {selectedItem?.cloth_id ? (
+        <div style={{ padding: '0 16px 8px' }}>
+          <Button
+            block
+            fill="outline"
+            onClick={() =>
+              navigate('/unified-agent', {
+                state: {
+                  presetTask: `帮我继续处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
+                  selectedCloth: selectedItem,
+                },
+              })
+            }
+          >
+            交给 Agent
+          </Button>
+        </div>
+      ) : null}
+
       <div className={styles.container}>
         <div className={styles.name}>
           <label htmlFor="name">衣物名称</label>

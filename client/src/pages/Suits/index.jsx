@@ -24,7 +24,7 @@ const coverOf = (suit) => {
   return img || ''
 }
 
-const SuitCard = ({ suit, onDelete }) => {
+const SuitCard = ({ suit, onDelete, onAgent }) => {
   const img = coverOf(suit)
   const items = Array.isArray(suit?.items) ? suit.items.slice(0, 6) : []
   const previewNames = items
@@ -44,9 +44,14 @@ const SuitCard = ({ suit, onDelete }) => {
       <div className={styles.cardBody}>
         <div className={styles.cardHeaderRow}>
           <div className={styles.cardTitleText}>{displayName}</div>
-          <button type="button" className={styles.cardDelete} onClick={() => onDelete(suit)}>
-            删除
-          </button>
+          <div className={styles.cardActions}>
+            <button type="button" className={styles.cardAgent} onClick={() => onAgent(suit)}>
+              交给 Agent
+            </button>
+            <button type="button" className={styles.cardDelete} onClick={() => onDelete(suit)}>
+              删除
+            </button>
+          </div>
         </div>
         <div className={styles.cardMetaRow}>
           <span className={styles.metaScene}>{suit.scene || '通用场景'}</span>
@@ -108,6 +113,16 @@ export default function Suits({ embedded = false }) {
     })
   }
 
+  const handleAgent = useCallback((suit) => {
+    if (!suit?.suit_id) return
+    navigate('/unified-agent', {
+      state: {
+        presetTask: `帮我处理这套已保存套装：${suit.name || suit.scene || `套装 ${suit.suit_id}`}`,
+        selectedSuit: suit,
+      },
+    })
+  }, [navigate])
+
   const renderContent = () => {
     if (loading) return <Loading text="加载套装库..." />
     if (error) return <ErrorBanner message={error} onAction={fetchSuits} />
@@ -122,6 +137,9 @@ export default function Suits({ embedded = false }) {
             <button type="button" onClick={() => navigate('/suits/create')}>
               新建套装
             </button>
+            <button type="button" onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看我的套装库' } })}>
+              交给 Agent
+            </button>
           </div>
         </div>
       )
@@ -129,7 +147,7 @@ export default function Suits({ embedded = false }) {
     return (
       <div className={styles.cardList}>
         {suits.map((suit) => (
-          <SuitCard key={suit.suit_id} suit={suit} onDelete={handleDelete} />
+          <SuitCard key={suit.suit_id} suit={suit} onDelete={handleDelete} onAgent={handleAgent} />
         ))}
       </div>
     )
@@ -140,13 +158,22 @@ export default function Suits({ embedded = false }) {
       {embedded ? null : (
         <div className={styles.header}>
           <div className={styles.headerTitle}>搭配合集</div>
-          <button
-            type="button"
-            className={styles.headerAction}
-            onClick={() => navigate('/suits/create')}
-          >
-            新建套装
-          </button>
+          <div className={styles.headerActions}>
+            <button
+              type="button"
+              className={styles.headerSecondary}
+              onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看我的套装库' } })}
+            >
+              交给 Agent
+            </button>
+            <button
+              type="button"
+              className={styles.headerAction}
+              onClick={() => navigate('/suits/create')}
+            >
+              新建套装
+            </button>
+          </div>
         </div>
       )}
       <div className={styles.body}>

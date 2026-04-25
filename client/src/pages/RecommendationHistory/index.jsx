@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
+import { useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 import { Loading, ErrorBanner, Empty } from '@/components/Feedback'
 
@@ -26,6 +27,7 @@ const toSummaryText = (summary = {}) => {
 }
 
 export default function RecommendationHistory() {
+  const navigate = useNavigate()
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -117,8 +119,17 @@ export default function RecommendationHistory() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <div className={styles.title}>推荐历史</div>
-        <div className={styles.subtitle}>查看推荐结果、采纳状态与反馈记录</div>
+        <div>
+          <div className={styles.title}>推荐历史</div>
+          <div className={styles.subtitle}>查看推荐结果、采纳状态与反馈记录</div>
+        </div>
+        <Button
+          size="small"
+          fill="outline"
+          onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看最近的推荐历史' } })}
+        >
+          交给 Agent
+        </Button>
       </div>
       <div className={styles.list}>
         {items.map((item) => (
@@ -139,6 +150,47 @@ export default function RecommendationHistory() {
             <div className={styles.summary}>{toSummaryText(item.result_summary)}</div>
 
             <div className={styles.actionRow}>
+              <Button
+                size="small"
+                fill="outline"
+                onClick={() =>
+                  navigate('/unified-agent', {
+                    state: {
+                      presetTask: `帮我处理这条推荐历史：${item.scene || `推荐 ${item.id}`}`,
+                      recommendationHistory: {
+                        id: item.id,
+                        scene: item.scene,
+                        adopted: item.adopted,
+                        saved_as_suit: item.saved_as_suit,
+                        saved_as_outfit_log: item.saved_as_outfit_log,
+                        trigger_source: item.trigger_source,
+                        create_time: item.create_time,
+                        result_summary: item.result_summary,
+                        feedback_result: item.feedback_result,
+                        feedback_reason_tags: item.feedback_reason_tags,
+                        feedback_note: item.feedback_note,
+                      },
+                      latestResult: {
+                        recommendationHistory: {
+                          id: item.id,
+                          scene: item.scene,
+                          adopted: item.adopted,
+                          saved_as_suit: item.saved_as_suit,
+                          saved_as_outfit_log: item.saved_as_outfit_log,
+                          trigger_source: item.trigger_source,
+                          create_time: item.create_time,
+                          result_summary: item.result_summary,
+                          feedback_result: item.feedback_result,
+                          feedback_reason_tags: item.feedback_reason_tags,
+                          feedback_note: item.feedback_note,
+                        },
+                      },
+                    },
+                  })
+                }
+              >
+                交给 Agent
+              </Button>
               {(() => {
                 const lockedAdoption = Boolean(item.saved_as_suit || item.saved_as_outfit_log)
                 const label = item.adopted ? '已采纳' : '标记采纳'

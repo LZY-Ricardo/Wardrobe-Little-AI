@@ -54,7 +54,9 @@ router.post('/', verify(), async (ctx) => {
     }
 
     const session = await getOrCreateLegacyChatSession(ctx.userId)
-    const result = await sendUnifiedAgentMessage(ctx.userId, session.id, input)
+    const result = await sendUnifiedAgentMessage(ctx.userId, session.id, input, {
+      enableAutonomousTools: true,
+    })
 
     if (result?.latest_task?.requiresConfirmation) {
       const confirmation = result.latest_task.confirmation

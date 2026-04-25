@@ -11,6 +11,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 const PROFILE_STORAGE_KEY = 'outfit-profile-v1'
 
 const emptyProfile = {
+  city: '',
   heightCm: '',
   weightKg: '',
   topSize: '',
@@ -141,7 +142,7 @@ export default function Person() {
   const [prefPickerVisible, setPrefPickerVisible] = useState(false)
   const [activePrefField, setActivePrefField] = useState('')
   const [prefSelected, setPrefSelected] = useState([])
-  const [confirmDialogVisible, setConfirmDialogVisible] = useState(false)
+  const [, setConfirmDialogVisible] = useState(false)
 
   const hasCharacterModel = Boolean(userInfo?.characterModel || uploadedImage)
 
@@ -673,7 +674,7 @@ export default function Person() {
       return
     }
 
-    ;['topSize', 'bottomSize', 'shoeSize', 'style', 'colors', 'scenes'].forEach((key) => {
+    ;['city', 'topSize', 'bottomSize', 'shoeSize', 'style', 'colors', 'scenes'].forEach((key) => {
       if (typeof next[key] === 'string') next[key] = next[key].trim()
     })
 
@@ -901,11 +902,46 @@ export default function Person() {
       <div className={styles.card}>
         <div className={styles.cardHeader}>
           <div className={styles.cardTitle}>穿搭档案</div>
-          <button type="button" className={styles.cardAction} onClick={openProfilePopup} disabled={userLoading}>
-            编辑
-          </button>
+          <div className={styles.cardActions}>
+            <button
+              type="button"
+              className={styles.cardAction}
+              onClick={() =>
+                navigate('/unified-agent', {
+                  state: {
+                    presetTask: '根据我当前的穿搭档案和个人信息，给我一些更适合我的穿搭建议',
+                    styleProfile: {
+                      city: profile.city || '',
+                      heightCm: profile.heightCm || '',
+                      weightKg: profile.weightKg || '',
+                      topSize: profile.topSize || '',
+                      bottomSize: profile.bottomSize || '',
+                      shoeSize: profile.shoeSize || '',
+                      style: profile.style || '',
+                      colors: profile.colors || '',
+                      scenes: profile.scenes || '',
+                      sex: sex || '',
+                      hasCharacterModel,
+                      clothesCount: assetStats.clothesCount || 0,
+                      favoriteCount: assetStats.favoriteCount || 0,
+                    },
+                  },
+                })
+              }
+              disabled={userLoading}
+            >
+              交给 Agent
+            </button>
+            <button type="button" className={styles.cardAction} onClick={openProfilePopup} disabled={userLoading}>
+              编辑
+            </button>
+          </div>
         </div>
         <div className={styles.profileGrid}>
+          <div className={styles.profileItem}>
+            <span className={styles.profileLabel}>城市</span>
+            <span className={styles.profileValue}>{profile.city || '-'}</span>
+          </div>
           <div className={styles.profileItem}>
             <span className={styles.profileLabel}>身高</span>
             <span className={styles.profileValue}>{profile.heightCm ? `${profile.heightCm}cm` : '-'}</span>
@@ -959,6 +995,17 @@ export default function Person() {
                 <div className={styles.profileSectionDesc}>用于更贴合的尺码与推荐</div>
               </div>
               <div className={styles.profileGrid2}>
+                <div className={styles.profileTile}>
+                  <div className={styles.profileTileLabel}>城市</div>
+                  <input
+                    className={styles.profileTileInput}
+                    type="text"
+                    inputMode="text"
+                    placeholder="例如：抚州"
+                    value={profileDraft.city}
+                    onChange={(e) => setProfileDraft((prev) => ({ ...prev, city: e.target.value }))}
+                  />
+                </div>
                 <div className={styles.profileTile}>
                   <div className={styles.profileTileLabel}>身高(cm)</div>
                   <input
@@ -1309,4 +1356,3 @@ export default function Person() {
     </div>
   )
 }
-

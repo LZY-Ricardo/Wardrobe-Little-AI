@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { Button } from 'antd-mobile'
 import axios from '@/api'
 import { ErrorBanner, Loading, Empty } from '@/components/Feedback'
+import { useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 
 const renderStats = (items = [], emptyText = '暂无数据') => {
@@ -20,6 +22,7 @@ const renderStats = (items = [], emptyText = '暂无数据') => {
 }
 
 export default function WardrobeAnalytics() {
+  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -49,8 +52,24 @@ export default function WardrobeAnalytics() {
   return (
     <div className={styles.page}>
       <div className={styles.hero}>
-        <div className={styles.title}>衣橱分析</div>
-        <div className={styles.subtitle}>从衣物结构、使用记录和推荐采纳情况观察你的穿搭习惯</div>
+        <div>
+          <div className={styles.title}>衣橱分析</div>
+          <div className={styles.subtitle}>从衣物结构、使用记录和推荐采纳情况观察你的穿搭习惯</div>
+        </div>
+        <Button
+          size="small"
+          fill="outline"
+          onClick={() =>
+            navigate('/unified-agent', {
+              state: {
+                presetTask: '结合当前衣橱分析，给我总结重点并告诉我下一步该怎么整理',
+                latestAnalytics: data,
+              },
+            })
+          }
+        >
+          交给 Agent
+        </Button>
       </div>
 
       <div className={styles.summaryGrid}>

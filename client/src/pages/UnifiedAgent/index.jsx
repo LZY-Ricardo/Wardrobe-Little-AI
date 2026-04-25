@@ -64,6 +64,23 @@ export default function UnifiedAgent() {
   const navigate = useNavigate()
   const location = useLocation()
   const presetTask = String(location.state?.presetTask || '').trim()
+  const contextualState = useMemo(
+    () => ({
+      latestResult: location.state?.latestResult || null,
+      selectedCloth: location.state?.selectedCloth || null,
+      selectedSuit: location.state?.selectedSuit || null,
+      selectedOutfitLog: location.state?.selectedOutfitLog || null,
+      latestProfile: location.state?.latestProfile || null,
+      latestAnalytics: location.state?.latestAnalytics || null,
+      latestWeather: location.state?.latestWeather || null,
+      styleProfile: location.state?.styleProfile || null,
+      recommendationHistory: location.state?.recommendationHistory || null,
+      manualSuitDraft: location.state?.manualSuitDraft || null,
+      manualOutfitLogDraft: location.state?.manualOutfitLogDraft || null,
+      prefillImages: Array.isArray(location.state?.prefillImages) ? location.state.prefillImages : [],
+    }),
+    [location.state],
+  )
 
   const [sessions, setSessions] = useState([])
   const [status, setStatus] = useState('loading')
@@ -90,7 +107,7 @@ export default function UnifiedAgent() {
   }, [loadSessions])
 
   const createSession = useCallback(
-    async (firstMessage = '新会话', { prefill } = {}) => {
+    async (firstMessage = '新会话', { prefill, contextState } = {}) => {
       if (creating) return
       setCreating(true)
       try {
@@ -101,7 +118,7 @@ export default function UnifiedAgent() {
         if (payload?.session?.id) {
           const query = prefill ? `&prefill=${encodeURIComponent(prefill)}` : ''
           navigate(`/aichat?sessionId=${payload.session.id}${query}`, {
-            state: { session: payload.session },
+            state: { session: payload.session, ...(contextState || {}) },
           })
           return
         }
@@ -119,8 +136,11 @@ export default function UnifiedAgent() {
 
   useEffect(() => {
     if (!presetTask) return
-    void createSession(presetTask)
-  }, [createSession, presetTask])
+    void createSession(presetTask, {
+      prefill: presetTask,
+      contextState: contextualState,
+    })
+  }, [contextualState, createSession, presetTask])
 
   const latestSession = sessions[0] || null
   const otherSessions = useMemo(() => sessions.slice(1, 3), [sessions])

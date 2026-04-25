@@ -1,10 +1,20 @@
 const { createChatCompletion } = require('../utils/deepseekClient')
 const { normalizeLlmError } = require('../utils/llmError')
 const { buildSystemPrompt, isProjectIntent } = require('../utils/aichatPrompt')
+const { getTodayInChina } = require('../utils/date')
 const { writeSse, endSse } = require('../utils/sseHelpers')
-const { analyzeImageWithVisionTool } = require('./qwenVision')
+const {
+  buildErrorEvent,
+  buildMessageSavedEvent,
+  buildMetaEvent,
+  buildTaskResultEvent,
+} = require('../utils/unifiedAgentSseEvents')
+const { runAgentWorkflow } = require('./agentOrchestrator')
 const { getProfileInsight } = require('./profileInsights')
-const { executeAgentTask, confirmAgentTask, cancelAgentTask } = require('./agent')
+const { executeAgentTask, executeAgentToolIntent, confirmAgentTask, cancelAgentTask } = require('./agent')
+const { resolveWriteActionOptions } = require('./legacyTaskFallbackService')
+const { executeTool } = require('../utils/toolRegistry')
+const { runAutonomousToolLoop, defaultStreamAssistantTurn } = require('../agent/tools/runtime/autonomousToolRuntime')
 const {
   appendMessage,
   createSession,
@@ -15,11 +25,14 @@ const {
   updateSessionMeta,
 } = require('./unifiedAgentSessions')
 const { getSessionMemory, upsertSessionMemory } = require('./unifiedAgentMemory')
+const { buildAssistantImageAttachments } = require('./unifiedAgentAttachments')
 const {
+  buildAssistantActionButton,
   buildRecentMessagesWindow,
   buildSessionRestorePayload,
   buildUnifiedMessagesForModel,
   deriveSessionTitle,
+  sanitizeAssistantReply,
   tryParseStructuredMemoryPayload,
   summarizeSessionMemoryFromMessages,
 } = require('./unifiedAgent.helpers')
@@ -51,30 +64,6 @@ const createAgentSession = async (userId, payload = {}) => {
 const LEGACY_CHAT_SESSION_TITLE = '兼容聊天会话'
 const SUMMARY_RETRY_BACKOFF_MS = Number(process.env.UNIFIED_AGENT_SUMMARY_RETRY_BACKOFF_MS || 30000)
 const summaryRetryBackoff = new Map()
-const IMAGE_TOOL_NAME = 'analyze_image'
-const IMAGE_TOOL_DEFINITION = {
-  type: 'function',
-  function: {
-    name: IMAGE_TOOL_NAME,
-    description: '分析当前用户消息中的图片，返回适用于穿搭问答的结构化结果',
-    parameters: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        attachmentIndex: {
-          type: 'integer',
-          minimum: 0,
-          maximum: 0,
-          description: '当前仅支持分析第 1 张图片，因此固定为 0',
-        },
-        question: {
-          type: 'string',
-          description: '用户当前关于图片的提问或关注点，可为空',
-        },
-      },
-    },
-  },
-}
 
 const getOrCreateLegacyChatSession = async (userId) => {
   const existed = await findLatestSessionByTitle(userId, LEGACY_CHAT_SESSION_TITLE)
@@ -242,193 +231,17 @@ const generateStructuredSessionMemory = async (messages, deps = {}, currentMemor
   }
 }
 
-const resolveWriteActionOptions = (input, latestTask) => {
-  const text = String(input || '')
-  if (!latestTask) return null
-
-  if (text.includes('保存') && text.includes('套装')) {
-    return {
-      action: 'save_suit',
-      latestResult: latestTask,
-      suitIndex: 0,
-    }
-  }
-
-  if ((text.includes('记录') || text.includes('加入')) && text.includes('穿搭')) {
-    return {
-      action: 'create_outfit_log',
-      latestResult: latestTask,
-      suitIndex: 0,
-    }
-  }
-
-  return null
-}
-
-const extractAssistantText = (message = {}) => {
-  if (typeof message?.content === 'string') return message.content
-  if (Array.isArray(message?.content)) {
-    return message.content
-      .map((item) => (typeof item?.text === 'string' ? item.text : ''))
-      .filter(Boolean)
-      .join('')
-  }
-  return ''
-}
-
-const parseToolArguments = (toolCall = {}) => {
-  const raw = toolCall?.function?.arguments
-  if (!raw) return {}
-  try {
-    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
-  }
-}
-
-const buildImageToolMeta = (toolResult = {}, status = 'success') => ({
-  toolCalls: [
-    {
-      name: IMAGE_TOOL_NAME,
-      status,
-      at: Date.now(),
-    },
-  ],
-  toolResultsSummary: [
-    typeof toolResult?.summary === 'string'
-      ? toolResult.summary
-      : String(toolResult?.error || '').trim(),
-  ].filter(Boolean),
-})
-
-const requestToolDecision = async (messages) => {
-  try {
-    const response = await createChatCompletion(
-      {
-        model: process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat',
-        messages,
-        tools: [IMAGE_TOOL_DEFINITION],
-        tool_choice: 'auto',
-        temperature: 0.2,
-        stream: false,
-      },
-      { timeout: Number(process.env.DEEPSEEK_TIMEOUT_MS) || 120000 }
-    )
-    return response?.data?.choices?.[0]?.message || {}
-  } catch (error) {
-    throw normalizeLlmError(error, 'DeepSeek 工具决策服务', CHAT_ERROR_MESSAGES)
-  }
-}
-
-const prepareImageToolConversation = async ({ messages, multimodal, emit }) => {
-  if (!multimodal?.attachments?.length) {
-    return { messages, toolMeta: null }
-  }
-
-  const assistantDecision = await requestToolDecision(messages)
-  const toolCalls = Array.isArray(assistantDecision?.tool_calls) ? assistantDecision.tool_calls : []
-  const shouldFallbackToTool = !multimodal.text.trim()
-
-  let selectedToolCall = toolCalls.find((item) => item?.function?.name === IMAGE_TOOL_NAME) || null
-  if (!selectedToolCall && !shouldFallbackToTool) {
-    return { messages, toolMeta: null }
-  }
-
-  if (!selectedToolCall) {
-    selectedToolCall = {
-      id: `fallback-${Date.now()}`,
-      type: 'function',
-      function: {
-        name: IMAGE_TOOL_NAME,
-        arguments: JSON.stringify({
-          attachmentIndex: 0,
-          question: multimodal.text || '',
-        }),
-      },
-    }
-  }
-
-  const args = parseToolArguments(selectedToolCall)
-  const attachmentIndex = Number.isInteger(args.attachmentIndex) ? args.attachmentIndex : 0
-  const attachment = multimodal.attachments[attachmentIndex]
-  if (!attachment) {
-    return {
-      messages,
-      toolMeta: buildImageToolMeta({ error: '图片工具未找到可分析的附件' }, 'failed'),
-    }
-  }
-
-  emit?.({
-    type: 'tool_call_started',
-    tool: IMAGE_TOOL_NAME,
-    message: '正在分析图片',
-  })
-
-  let toolResult
-  let toolStatus = 'success'
-  try {
-    toolResult = await analyzeImageWithVisionTool({
-      dataUrl: attachment.dataUrl,
-      question: String(args.question || multimodal.text || '').trim(),
-    })
-    emit?.({
-      type: 'tool_call_completed',
-      tool: IMAGE_TOOL_NAME,
-      ok: true,
-      summary: toolResult.summary || '',
-      message: '图片分析完成',
-    })
-  } catch (error) {
-    toolStatus = 'failed'
-    toolResult = {
-      error: error.message || '图片分析失败',
-      summary: '图片分析失败，请结合用户文字继续给出保守回答。',
-    }
-    emit?.({
-      type: 'tool_call_completed',
-      tool: IMAGE_TOOL_NAME,
-      ok: false,
-      summary: toolResult.summary,
-      message: toolResult.error,
-    })
-  }
-
-  const assistantToolMessage = {
-    role: 'assistant',
-    content: extractAssistantText(assistantDecision),
-    tool_calls: [
-      {
-        id: selectedToolCall.id,
-        type: 'function',
-        function: {
-          name: IMAGE_TOOL_NAME,
-          arguments: JSON.stringify({
-            attachmentIndex,
-            question: String(args.question || multimodal.text || '').trim(),
-          }),
-        },
-      },
-    ],
-  }
-
-  const toolMessage = {
-    role: 'tool',
-    tool_call_id: selectedToolCall.id,
-    content: JSON.stringify(toolResult),
-  }
-
-  return {
-    messages: [...messages, assistantToolMessage, toolMessage],
-    toolMeta: buildImageToolMeta(toolResult, toolStatus),
-  }
-}
-
-const streamReplyFromMessages = async ({ messages, emit, isClientGone }) => {
+const streamReplyFromMessages = async ({
+  messages,
+  emit,
+  isClientGone,
+  createChatCompletionImpl = createChatCompletion,
+}) => {
   let fullReply = ''
+  let reasoningAccum = ''
   let streamResponse
   try {
-    streamResponse = await createChatCompletion(
+    streamResponse = await createChatCompletionImpl(
       {
         model: process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat',
         messages,
@@ -448,10 +261,14 @@ const streamReplyFromMessages = async ({ messages, emit, isClientGone }) => {
       fullReply += text
       emit({ type: 'content', text })
     },
+    (reasoning) => {
+      reasoningAccum += reasoning
+      emit({ type: 'reasoning', text: reasoning })
+    },
     isClientGone
   )
 
-  return fullReply
+  return { reply: fullReply, reasoningContent: reasoningAccum }
 }
 
 const resolveMultimodalInput = async (rawInput, deps = {}) => {
@@ -469,22 +286,112 @@ const resolveMultimodalInput = async (rawInput, deps = {}) => {
     attachments,
     messageType: getUserMessageType({ text, attachments }),
     storedContent: buildUserMessageContent({ text, attachments }),
-    modelInput: attachments.length ? buildMultimodalPrompt({ text }) : text,
+    modelInput: attachments.length ? buildMultimodalPrompt({ text, attachments }) : text,
   }
 }
 
-const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
+const initializeAgentMessage = async (userId, sessionId, input, deps = {}) => {
   const multimodal = await resolveMultimodalInput(input, deps)
   const trimmed = multimodal.modelInput
-
   const restored = await restoreAgentSession(userId, sessionId)
   const currentSession = restored.session
+
   await appendMessage(userId, sessionId, {
     role: 'user',
     content: multimodal.storedContent,
     messageType: multimodal.messageType,
     meta: multimodal.attachments.length ? { attachments: multimodal.attachments } : null,
   })
+
+  return {
+    restored,
+    currentSession,
+    trimmed,
+    multimodal,
+  }
+}
+
+const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
+  const shouldUseAutonomousTools = Boolean(deps.enableAutonomousTools || deps.requestAssistantTurn)
+  const { restored, currentSession, trimmed, multimodal } = await initializeAgentMessage(userId, sessionId, input, deps)
+
+  if (!shouldUseAutonomousTools) {
+    const workflowResult = await runAgentWorkflow({
+      userId,
+      input: multimodal.text,
+      multimodal,
+      sourceEntry: 'unified-agent',
+      deps,
+    })
+    if (workflowResult) {
+      return {
+        restored,
+        currentSession,
+        taskResult: workflowResult,
+        autonomousResult: null,
+        canUseTask:
+          workflowResult?.requiresConfirmation ||
+          workflowResult?.taskType === 'create_cloth' ||
+          workflowResult?.status === 'needs_clarification',
+        trimmed,
+        multimodal,
+      }
+    }
+  }
+
+  const intent = isProjectIntent(trimmed) ? 'project' : 'clothing'
+  if (shouldUseAutonomousTools) {
+    const autonomousMessages = buildUnifiedMessagesForModel({
+      systemPrompt: buildSystemPrompt({ intent, currentDate: getTodayInChina() }),
+      recentMessages: restored.recent_messages,
+      sessionMemory: restored.session_memory,
+      preferenceSummary: restored.preference_summary,
+      userInput: trimmed,
+    })
+    const autonomousResult = await runAutonomousToolLoop({
+      userId,
+      input: trimmed,
+      sourceEntry: 'unified-agent',
+      intent,
+      messages: autonomousMessages,
+      multimodal,
+      latestTask: deps.latestTask || null,
+      deps: {
+        ...deps,
+        executeTool,
+        executeAgentToolIntent,
+        preferenceSummary: restored.preference_summary,
+        clientContext: deps.clientContext || null,
+        sessionMemory: restored.session_memory,
+      },
+      sanitizeAssistantReply,
+    })
+    if (autonomousResult) {
+      return {
+        restored,
+        currentSession,
+        taskResult: autonomousResult.kind === 'task' ? autonomousResult.taskResult : null,
+        autonomousResult,
+        canUseTask: autonomousResult.kind === 'task',
+        trimmed,
+        multimodal,
+        intent,
+      }
+    }
+  }
+
+  if (shouldUseAutonomousTools) {
+    return {
+      restored,
+      currentSession,
+      taskResult: null,
+      autonomousResult: null,
+      canUseTask: false,
+      trimmed,
+      multimodal,
+      intent,
+    }
+  }
 
   const writeActionOptions = resolveWriteActionOptions(trimmed, deps.latestTask)
   const shouldUseTaskPipeline =
@@ -504,6 +411,9 @@ const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
   const taskType = taskResult?.taskType
   const canUseTask = Boolean(taskResult) && (
     taskResult?.requiresConfirmation ||
+    taskType === 'cloth_detail' ||
+    taskType === 'suit_detail' ||
+    taskType === 'outfit_log_detail' ||
     taskType === 'closet_query' ||
     taskType === 'recommendation' ||
     taskType === 'profile' ||
@@ -514,7 +424,7 @@ const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
 }
 
 const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
-  const { restored, currentSession, taskResult, canUseTask, trimmed, multimodal } = await prepareAgentMessage(userId, sessionId, input, deps)
+  const { restored, currentSession, taskResult, autonomousResult, canUseTask, trimmed, multimodal, intent: preparedIntent } = await prepareAgentMessage(userId, sessionId, input, deps)
 
   if (canUseTask) {
     const nextTitle =
@@ -527,6 +437,20 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
       title: nextTitle,
     })
 
+    const actionButton = taskResult?.requiresConfirmation
+      ? null
+      : buildAssistantActionButton({
+        intent: preparedIntent || 'clothing',
+        reply: taskResult.summary,
+        latestTask: taskResult,
+      })
+    const attachments = await resolveAssistantAttachments({
+      userId,
+      input: trimmed,
+      taskResult,
+      deps,
+    })
+
     const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
     const assistantMessage = await appendMessage(userId, sessionId, {
       role: 'assistant',
@@ -534,6 +458,11 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
       messageType,
       taskId: taskResult.historyId || null,
       confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
+      meta: buildAssistantMessageMeta({
+        attachments,
+        pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
+        actionButton,
+      }),
     })
 
     await safeRefreshSessionMemory(userId, sessionId, deps)
@@ -545,7 +474,51 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
     }
   }
 
-  const intent = isProjectIntent(trimmed) ? 'project' : 'clothing'
+  if (autonomousResult?.kind === 'reply') {
+    const nextTitle =
+      currentSession?.title === '新会话'
+        ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
+        : currentSession?.title
+
+    await updateSessionMeta(userId, sessionId, {
+      current_task_type: 'chat',
+      title: nextTitle,
+    })
+
+    const actionButton = buildAssistantActionButton({
+      intent: preparedIntent || 'clothing',
+      reply: autonomousResult.reply,
+      latestTask: deps.latestTask || null,
+    })
+    const attachments = await resolveAssistantAttachments({
+      userId,
+      input: trimmed,
+      latestTask: deps.latestTask || null,
+      deps,
+    })
+
+    const assistantMessage = await appendMessage(userId, sessionId, {
+      role: 'assistant',
+      content: autonomousResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      messageType: 'chat',
+      meta: buildAssistantMessageMeta({
+        toolMeta: autonomousResult.toolMeta,
+        attachments,
+        actionButton,
+        reasoningContent: autonomousResult.reasoningContent,
+      }),
+    })
+
+    await safeRefreshSessionMemory(userId, sessionId, deps)
+    const restoredNext = await restoreAgentSession(userId, sessionId)
+    return {
+      message: assistantMessage,
+      restored: restoredNext,
+      latest_task: null,
+    }
+  }
+
+  const intent = preparedIntent || (isProjectIntent(trimmed) ? 'project' : 'clothing')
   const nextTitle =
     currentSession?.title === '新会话'
       ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
@@ -557,29 +530,32 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
   })
 
   const messages = buildUnifiedMessagesForModel({
-    systemPrompt: buildSystemPrompt({ intent }),
+    systemPrompt: buildSystemPrompt({ intent, currentDate: getTodayInChina() }),
     recentMessages: restored.recent_messages,
     sessionMemory: restored.session_memory,
     preferenceSummary: restored.preference_summary,
     userInput: trimmed,
   })
 
-  let finalMessages = messages
-  let toolMeta = null
-  if (multimodal.attachments.length) {
-    const preparedConversation = await prepareImageToolConversation({ messages, multimodal })
-    finalMessages = preparedConversation.messages
-    toolMeta = preparedConversation.toolMeta
-  }
-
   const generateReply = deps.generateReply || defaultGenerateReply
-  const reply = await generateReply(finalMessages)
+  const reply = sanitizeAssistantReply(await generateReply(messages), { intent })
+  const actionButton = buildAssistantActionButton({
+    intent,
+    reply,
+    latestTask: deps.latestTask || null,
+  })
+  const attachments = await resolveAssistantAttachments({
+    userId,
+    input: trimmed,
+    latestTask: deps.latestTask || null,
+    deps,
+  })
 
   const assistantMessage = await appendMessage(userId, sessionId, {
     role: 'assistant',
     content: reply || '我暂时没有生成有效回复，请稍后再试。',
     messageType: 'chat',
-    meta: toolMeta,
+    meta: buildAssistantMessageMeta({ attachments, actionButton }),
   })
 
   await safeRefreshSessionMemory(userId, sessionId, deps)
@@ -597,14 +573,18 @@ const parseDeepSeekStreamChunk = (line) => {
   if (payload === '[DONE]') return { done: true }
   try {
     const parsed = JSON.parse(payload)
-    const content = parsed?.choices?.[0]?.delta?.content
-    return content != null ? { text: content } : null
+    const delta = parsed?.choices?.[0]?.delta
+    if (!delta) return null
+    const result = {}
+    if (delta.content != null) result.text = delta.content
+    if (delta.reasoning_content != null) result.reasoning = delta.reasoning_content
+    return Object.keys(result).length ? result : null
   } catch {
     return null
   }
 }
 
-const consumeDeepSeekStream = async (stream, onChunk, isClientGone) => {
+const consumeDeepSeekStream = async (stream, onChunk, onReasoning, isClientGone) => {
   let buffer = ''
   for await (const chunk of stream) {
     if (isClientGone()) return
@@ -616,9 +596,57 @@ const consumeDeepSeekStream = async (stream, onChunk, isClientGone) => {
       if (!parsed) continue
       if (parsed.done) return
       if (parsed.text != null) onChunk(parsed.text)
+      if (parsed.reasoning != null) onReasoning?.(parsed.reasoning)
     }
   }
 }
+
+const resolveStreamingAutonomousMode = (deps = {}) => {
+  const hasStreamAssistantTurnOverride = Object.prototype.hasOwnProperty.call(deps, 'streamAssistantTurn')
+  const streamAssistantTurn = hasStreamAssistantTurnOverride
+    ? deps.streamAssistantTurn
+    : defaultStreamAssistantTurn
+
+  return {
+    streamAssistantTurn,
+    shouldUseStreamingAutonomous: Boolean(
+      deps.enableAutonomousTools &&
+      typeof streamAssistantTurn === 'function'
+    ),
+  }
+}
+
+const buildAssistantMessageMeta = ({
+  actionButton = null,
+  attachments = null,
+  pendingConfirmation = null,
+  reasoningContent = '',
+  toolMeta = null,
+} = {}) => {
+  const meta = {
+    ...(toolMeta && typeof toolMeta === 'object' ? toolMeta : {}),
+    ...(Array.isArray(attachments) && attachments.length ? { attachments } : {}),
+    ...(actionButton ? { actionButton } : {}),
+    ...(pendingConfirmation ? { pendingConfirmation } : {}),
+    ...(reasoningContent ? { reasoningContent } : {}),
+  }
+
+  return Object.keys(meta).length ? meta : null
+}
+
+const resolveAssistantAttachments = async ({
+  userId,
+  input = '',
+  taskResult = null,
+  latestTask = null,
+  deps = {},
+} = {}) => buildAssistantImageAttachments({
+  userId,
+  taskResult,
+  latestTask,
+  input,
+  deps,
+})
 
 const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps = {}) => {
   const res = ctx.res
@@ -627,18 +655,173 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
   const emit = (data) => writeSse(res, data)
   const finish = () => endSse(res)
 
-  let prepared
-  try {
-    prepared = await prepareAgentMessage(userId, sessionId, input, deps)
-  } catch (err) {
-    emit({ type: 'error', msg: err.message || '发送失败' })
+  const { shouldUseStreamingAutonomous, streamAssistantTurn } = resolveStreamingAutonomousMode(deps)
+  if (shouldUseStreamingAutonomous) {
+    let initialized
+    try {
+      initialized = await initializeAgentMessage(userId, sessionId, input, deps)
+    } catch (err) {
+      emit(buildErrorEvent(err.message || '发送失败'))
+      finish()
+      return
+    }
+
+    const { restored, currentSession, trimmed, multimodal } = initialized
+    const intent = isProjectIntent(trimmed) ? 'project' : 'clothing'
+    const nextTitle =
+      currentSession?.title === '新会话'
+        ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
+        : currentSession?.title
+
+    await updateSessionMeta(userId, sessionId, {
+      current_task_type: 'chat',
+      title: nextTitle,
+    })
+
+    if (isClientGone()) { finish(); return }
+    emit(buildMetaEvent({ title: nextTitle }))
+
+    const autonomousMessages = buildUnifiedMessagesForModel({
+      systemPrompt: buildSystemPrompt({ intent, currentDate: getTodayInChina() }),
+      recentMessages: restored.recent_messages,
+      sessionMemory: restored.session_memory,
+      preferenceSummary: restored.preference_summary,
+      userInput: trimmed,
+    })
+
+    let autonomousResult
+    try {
+      autonomousResult = await runAutonomousToolLoop({
+        userId,
+        input: trimmed,
+        sourceEntry: 'unified-agent',
+        intent,
+        messages: autonomousMessages,
+        multimodal,
+        latestTask: deps.latestTask || null,
+      deps: {
+        ...deps,
+        executeTool,
+        executeAgentToolIntent,
+        preferenceSummary: restored.preference_summary,
+        clientContext: deps.clientContext || null,
+        sessionMemory: restored.session_memory,
+        streamAssistantTurn,
+        isClientGone,
+        },
+        emit,
+        sanitizeAssistantReply,
+      })
+    } catch (error) {
+      emit(buildErrorEvent(error.message || '生成回复时出错'))
+      finish()
+      return
+    }
+
+    if (!autonomousResult) {
+      emit(buildErrorEvent('暂时无法对话'))
+      finish()
+      return
+    }
+
+    if (autonomousResult.kind === 'aborted' || isClientGone()) {
+      finish()
+      return
+    }
+
+    if (autonomousResult.kind === 'task') {
+      const taskResult = autonomousResult.taskResult
+      if (isClientGone()) { finish(); return }
+      await updateSessionMeta(userId, sessionId, {
+        current_task_type: taskResult.taskType,
+        title: nextTitle,
+      })
+
+      const actionButton = taskResult?.requiresConfirmation
+        ? null
+        : buildAssistantActionButton({
+          intent,
+          reply: taskResult.summary,
+          latestTask: taskResult,
+        })
+      const attachments = await resolveAssistantAttachments({
+        userId,
+        input: trimmed,
+        taskResult,
+        deps,
+      })
+
+      const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
+      const assistantMessage = await appendMessage(userId, sessionId, {
+        role: 'assistant',
+        content: taskResult.summary,
+        messageType,
+        taskId: taskResult.historyId || null,
+        confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
+        meta: buildAssistantMessageMeta({
+          attachments,
+          pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
+          actionButton,
+        }),
+      })
+
+      safeRefreshSessionMemory(userId, sessionId, deps).catch(() => {})
+      const restoredNext = await restoreAgentSession(userId, sessionId)
+      emit(buildTaskResultEvent({ message: assistantMessage, latest_task: taskResult, restored: restoredNext }))
+      finish()
+      return
+    }
+
+    if (isClientGone()) { finish(); return }
+
+    const actionButton = buildAssistantActionButton({
+      intent,
+      reply: autonomousResult.reply,
+      latestTask: deps.latestTask || null,
+    })
+    const attachments = await resolveAssistantAttachments({
+      userId,
+      input: trimmed,
+      latestTask: deps.latestTask || null,
+      deps,
+    })
+
+    const assistantMessage = await appendMessage(userId, sessionId, {
+      role: 'assistant',
+      content: autonomousResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      messageType: 'chat',
+      meta: buildAssistantMessageMeta({
+        toolMeta: autonomousResult.toolMeta,
+        attachments,
+        actionButton,
+        reasoningContent: autonomousResult.reasoningContent,
+      }),
+    })
+
+    safeRefreshSessionMemory(userId, sessionId, deps).catch(() => {})
+    const restoredNext = await restoreAgentSession(userId, sessionId)
+    emit(buildMessageSavedEvent({ message: assistantMessage, restored: restoredNext }))
     finish()
     return
   }
 
-  const { restored, currentSession, taskResult, canUseTask, trimmed, multimodal } = prepared
+  let prepared
+  try {
+    prepared = await prepareAgentMessage(userId, sessionId, input, {
+      ...deps,
+      enableAutonomousTools: false,
+      requestAssistantTurn: undefined,
+    })
+  } catch (err) {
+    emit(buildErrorEvent(err.message || '发送失败'))
+    finish()
+    return
+  }
+
+  const { restored, currentSession, taskResult, canUseTask, trimmed, intent: preparedIntent } = prepared
 
   if (canUseTask) {
+    if (isClientGone()) { finish(); return }
     const nextTitle =
       currentSession?.title === '新会话'
         ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
@@ -649,6 +832,20 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       title: nextTitle,
     })
 
+    const actionButton = taskResult?.requiresConfirmation
+      ? null
+      : buildAssistantActionButton({
+        intent: preparedIntent || 'clothing',
+        reply: taskResult.summary,
+        latestTask: taskResult,
+      })
+    const attachments = await resolveAssistantAttachments({
+      userId,
+      input: trimmed,
+      taskResult,
+      deps,
+    })
+
     const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
     const assistantMessage = await appendMessage(userId, sessionId, {
       role: 'assistant',
@@ -656,17 +853,22 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       messageType,
       taskId: taskResult.historyId || null,
       confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
+      meta: buildAssistantMessageMeta({
+        attachments,
+        pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
+        actionButton,
+      }),
     })
 
     safeRefreshSessionMemory(userId, sessionId, deps).catch(() => {})
     const restoredNext = await restoreAgentSession(userId, sessionId)
 
-    emit({ type: 'task_result', message: assistantMessage, latest_task: taskResult, restored: restoredNext })
+    emit(buildTaskResultEvent({ message: assistantMessage, latest_task: taskResult, restored: restoredNext }))
     finish()
     return
   }
 
-  const intent = isProjectIntent(trimmed) ? 'project' : 'clothing'
+  const intent = preparedIntent || (isProjectIntent(trimmed) ? 'project' : 'clothing')
   const nextTitle =
     currentSession?.title === '新会话'
       ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
@@ -679,72 +881,76 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
 
   if (isClientGone()) { finish(); return }
 
-  emit({ type: 'meta', title: nextTitle })
+  emit(buildMetaEvent({ title: nextTitle }))
 
   const messages = buildUnifiedMessagesForModel({
-    systemPrompt: buildSystemPrompt({ intent }),
+    systemPrompt: buildSystemPrompt({ intent, currentDate: getTodayInChina() }),
     recentMessages: restored.recent_messages,
     sessionMemory: restored.session_memory,
     preferenceSummary: restored.preference_summary,
     userInput: trimmed,
   })
 
-  let finalMessages = messages
-  let toolMeta = null
+  let streamResult
   try {
-    if (multimodal.attachments.length) {
-      const preparedConversation = await prepareImageToolConversation({
-        messages,
-        multimodal,
-        emit,
-      })
-      finalMessages = preparedConversation.messages
-      toolMeta = preparedConversation.toolMeta
-    }
-  } catch (error) {
-    const normalized = normalizeLlmError(error, 'DeepSeek 对话服务', CHAT_ERROR_MESSAGES)
-    emit({ type: 'error', msg: normalized.message || '对话服务暂时不可用' })
-    finish()
-    return
-  }
-
-  let fullReply = ''
-  try {
-    fullReply = await streamReplyFromMessages({
-      messages: finalMessages,
+    streamResult = await streamReplyFromMessages({
+      messages,
       emit,
       isClientGone,
     })
   } catch (error) {
-    emit({ type: 'error', msg: error.message || '生成回复时出错' })
+    emit(buildErrorEvent(error.message || '生成回复时出错'))
     finish()
     return
   }
 
   if (isClientGone()) { finish(); return }
 
+  const cleanedReply = sanitizeAssistantReply(streamResult.reply, { intent })
+  const actionButton = buildAssistantActionButton({
+    intent,
+    reply: cleanedReply,
+    latestTask: deps.latestTask || null,
+  })
+  const attachments = await resolveAssistantAttachments({
+    userId,
+    input: trimmed,
+    latestTask: deps.latestTask || null,
+    deps,
+  })
+
   const assistantMessage = await appendMessage(userId, sessionId, {
     role: 'assistant',
-    content: fullReply || '我暂时没有生成有效回复，请稍后再试。',
+    content: cleanedReply || '我暂时没有生成有效回复，请稍后再试。',
     messageType: 'chat',
-    meta: toolMeta,
+    meta: buildAssistantMessageMeta({
+      attachments,
+      actionButton,
+      reasoningContent: streamResult.reasoningContent,
+    }),
   })
 
   safeRefreshSessionMemory(userId, sessionId, deps).catch(() => {})
   const restoredNext = await restoreAgentSession(userId, sessionId)
 
-  emit({ type: 'message_saved', message: assistantMessage, restored: restoredNext })
+  emit(buildMessageSavedEvent({ message: assistantMessage, restored: restoredNext }))
   finish()
 }
 
 const confirmUnifiedAgentAction = async (userId, sessionId, confirmId) => {
   const result = await confirmAgentTask(userId, confirmId)
+  const actionButton = buildAssistantActionButton({
+    intent: 'clothing',
+    reply: result.summary,
+    latestTask: result,
+  })
   await appendMessage(userId, sessionId, {
     role: 'assistant',
     content: result.summary,
     messageType: 'confirm_result',
     taskId: result.historyId || null,
     confirmationStatus: 'confirmed',
+    meta: buildAssistantMessageMeta({ actionButton }),
   })
   await safeRefreshSessionMemory(userId, sessionId)
   const restored = await restoreAgentSession(userId, sessionId)
@@ -772,6 +978,13 @@ const cancelUnifiedAgentAction = async (userId, sessionId, confirmId) => {
 }
 
 module.exports = {
+  __testables: {
+    buildAssistantMessageMeta,
+    initializeAgentMessage,
+    parseDeepSeekStreamChunk,
+    resolveStreamingAutonomousMode,
+    streamReplyFromMessages,
+  },
   appendAgentMessage,
   cancelUnifiedAgentAction,
   confirmUnifiedAgentAction,

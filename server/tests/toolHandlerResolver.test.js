@@ -1,0 +1,51 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+
+const { getToolByName } = require('../agent/tools/registry')
+const { HANDLER_ALIASES, resolveToolHandler } = require('../agent/tools/registry/handlerResolver')
+
+test('handler resolver can resolve catalog handler strings to executable functions', () => {
+  const clothListTool = getToolByName('list_clothes')
+  const imageTool = getToolByName('analyze_image')
+  const saveSuitTool = getToolByName('save_suit')
+  const weatherTool = getToolByName('get_weather_forecast')
+  const listSuitsTool = getToolByName('list_suits')
+  const outfitLogDetailTool = getToolByName('get_outfit_log_detail')
+  const recommendationListTool = getToolByName('list_recommendations')
+  const feedbackTool = getToolByName('submit_recommendation_feedback')
+  const refreshProfileTool = getToolByName('refresh_profile_insight')
+
+  const clothListHandler = resolveToolHandler(clothListTool)
+  const imageHandler = resolveToolHandler(imageTool)
+  const saveSuitHandler = resolveToolHandler(saveSuitTool)
+  const weatherHandler = resolveToolHandler(weatherTool)
+  const listSuitsHandler = resolveToolHandler(listSuitsTool)
+  const outfitLogDetailHandler = resolveToolHandler(outfitLogDetailTool)
+  const recommendationListHandler = resolveToolHandler(recommendationListTool)
+  const feedbackHandler = resolveToolHandler(feedbackTool)
+  const refreshProfileHandler = resolveToolHandler(refreshProfileTool)
+
+  assert.equal(typeof clothListHandler, 'function')
+  assert.equal(typeof imageHandler, 'function')
+  assert.equal(typeof saveSuitHandler, 'function')
+  assert.equal(typeof weatherHandler, 'function')
+  assert.equal(typeof listSuitsHandler, 'function')
+  assert.equal(typeof outfitLogDetailHandler, 'function')
+  assert.equal(typeof recommendationListHandler, 'function')
+  assert.equal(typeof feedbackHandler, 'function')
+  assert.equal(typeof refreshProfileHandler, 'function')
+})
+
+test('handler resolver keeps compatibility aliases only for non-conventional exports', () => {
+  assert.equal(HANDLER_ALIASES['vision.read.analyzeImage'], 'analyzeImageTool')
+  assert.equal(HANDLER_ALIASES['wardrobe.write.setFavorite'], 'setClothFavorite')
+  assert.equal(HANDLER_ALIASES['profile.read.getProfileInsight'], 'getProfileInsightTool')
+  assert.equal(HANDLER_ALIASES['profile.read.refreshProfileInsight'], 'refreshProfileInsightTool')
+  assert.equal(HANDLER_ALIASES['recommendations.write.submitRecommendationFeedback'], 'submitRecommendationFeedbackTool')
+  assert.equal(HANDLER_ALIASES['suits.write.saveSuit'], undefined)
+})
+
+test('handler resolver returns null for missing handler metadata', () => {
+  assert.equal(resolveToolHandler({ name: 'x', handler: '' }), null)
+  assert.equal(resolveToolHandler({ name: 'x', handler: 'unknown.handler.path' }), null)
+})

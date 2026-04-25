@@ -1,7 +1,16 @@
 // 数据库相关操作
 const { query } = require('../models/db')
+const {
+    calcBase64Size,
+    clampLen,
+    ensureLen,
+    hasRequiredClothesType,
+    isProbablyBase64Image,
+    normalizeClothesType,
+} = require('../utils/validate')
 
 const allServices = { query }
+const MAX_IMAGE_BYTES = 1 * 1024 * 1024
 
 const parseTypeKeywords = (raw, fallback) =>
     String(raw || fallback || '')
@@ -125,6 +134,47 @@ const updateClothFieldsForUser = async (user_id, cloth_id, patch = {}) => {
     return result.affectedRows > 0
 }
 
+const createClothForUser = async (user_id, payload = {}) => {
+    const name = ensureLen(payload.name, '衣物名称')
+    const normalizedType = normalizeClothesType(ensureLen(payload.type, '衣物类型')).value
+    if (!hasRequiredClothesType(normalizedType)) {
+        const error = new Error('衣物类型需包含：上衣/下衣/鞋子/配饰')
+        error.status = 400
+        throw error
+    }
+
+    const color = ensureLen(payload.color, '衣物颜色')
+    const style = ensureLen(payload.style, '衣物风格')
+    const season = ensureLen(payload.season, '适宜季节')
+    const material = clampLen(payload.material, 64)
+    const image = String(payload.image || '').trim()
+
+    if (image) {
+        if (!isProbablyBase64Image(image)) {
+            const error = new Error('请上传图片数据')
+            error.status = 400
+            throw error
+        }
+        const imageSize = calcBase64Size(image)
+        if (imageSize > MAX_IMAGE_BYTES) {
+            const error = new Error('图片大小需不超过 1MB，请压缩后再上传')
+            error.status = 400
+            throw error
+        }
+    }
+
+    const now = Date.now()
+    const sql = 'INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    const params = [user_id, name, normalizedType, color, style, season, material, image, now, now]
+    const result = await allServices.query(sql, params)
+    if (!result?.insertId) {
+        const error = new Error('创建衣物失败')
+        error.status = 500
+        throw error
+    }
+    return getClothByIdForUser(user_id, result.insertId)
+}
+
 const buildTypeLikeQuery = (user_id, keywords = []) => {
     const list = Array.isArray(keywords) ? keywords.filter(Boolean) : []
     if (!list.length) {
@@ -163,5 +213,6 @@ module.exports = {
     getClothByIdForUser,
     deleteClothForUser,
     updateClothFieldsForUser,
+    createClothForUser,
 
 }

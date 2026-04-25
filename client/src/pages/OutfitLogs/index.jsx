@@ -4,11 +4,13 @@ import axios from '@/api'
 import { useClosetStore } from '@/store'
 import { Empty, ErrorBanner, Loading } from '@/components/Feedback'
 import { getTodayInChina } from '@/utils/date'
+import { useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 
 const today = () => getTodayInChina()
 
 export default function OutfitLogs() {
+  const navigate = useNavigate()
   const fetchAllClothes = useClosetStore((s) => s.fetchAllClothes)
   const [logs, setLogs] = useState([])
   const [status, setStatus] = useState('loading')
@@ -103,10 +105,34 @@ export default function OutfitLogs() {
   if (status === 'loading') return <Loading text="加载穿搭记录中..." />
   if (status === 'error') return <ErrorBanner message={error} onAction={loadLogs} />
 
+  const canDraftToAgent = form.items.length > 0
+
   return (
     <div className={styles.page}>
       <div className={styles.formCard}>
-        <div className={styles.sectionTitle}>记录穿搭</div>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>记录穿搭</div>
+          <Button
+            size="small"
+            fill="outline"
+            disabled={!canDraftToAgent}
+            onClick={() =>
+              navigate('/unified-agent', {
+                state: {
+                  presetTask: `帮我记录这套${form.scene || '今日'}穿搭`,
+                  latestResult: {
+                    manualOutfitLogDraft: {
+                      ...form,
+                      source: 'agent',
+                    },
+                  },
+                },
+              })
+            }
+          >
+            交给 Agent
+          </Button>
+        </div>
         <div className={styles.grid}>
           <label className={styles.field}>
             <span>日期</span>
@@ -182,7 +208,16 @@ export default function OutfitLogs() {
       </div>
 
       <div className={styles.listCard}>
-        <div className={styles.sectionTitle}>穿搭历史</div>
+        <div className={styles.sectionHeader}>
+          <div className={styles.sectionTitle}>穿搭历史</div>
+          <Button
+            size="small"
+            fill="outline"
+            onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看最近的穿搭记录' } })}
+          >
+            交给 Agent
+          </Button>
+        </div>
         {!logs.length ? (
           <Empty description="还没有穿搭记录" />
         ) : (
@@ -205,6 +240,22 @@ export default function OutfitLogs() {
                   >
                     删除
                   </button>
+                </div>
+                <div className={styles.logActions}>
+                  <Button
+                    size="mini"
+                    fill="outline"
+                    onClick={() =>
+                      navigate('/unified-agent', {
+                        state: {
+                          presetTask: `帮我处理这条穿搭记录：${item.log_date}`,
+                          selectedOutfitLog: item,
+                        },
+                      })
+                    }
+                  >
+                    交给 Agent
+                  </Button>
                 </div>
                 {item.note ? <div className={styles.note}>{item.note}</div> : null}
                 <div className={styles.tags}>

@@ -11,6 +11,12 @@ const TABS = [
   { key: 'collection', title: '衣萃' },
 ]
 
+const AGENT_PRESET_MAP = {
+  preview: '帮我继续处理我在搭配中心里的当前搭配',
+  recommend: '帮我继续处理当前场景推荐',
+  collection: '帮我看看我的套装库，并告诉我下一步可以怎么整理',
+}
+
 const parseTabKey = (search = '') => {
   const params = new URLSearchParams(search || '')
   const value = (params.get('tab') || '').trim().toLowerCase()
@@ -43,6 +49,21 @@ export default function MatchHub() {
   return (
     <div className={styles.hub}>
       <div className={styles.header}>
+        <div className={styles.headerTop}>
+          <button
+            type="button"
+            className={styles.agentButton}
+            onClick={() =>
+              navigate('/unified-agent', {
+                state: {
+                  presetTask: AGENT_PRESET_MAP[activeKey] || AGENT_PRESET_MAP.preview,
+                },
+              })
+            }
+          >
+            交给 Agent
+          </button>
+        </div>
         <div className={styles.tabs}>
           {TABS.map((tab) => (
             <button
