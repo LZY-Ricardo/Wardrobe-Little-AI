@@ -113,7 +113,7 @@ api.interceptors.response.use(
     if (response.status === 200) {
       const data = response.data
       if (data?.code === 1) return data
-      const message = data?.msg || '请求失败'
+      const message = data?.msg || '操作失败'
       Toast.show({ icon: 'fail', content: message, duration: 1200 })
       return Promise.reject(data)
     }
@@ -169,7 +169,7 @@ api.interceptors.response.use(
     if (statusMessage) {
       Toast.show({ icon: 'fail', content: statusMessage, duration: 1200 })
     } else {
-      Toast.show({ icon: 'fail', content: '网络异常，请稍后重试', duration: 1200 })
+      Toast.show({ icon: 'fail', content: '当前不可用', duration: 1200 })
     }
 
     return Promise.reject(error)

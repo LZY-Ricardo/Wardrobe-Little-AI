@@ -2,7 +2,7 @@
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
 import { Button, Dialog, Toast } from 'antd-mobile'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
@@ -34,6 +34,10 @@ const ANALYSIS_TIPS = [
 
 export default function Add() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromAgent = location.state?.from === 'aichat'
+  const returnSessionId = location.state?.returnSessionId
+  const returnSession = location.state?.returnSession || null
   const markMatchStale = useMatchStore((s) => s.markStale)
   const [imageUrl, setImageUrl] = useState('')
   const [status, setStatus] = useState('')
@@ -57,6 +61,12 @@ export default function Add() {
   const styleRef = useRef(null)
   const seasonRef = useRef(null)
   const materialRef = useRef(null)
+
+  useEffect(() => {
+    const presetImage = location.state?.prefillImage
+    if (!presetImage || imageUrl) return
+    setImageUrl(presetImage)
+  }, [imageUrl, location.state])
 
   const startAnalysisTimer = useCallback(() => {
     const startTime = Date.now()
@@ -305,10 +315,21 @@ export default function Add() {
     }
   }
 
+  const handleBack = () => {
+    if (fromAgent && returnSessionId) {
+      navigate(`/aichat?sessionId=${returnSessionId}`, {
+        replace: true,
+        state: returnSession ? { session: returnSession } : undefined,
+      })
+      return
+    }
+    navigate(-1)
+  }
+
   return (
     <div className={styles.add}>
       <div className={styles.header}>
-        <div className={styles.headerBack} onClick={() => navigate(-1)}>
+        <div className={styles.headerBack} onClick={handleBack}>
           <SvgIcon iconName="icon-fanhui" />
         </div>
         <div className={styles.headerTitle}>添加衣物</div>
@@ -325,6 +346,8 @@ export default function Add() {
       </div>
 
       <div className={styles.container}>
+        {fromAgent ? <div className={styles.sourceHint}>来自 Agent 选图</div> : null}
+
         <div className={styles.name}>
           <label htmlFor="name">衣物名称</label>
           <input ref={nameRef} type="text" id="name" placeholder="请输入衣物名称" />

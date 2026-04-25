@@ -1,4 +1,22 @@
-﻿.bottom-navigation-bar{
+@keyframes navShimmer {
+    0% {
+        background-position: -100% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+@keyframes handlePulse {
+    0%, 100% {
+        opacity: 0.25;
+    }
+    50% {
+        opacity: 0.45;
+    }
+}
+
+.bottom-navigation-bar {
     position: fixed;
     bottom: 0;
     left: 0;
@@ -6,7 +24,9 @@
     z-index: 6666;
     background: var(--nav-bg);
     box-shadow: var(--nav-shadow);
-    transition: background-color 0.3s ease, box-shadow 0.3s ease;
+    transition: background-color 0.3s ease,
+                box-shadow 0.3s ease,
+                transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 
     :global(.adm-tab-bar) {
         position: relative;
@@ -23,5 +43,160 @@
     :global(.adm-tab-bar-item-active .adm-tab-bar-item-icon),
     :global(.adm-tab-bar-item-active .adm-tab-bar-item-title) {
         color: var(--accent-primary);
+    }
+}
+
+/* ---------- inactive shimmer (Agent pages) ---------- */
+.inactive {
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+            90deg,
+            transparent 0%,
+            transparent 30%,
+            rgba(102, 126, 234, 0.06) 44%,
+            rgba(102, 126, 234, 0.1) 50%,
+            rgba(102, 126, 234, 0.06) 56%,
+            transparent 70%,
+            transparent 100%
+        );
+        background-size: 200% 100%;
+        animation: navShimmer 3.5s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 1;
+        border-radius: inherit;
+    }
+}
+
+/* ---------- hidden state ---------- */
+.hidden {
+    transform: translateY(100%);
+    pointer-events: none;
+}
+
+/* ---------- hide handle (top-center pill) ---------- */
+.hide-handle {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 44px;
+    height: 14px;
+    padding: 5px 0 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    z-index: 3;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+}
+
+.hide-pill {
+    display: block;
+    width: 22px;
+    height: 3px;
+    border-radius: 2px;
+    background: var(--text-secondary);
+    opacity: 0.25;
+    animation: handlePulse 2.4s ease-in-out infinite;
+    transition: opacity 0.15s ease, background 0.15s ease, width 0.15s ease;
+}
+
+.hide-handle:hover .hide-pill,
+.hide-handle:active .hide-pill {
+    opacity: 0.6;
+    background: var(--accent-primary);
+    width: 26px;
+    animation: none;
+}
+
+/* ---------- restore indicator (bottom pill) ---------- */
+.restore-indicator {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    z-index: 6665;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+}
+
+.restore-pill {
+    display: block;
+    width: 32px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--text-secondary);
+    opacity: 0.2;
+    transition: opacity 0.15s ease, background 0.15s ease, width 0.15s ease;
+}
+
+.restore-indicator:hover .restore-pill,
+.restore-indicator:active .restore-pill {
+    opacity: 0.45;
+    background: var(--accent-primary);
+    width: 40px;
+}
+
+/* ---------- center agent tab ---------- */
+.center-tab {
+    :global(.adm-tab-bar-item-title) {
+        display: none !important;
+    }
+}
+
+.agent-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transform: translateY(-6px);
+
+    &:active {
+        transform: translateY(-6px) scale(0.93);
+    }
+}
+
+.agent-btn--inactive {
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
+    opacity: 0.65;
+}
+
+.agent-btn--active {
+    box-shadow: 0 3px 16px rgba(168, 85, 247, 0.55);
+}
+
+.agent-avatar-svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+    .inactive::before {
+        animation: none;
+    }
+
+    .bottom-navigation-bar {
+        transition: none;
+    }
+
+    .hide-pill {
+        animation: none;
+        opacity: 0.3;
     }
 }

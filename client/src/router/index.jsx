@@ -1,4 +1,4 @@
-﻿import React, { Suspense } from 'react'
+import React, { Suspense } from 'react'
 import { BrowserRouter, Navigate, useLocation, useRoutes } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import { Skeleton } from '@/components/Feedback'
@@ -20,6 +20,7 @@ const ProfileInsights = React.lazy(() => import('../pages/ProfileInsights'))
 const WardrobeAnalytics = React.lazy(() => import('../pages/WardrobeAnalytics'))
 const Agent = React.lazy(() => import('../pages/Agent'))
 const UnifiedAgent = React.lazy(() => import('../pages/UnifiedAgent'))
+const AgentHistory = React.lazy(() => import('../pages/AgentHistory'))
 
 const isAuthed = () => {
   const token = useAuthStore.getState().accessToken || localStorage.getItem('access_token')
@@ -47,7 +48,7 @@ const RedirectIfAuthed = ({ children }) => {
   return children
 }
 
-const withLayout = (node) => <Layout>{node}</Layout>
+const withLayout = (node, showBottomNav = true) => <Layout showBottomNav={showBottomNav}>{node}</Layout>
 
 const routes = [
   { path: '/', element: <Navigate to="/home" replace /> },
@@ -170,6 +171,14 @@ const routes = [
     element: (
       <ProtectedRoute>
         {withLayout(<UnifiedAgent />)}
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/agent/history',
+    element: (
+      <ProtectedRoute>
+        {withLayout(<AgentHistory />)}
       </ProtectedRoute>
     ),
   },

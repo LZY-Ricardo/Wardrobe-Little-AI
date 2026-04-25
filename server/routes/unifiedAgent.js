@@ -1,4 +1,4 @@
-const Router = require('@koa/router')
+﻿const Router = require('@koa/router')
 const router = new Router()
 const { verify } = require('../utils/jwt')
 const {
@@ -9,8 +9,11 @@ const {
   listAgentSessions,
   restoreAgentSession,
   sendUnifiedAgentMessage,
+  sendUnifiedAgentMessageStream,
   updateAgentSessionMemory,
 } = require('../controllers/unifiedAgentRuntime')
+const { deleteSession, renameSession } = require('../controllers/unifiedAgentSessions')
+const { setSseHeaders } = require('../utils/sseHelpers')
 
 router.prefix('/unified-agent')
 router.use(verify())
@@ -42,6 +45,44 @@ router.get('/sessions/:id', async (ctx) => {
   }
 })
 
+router.patch('/sessions/:id', async (ctx) => {
+  try {
+    const sessionId = Number.parseInt(ctx.params.id, 10)
+    const title = String(ctx.request.body?.title || '').trim()
+    if (!Number.isFinite(sessionId)) {
+      ctx.status = 400
+      ctx.body = { code: 0, msg: '会话 ID 无效' }
+      return
+    }
+    if (!title) {
+      ctx.status = 400
+      ctx.body = { code: 0, msg: '会话标题不能为空' }
+      return
+    }
+    const data = await renameSession(ctx.userId, sessionId, title)
+    ctx.body = { code: 1, data, msg: '更新成功' }
+  } catch (error) {
+    ctx.status = error.status || 500
+    ctx.body = { code: 0, msg: error.message || '更新会话失败' }
+  }
+})
+
+router.delete('/sessions/:id', async (ctx) => {
+  try {
+    const sessionId = Number.parseInt(ctx.params.id, 10)
+    if (!Number.isFinite(sessionId)) {
+      ctx.status = 400
+      ctx.body = { code: 0, msg: '会话 ID 无效' }
+      return
+    }
+    await deleteSession(ctx.userId, sessionId)
+    ctx.body = { code: 1, data: true, msg: '删除成功' }
+  } catch (error) {
+    ctx.status = error.status || 500
+    ctx.body = { code: 0, msg: error.message || '删除会话失败' }
+  }
+})
+
 router.post('/sessions/:id/messages', async (ctx) => {
   try {
     const sessionId = Number.parseInt(ctx.params.id, 10)
@@ -67,18 +108,55 @@ router.post('/sessions/:id/chat', async (ctx) => {
       return
     }
     const input = String(ctx.request.body?.input || '').trim()
-    if (!input) {
+    const attachments = Array.isArray(ctx.request.body?.attachments) ? ctx.request.body.attachments : []
+    if (!input && !attachments.length) {
       ctx.status = 400
       ctx.body = { code: 0, msg: '消息内容不能为空' }
       return
     }
     const data = await sendUnifiedAgentMessage(ctx.userId, sessionId, input, {
       latestTask: ctx.request.body?.latestTask || null,
+      attachments,
     })
     ctx.body = { code: 1, data, msg: '发送成功' }
   } catch (error) {
     ctx.status = error.status || 500
     ctx.body = { code: 0, msg: error.message || '发送消息失败' }
+  }
+})
+
+router.post('/sessions/:id/chat-stream', async (ctx) => {
+  const sessionId = Number.parseInt(ctx.params.id, 10)
+  if (!Number.isFinite(sessionId)) {
+    ctx.status = 400
+    ctx.body = { code: 0, msg: '会话 ID 无效' }
+    return
+  }
+  const input = String(ctx.request.body?.input || '').trim()
+  const attachments = Array.isArray(ctx.request.body?.attachments) ? ctx.request.body.attachments : []
+  if (!input && !attachments.length) {
+    ctx.status = 400
+    ctx.body = { code: 0, msg: '消息内容不能为空' }
+    return
+  }
+
+  ctx.respond = false
+  setSseHeaders(ctx.res)
+
+  let clientGone = false
+  ctx.req.on('close', () => { clientGone = true })
+
+  try {
+    await sendUnifiedAgentMessageStream(ctx.userId, sessionId, input, ctx, {
+      latestTask: ctx.request.body?.latestTask || null,
+      attachments,
+      isClientGone: () => clientGone,
+    })
+  } catch (error) {
+    if (!ctx.res.headersSent) {
+      ctx.res.writeHead(500, { 'Content-Type': 'application/json' })
+      ctx.res.end(JSON.stringify({ code: 0, msg: error.message || '发送消息失败' }))
+    }
   }
 })
 

@@ -40,8 +40,18 @@ test('parseStructuredMemoryPayload keeps valid llm structured fields', () => {
   assert.equal(parsed.last_summarized_message_id, 8)
 })
 
-test('deriveSessionTitle still provides short fallback title', () => {
+test('deriveSessionTitle strips leading filler and clamps to 16 chars', () => {
   const title = deriveSessionTitle('帮我推荐一套适合明天面试的通勤穿搭方案')
-  assert.ok(title.length <= 32)
-  assert.match(title, /帮我推荐/)
+  assert.ok(title.length <= 16)
+  assert.doesNotMatch(title, /^帮我/)
+  assert.match(title, /推荐/)
+})
+
+test('deriveSessionTitle returns default for empty input', () => {
+  assert.equal(deriveSessionTitle(''), '新会话')
+  assert.equal(deriveSessionTitle('  '), '新会话')
+})
+
+test('deriveSessionTitle preserves short titles as-is', () => {
+  assert.equal(deriveSessionTitle('面试穿搭'), '面试穿搭')
 })

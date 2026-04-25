@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { Dialog, Popup, Picker, Selector } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
-import { useAuthStore, useUiStore, useClosetStore } from '@/store'
+import { useAuthStore, useClosetStore } from '@/store'
 import { Loading, ErrorBanner } from '@/components/Feedback'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
@@ -78,7 +78,7 @@ const SIZE_PICKER_META = {
   topSize: { title: '选择上装尺码', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
   bottomSize: {
     title: '选择下装尺码',
-    options: ['26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38'],
+    options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'],
   },
   shoeSize: {
     title: '选择鞋码',
@@ -107,7 +107,6 @@ const PREF_PICKER_META = {
 export default function Person() {
   const navigate = useNavigate()
   const clearTokens = useAuthStore((s) => s.clearTokens)
-  const setAiEntranceHidden = useUiStore((s) => s.setAiEntranceHidden)
   const avatarInputRef = useRef(null)
   const fileInputRef = useRef(null) // 图片上传input
   const [uploadedImage, setUploadedImage] = useState(null) // 展示预览图片
@@ -145,34 +144,6 @@ export default function Person() {
   const [confirmDialogVisible, setConfirmDialogVisible] = useState(false)
 
   const hasCharacterModel = Boolean(userInfo?.characterModel || uploadedImage)
-
-  useEffect(() => {
-    const shouldHide =
-      profileVisible ||
-      sizePickerVisible ||
-      prefPickerVisible ||
-      modelPreviewVisible ||
-      passwordVisible ||
-      sexVisible ||
-      confirmDialogVisible
-
-    setAiEntranceHidden(shouldHide)
-  }, [
-    profileVisible,
-    sizePickerVisible,
-    prefPickerVisible,
-    modelPreviewVisible,
-    passwordVisible,
-    sexVisible,
-    confirmDialogVisible,
-    setAiEntranceHidden,
-  ])
-
-  useEffect(() => {
-    return () => {
-      setAiEntranceHidden(false)
-    }
-  }, [setAiEntranceHidden])
 
   // 获取用户所有信息
   const getUserInfo = useCallback(async (forceRefresh = false) => {
@@ -975,7 +946,7 @@ export default function Person() {
         visible={profileVisible}
         closeable
         title="编辑穿搭档案"
-        style={{ height: '70%' }}
+        style={{ height: '70%', zIndex: 7000 }}
         position="bottom"
         round
         onClose={closeProfilePopup}
@@ -1136,7 +1107,7 @@ export default function Person() {
         title={SIZE_PICKER_META[activeSizeField]?.title || '选择'}
         position="bottom"
         round
-        style={{ height: '45%' }}
+        style={{ height: '45%', zIndex: 7000 }}
         onClose={closeSizePicker}
       >
         <div className={styles.profilePickerBody}>
@@ -1159,7 +1130,7 @@ export default function Person() {
         title={PREF_PICKER_META[activePrefField]?.title || '选择'}
         position="bottom"
         round
-        style={{ height: '55%' }}
+        style={{ zIndex: 7000 }}
         onClose={closePrefPicker}
       >
         <div className={styles.profilePickerBody}>

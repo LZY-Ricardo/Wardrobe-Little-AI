@@ -2,6 +2,15 @@ const axios = require('axios')
 const { getAllClothes } = require('./clothes')
 const { isProbablyBase64Image } = require('../utils/validate')
 const { createCircuitBreaker } = require('../utils/circuitBreaker')
+const { normalizeLlmError } = require('../utils/llmError')
+
+const RECOMMEND_ERROR_MESSAGES = {
+  unavailable: '暂时无法推荐',
+  config: '推荐服务异常',
+  quota: '推荐额度不足',
+  rateLimit: '请稍后再试',
+  failed: '推荐失败',
+}
 
 const DEEPSEEK_BASE_URL = (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com').replace(/\/$/, '')
 const DEEPSEEK_MODEL = process.env.DEEPSEEK_CHAT_MODEL || 'deepseek-chat'
@@ -270,7 +279,8 @@ const callLlm = async (scene, clothes, options = {}) => {
     }
     return { suits: parsed, error: null }
   } catch (error) {
-    return { suits: [], error: error?.message || 'LLM 调用失败' }
+    const normalizedError = normalizeLlmError(error, 'DeepSeek 推荐服务', RECOMMEND_ERROR_MESSAGES)
+    return { suits: [], error: normalizedError?.message || '推荐失败' }
   }
 }
 

@@ -1,4 +1,4 @@
-const { clampLen, trimToString } = require('../utils/validate')
+﻿const { clampLen, trimToString } = require('../utils/validate')
 
 const buildRecentMessagesWindow = (messages = [], limit = 12) => {
   const list = Array.isArray(messages) ? messages : []
@@ -122,10 +122,15 @@ const tryParseStructuredMemoryPayload = (raw, fallbackMessages = []) => {
   }
 }
 
+const MAX_TITLE_LEN = 16
+
+const stripLeadingFiller = (s) => s.replace(/^(帮我|请|给我|能不能|你可以|我想|我想问|麻烦|麻烦你)[\s，。、]*/, '')
+
 const deriveSessionTitle = (text = '') => {
   const input = trimToString(text)
   if (!input) return '新会话'
-  return clampLen(input.replace(/\s+/g, ' '), 32)
+  const cleaned = stripLeadingFiller(input).replace(/\s+/g, ' ')
+  return clampLen(cleaned, MAX_TITLE_LEN)
 }
 
 module.exports = {

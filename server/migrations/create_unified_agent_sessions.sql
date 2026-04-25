@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS agent_messages (
   user_id BIGINT NOT NULL,
   role VARCHAR(16) NOT NULL,
   content MEDIUMTEXT NOT NULL,
+  meta_json MEDIUMTEXT NULL,
   message_type VARCHAR(32) NOT NULL DEFAULT 'chat',
   task_id BIGINT NULL,
   tool_name VARCHAR(32) DEFAULT '',

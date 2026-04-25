@@ -5,7 +5,7 @@ import axios from '@/api'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { buildCompositeCover } from '@/utils/compositeCover'
-import { useUiStore, useClosetStore, useSuitStore } from '@/store'
+import { useClosetStore, useSuitStore } from '@/store'
 import styles from './index.module.less'
 
 const MIN_ITEMS = 2
@@ -14,7 +14,6 @@ const SCENE_PRESETS = ['通勤', '约会', '运动', '商务', '旅行', '聚会
 
 const SuitCreate = () => {
   const navigate = useNavigate()
-  const setAiEntranceHidden = useUiStore((s) => s.setAiEntranceHidden)
   const invalidateSuitCache = useSuitStore((s) => s.invalidateCache)
   const [name, setName] = useState('')
   const [scene, setScene] = useState('')
@@ -43,11 +42,6 @@ const SuitCreate = () => {
   useEffect(() => {
     void loadClothes()
   }, [loadClothes])
-
-  useEffect(() => {
-    setAiEntranceHidden(true)
-    return () => setAiEntranceHidden(false)
-  }, [setAiEntranceHidden])
 
   const toggleSelect = (clothId) => {
     setSelected((prev) => {
