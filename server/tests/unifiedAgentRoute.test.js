@@ -43,6 +43,8 @@ test('chat-stream route keeps autonomous tools enabled for streaming runtime', a
   require.cache[sseModulePath] = {
     exports: {
       setSseHeaders: () => {},
+      writeSse: () => true,
+      endSse: () => {},
     },
   }
 
@@ -85,6 +87,8 @@ test('chat-stream route keeps autonomous tools enabled for streaming runtime', a
 test('chat-stream route emits sse error event when runtime throws after headers are sent', async () => {
   const written = []
   let ended = false
+  const originalError = console.error
+  console.error = () => {}
 
   require.cache[runtimeModulePath] = {
     exports: {
@@ -156,6 +160,7 @@ test('chat-stream route emits sse error event when runtime throws after headers 
     assert.deepEqual(written, [{ type: 'error', msg: 'STREAM_BROKEN' }])
     assert.equal(ended, true)
   } finally {
+    console.error = originalError
     delete require.cache[routeModulePath]
     if (originalRuntimeModule) require.cache[runtimeModulePath] = originalRuntimeModule
     else delete require.cache[runtimeModulePath]
@@ -201,6 +206,8 @@ test('chat-stream route does not treat request close as client disconnect for SS
   require.cache[sseModulePath] = {
     exports: {
       setSseHeaders: () => {},
+      writeSse: () => true,
+      endSse: () => {},
     },
   }
 

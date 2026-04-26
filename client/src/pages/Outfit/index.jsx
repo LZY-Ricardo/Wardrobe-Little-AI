@@ -1,7 +1,7 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Overlay, Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
-import { HeartFill, HeartOutline, FilterOutline } from 'antd-mobile-icons'
+import { HeartFill, HeartOutline, FilterOutline, SearchOutline } from 'antd-mobile-icons'
 import { useLocation, useNavigate } from 'react-router-dom'
 import SvgIcon from '@/components/SvgIcon'
 import white from '@/assets/white.jpg'
@@ -13,6 +13,7 @@ import { getTodayInChina } from '@/utils/date'
 import { resolveReturnObject } from '@/utils/returnNavigation'
 import { useClosetStore, useMatchStore } from '@/store'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
+import { buildOutfitViewModel } from './viewModel'
 
 const FILTER_OPTIONS = {
   type: ['全部', '上衣', '下衣', '鞋子', '配饰'],
@@ -74,7 +75,7 @@ export default function Outfit() {
   }, [fetchAllClothes, setError, setHasMore, setItems, setStatus])
 
   useEffect(() => {
-    loadClothes()
+    void loadClothes()
     return () => reset()
   }, [loadClothes, reset])
 
@@ -107,8 +108,27 @@ export default function Outfit() {
     setHasMore(filteredClothes.length > page * PAGE_SIZE)
   }, [filteredClothes, page, setHasMore])
 
+  const viewModel = useMemo(
+    () =>
+      buildOutfitViewModel({
+        items,
+        filters,
+      }),
+    [items, filters]
+  )
+
+  const selectedCardModel = useMemo(
+    () => (selectedItem ? viewModel.buildCardModel(selectedItem) : null),
+    [selectedItem, viewModel]
+  )
+
   const handleFilterClick = (filterType, value) => {
     setFilters({ [filterType]: value })
+    setPage(1)
+  }
+
+  const handleResetSecondaryFilters = () => {
+    setFilters({ color: '全部', season: '全部', style: '全部' })
     setPage(1)
   }
 
@@ -153,19 +173,18 @@ export default function Outfit() {
 
   const handleImportFile = async (e) => {
     const file = e.target.files?.[0]
-    if (!file) return
-    if (backupBusy) return
+    if (!file || backupBusy) return
     setBackupBusy(true)
     try {
       const text = await file.text()
       const parsed = JSON.parse(text)
       const rawItems = Array.isArray(parsed) ? parsed : parsed?.data?.items || parsed?.items || []
-      const items = Array.isArray(rawItems) ? rawItems : []
-      if (!items.length) {
+      const nextItems = Array.isArray(rawItems) ? rawItems : []
+      if (!nextItems.length) {
         Toast.show({ content: '导入文件为空或格式不正确', duration: 1500 })
         return
       }
-      await axios.post('/clothes/import', { items })
+      await axios.post('/clothes/import', { items: nextItems })
       Toast.show({ content: '导入完成', duration: 1200 })
       await loadClothes()
       markMatchStale()
@@ -184,10 +203,10 @@ export default function Outfit() {
       await axios.delete(`/clothes/${selectedItem.cloth_id}`)
       Toast.show({ icon: 'success', content: '删除成功', duration: 1000 })
       setVisible(false)
+      setSelectedItem(null)
       const nextItems = items.filter((item) => item.cloth_id !== selectedItem.cloth_id)
       setItems(nextItems)
       markMatchStale()
-      // 失效衣物缓存
       useClosetStore.getState().invalidateCache()
     } catch (err) {
       console.error('删除衣物失败', err)
@@ -228,8 +247,7 @@ export default function Outfit() {
 
   const toggleFavorite = async (cloth) => {
     const clothId = cloth?.cloth_id
-    if (!clothId) return
-    if (favoriteUpdating[clothId]) return
+    if (!clothId || favoriteUpdating[clothId]) return
 
     const prevFavorite = isFavorited(cloth.favorite)
     const nextFavorite = !prevFavorite
@@ -259,20 +277,15 @@ export default function Outfit() {
     if (pagedList.length === 0) return <Empty description="暂无符合条件的衣物" />
 
     return (
-      <div className={styles['clothes-wrap']}>
-        <div className={styles.clothes}>
+      <div className={styles.clothesWrap}>
+        <div className={styles.clothesGrid}>
           {pagedList.map((item, index) => {
-            const tags = []
-            if (item.type) tags.push(item.type)
-            if (item.style) tags.push(item.style)
-            if (item.season) tags.push(item.season)
-            if (tags.length < 3 && item.color) tags.push(item.color)
-            const displayTags = tags.filter(Boolean).slice(0, 3)
+            const cardModel = viewModel.buildCardModel(item)
 
             return (
-              <div
+              <article
                 key={`${item.cloth_id || index}`}
-                className={styles['clothes-item']}
+                className={styles.clothesItem}
                 onClick={() => {
                   setSelectedItem(item)
                   setVisible(true)
@@ -280,46 +293,49 @@ export default function Outfit() {
               >
                 <button
                   type="button"
-                  className={styles['favorite-btn']}
+                  className={styles.favoriteBtn}
                   disabled={Boolean(favoriteUpdating[item.cloth_id])}
-                  aria-label={isFavorited(item.favorite) ? '取消收藏' : '收藏'}
+                  aria-label={cardModel.isFavorited ? '取消收藏' : '收藏'}
                   onClick={(e) => {
                     e.stopPropagation()
                     void toggleFavorite(item)
                   }}
                 >
-                  {isFavorited(item.favorite) ? (
-                    <HeartFill className={`${styles['favorite-icon']} ${styles['favorite-icon-active']}`} />
+                  {cardModel.isFavorited ? (
+                    <HeartFill className={`${styles.favoriteIcon} ${styles.favoriteIconActive}`} />
                   ) : (
-                    <HeartOutline className={styles['favorite-icon']} />
+                    <HeartOutline className={styles.favoriteIcon} />
                   )}
                 </button>
-                <div className={styles['clothes-img']}>
-                  <img src={item.image || white} alt={item.name} loading="lazy" />
+
+                <div className={styles.clothesImageWrap}>
+                  <img src={item.image || white} alt={item.name} loading="lazy" className={styles.clothesImage} />
                 </div>
-                <div className={styles.label}>
-                  <div className={styles['label-title']} title={item.name || ''}>
-                    {item.name || '未命名'}
-                  </div>
-                  <div className={styles['label-tags']}>
-                    {displayTags.map((tag, tagIndex) => (
-                      <span key={`${tag}-${tagIndex}`} className={styles['label-item']}>
+
+                <div className={styles.cardBody}>
+                  <h3 className={styles.cardTitle} title={cardModel.title}>
+                    {cardModel.title}
+                  </h3>
+                  <div className={styles.cardMeta}>{cardModel.meta}</div>
+                  <div className={styles.cardTags}>
+                    {cardModel.tags.map((tag, tagIndex) => (
+                      <span key={`${tag}-${tagIndex}`} className={styles.cardTag}>
                         {tag}
                       </span>
                     ))}
                   </div>
                 </div>
-              </div>
+              </article>
             )
           })}
         </div>
 
         {hasMore ? (
-          <button type="button" className={styles['load-more']} onClick={handleLoadMore}>
+          <button type="button" className={styles.loadMore} onClick={handleLoadMore}>
             加载更多
           </button>
         ) : (
-          <div className={styles['no-more']}>没有更多了</div>
+          <div className={styles.noMore}>没有更多了</div>
         )}
       </div>
     )
@@ -328,161 +344,205 @@ export default function Outfit() {
   return (
     <div className={styles.outfit}>
       <div className={styles.header}>
-        <div className={styles['header-left']}>我的衣橱</div>
-        <div className={styles['search-box']}>
-          <input
-            type="text"
-            placeholder="搜索衣物..."
-            value={searchKeyword}
-            onChange={(e) => setSearchKeyword(e.target.value)}
-            className={styles['search-input']}
-          />
-        </div>
-        <div className={styles['header-actions']}>
-          <button
-            type="button"
-            className={styles['header-action']}
-            onClick={() => setMenuOpen((v) => !v)}
-            aria-label="更多操作"
-          >
-            ⋮
-          </button>
-          {menuOpen ? (
-            <>
-              <div className={styles['menu-backdrop']} onClick={() => setMenuOpen(false)} />
-              <div className={styles['header-menu']}>
-                <button
-                  type="button"
-                  className={styles['header-menu-item']}
-                  disabled={backupBusy}
-                  onClick={() => { setMenuOpen(false); void handleExport(false) }}
-                >
-                  导出数据
-                </button>
-                <button
-                  type="button"
-                  className={styles['header-menu-item']}
-                  disabled={backupBusy}
-                  onClick={() => {
-                    setMenuOpen(false)
-                    Dialog.confirm({
-                      message: '包含图片导出可能较大，且可能触发服务端大小限制，是否继续？',
-                      onConfirm: () => handleExport(true),
-                    })
-                  }}
-                >
-                  含图导出
-                </button>
-                <button
-                  type="button"
-                  className={styles['header-menu-item']}
-                  disabled={backupBusy}
-                  onClick={() => { setMenuOpen(false); importInputRef.current?.click() }}
-                >
-                  导入数据
-                </button>
-              </div>
-            </>
-          ) : null}
-          <div className={styles['header-right']} onClick={() => navigate('/add')}>
-            <SvgIcon iconName="icon-jiahao-copy" />
-          </div>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json"
-            style={{ display: 'none' }}
-            onChange={handleImportFile}
-          />
-        </div>
-      </div>
-
-      <div className={styles.container}>
-        <div className={styles.select}>
-          <div className={styles['select-top']}>
-            <div className={styles['select-type']}>
-              {FILTER_OPTIONS.type.map((type) => (
-                <div
-                  key={type}
-                  className={`${styles['type-item']} ${type === filters.type ? styles['type-item-active'] : ''}`}
-                  onClick={() => handleFilterClick('type', type)}
-                >
-                  {type}
-                </div>
-              ))}
+        <div className={styles.hero}>
+          <div className={styles.heroRow}>
+            <div>
+              <div className={styles.pageTitle}>我的衣橱</div>
+              <div className={styles.pageMeta}>{viewModel.heroMeta}</div>
             </div>
-
-            <button
-              type="button"
-              className={`${styles['filters-toggle']} ${
-                filtersExpanded || filters.color !== '全部' || filters.season !== '全部' || filters.style !== '全部'
-                  ? styles['filters-toggle-active']
-                  : ''
-              }`}
-              aria-label="筛选"
-              onClick={() => setFiltersExpanded((prev) => !prev)}
-            >
-              <FilterOutline className={styles['filters-toggle-icon']} />
-              {filters.color !== '全部' || filters.season !== '全部' || filters.style !== '全部' ? (
-                <span className={styles['filters-dot']} />
-              ) : null}
-            </button>
+            <div className={styles.headerActions}>
+              <button
+                type="button"
+                className={styles.iconButton}
+                onClick={() => setMenuOpen((prev) => !prev)}
+                aria-label="更多操作"
+              >
+                ⋯
+              </button>
+              <button
+                type="button"
+                className={`${styles.iconButton} ${styles.primaryIconButton}`}
+                onClick={() => navigate('/add')}
+                aria-label="新增衣物"
+              >
+                <SvgIcon iconName="icon-jiahao-copy" />
+              </button>
+            </div>
           </div>
 
-          {filtersExpanded ? (
-            <div className={styles['select-more']}>
-              <div className={styles['select-row']}>
-                <div className={styles['select-row-label']}>颜色</div>
-                <div className={styles['select-color']}>
-                  {FILTER_OPTIONS.color.map((color) => (
-                    <div
-                      key={color}
-                      className={`${styles['color-item']} ${color === filters.color ? styles['color-item-active'] : ''}`}
-                      onClick={() => handleFilterClick('color', color)}
-                    >
-                      {color}
-                    </div>
-                  ))}
-                </div>
+          <label className={styles.searchBox}>
+            <SearchOutline className={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="搜索名称、颜色、风格"
+              value={searchKeyword}
+              onChange={(e) => setSearchKeyword(e.target.value)}
+              className={styles.searchInput}
+            />
+          </label>
+
+          <div className={styles.filterSection}>
+            <div className={styles.typeRow}>
+              <div className={styles.typeScroller}>
+                {FILTER_OPTIONS.type.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    className={`${styles.filterChip} ${type === filters.type ? styles.filterChipActive : ''}`}
+                    onClick={() => handleFilterClick('type', type)}
+                  >
+                    {type}
+                  </button>
+                ))}
               </div>
 
-              <div className={styles['select-row']}>
-                <div className={styles['select-row-label']}>季节</div>
-                <div className={styles['select-season']}>
-                  {FILTER_OPTIONS.season.map((season) => (
-                    <div
-                      key={season}
-                      className={`${styles['season-item']} ${
-                        season === filters.season ? styles['season-item-active'] : ''
-                      }`}
-                      onClick={() => handleFilterClick('season', season)}
-                    >
-                      {season}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className={styles['select-row']}>
-                <div className={styles['select-row-label']}>场景</div>
-                <div className={styles['select-style']}>
-                  {FILTER_OPTIONS.style.map((style) => (
-                    <div
-                      key={style}
-                      className={`${styles['style-item']} ${style === filters.style ? styles['style-item-active'] : ''}`}
-                      onClick={() => handleFilterClick('style', style)}
-                    >
-                      {style}
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <button
+                type="button"
+                className={`${styles.filterToggle} ${filtersExpanded ? styles.filterToggleActive : ''}`}
+                aria-label="高级筛选"
+                onClick={() => setFiltersExpanded((prev) => !prev)}
+              >
+                <FilterOutline />
+              </button>
             </div>
-          ) : null}
+
+            {!filtersExpanded ? (
+              <button type="button" className={styles.compactAdvancedBar} onClick={() => setFiltersExpanded(true)}>
+                <div className={styles.compactAdvancedMain}>
+                  <FilterOutline className={styles.compactAdvancedIcon} />
+                  <span className={styles.compactAdvancedLabel}>高级筛选</span>
+                </div>
+                <div className={styles.compactAdvancedMeta}>
+                  {viewModel.activeSecondaryFilters.length ? (
+                    viewModel.activeSecondaryFilters.map((item) => (
+                      <span key={item.key} className={styles.summaryTag}>
+                        {item.value}
+                      </span>
+                    ))
+                  ) : (
+                    <span className={styles.summaryText}>颜色、季节、场景</span>
+                  )}
+                </div>
+              </button>
+            ) : (
+              <div className={styles.expandedFilters}>
+                <div className={styles.filterGroup}>
+                  <div className={styles.filterGroupLabel}>颜色</div>
+                  <div className={styles.filterOptions}>
+                    {FILTER_OPTIONS.color.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`${styles.secondaryChip} ${color === filters.color ? styles.secondaryChipActive : ''}`}
+                        onClick={() => handleFilterClick('color', color)}
+                      >
+                        {color}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.filterGroup}>
+                  <div className={styles.filterGroupLabel}>季节</div>
+                  <div className={styles.filterOptions}>
+                    {FILTER_OPTIONS.season.map((season) => (
+                      <button
+                        key={season}
+                        type="button"
+                        className={`${styles.secondaryChip} ${
+                          season === filters.season ? styles.secondaryChipActive : ''
+                        }`}
+                        onClick={() => handleFilterClick('season', season)}
+                      >
+                        {season}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.filterGroup}>
+                  <div className={styles.filterGroupLabel}>场景</div>
+                  <div className={styles.filterOptions}>
+                    {FILTER_OPTIONS.style.map((style) => (
+                      <button
+                        key={style}
+                        type="button"
+                        className={`${styles.secondaryChip} ${style === filters.style ? styles.secondaryChipActive : ''}`}
+                        onClick={() => handleFilterClick('style', style)}
+                      >
+                        {style}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className={styles.filterActions}>
+                  <button type="button" className={styles.ghostAction} onClick={handleResetSecondaryFilters}>
+                    重置
+                  </button>
+                  <button type="button" className={styles.primaryAction} onClick={() => setFiltersExpanded(false)}>
+                    应用筛选
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
-        {renderContent()}
+        {menuOpen ? (
+          <>
+            <div className={styles.menuBackdrop} onClick={() => setMenuOpen(false)} />
+            <div className={styles.headerMenu}>
+              <button
+                type="button"
+                className={styles.headerMenuItem}
+                disabled={backupBusy}
+                onClick={() => {
+                  setMenuOpen(false)
+                  void handleExport(false)
+                }}
+              >
+                导出数据
+              </button>
+              <button
+                type="button"
+                className={styles.headerMenuItem}
+                disabled={backupBusy}
+                onClick={() => {
+                  setMenuOpen(false)
+                  Dialog.confirm({
+                    message: '包含图片导出可能较大，且可能触发服务端大小限制，是否继续？',
+                    onConfirm: () => handleExport(true),
+                  })
+                }}
+              >
+                含图导出
+              </button>
+              <button
+                type="button"
+                className={styles.headerMenuItem}
+                disabled={backupBusy}
+                onClick={() => {
+                  setMenuOpen(false)
+                  importInputRef.current?.click()
+                }}
+              >
+                导入数据
+              </button>
+            </div>
+          </>
+        ) : null}
+
+        <input
+          ref={importInputRef}
+          type="file"
+          accept="application/json"
+          style={{ display: 'none' }}
+          onChange={handleImportFile}
+        />
       </div>
+
+      <div className={styles.container}>{renderContent()}</div>
 
       <Overlay
         visible={visible}
@@ -490,98 +550,92 @@ export default function Outfit() {
         style={{
           height: '100%',
           display: 'flex',
-          alignItems: 'center',
+          alignItems: 'flex-end',
           justifyContent: 'center',
-          padding: '0',
         }}
       >
-        <div className={styles['overlay-content']} onClick={(e) => e.stopPropagation()}>
+        <div className={styles.sheet} onClick={(e) => e.stopPropagation()}>
           {selectedItem ? (
             <>
-              <div className={styles['detail-image']}>
-                <img src={selectedItem.image || white} alt={selectedItem.name} loading="lazy" />
-              </div>
-              <div className={styles['detail-info']}>
-                <h3 className={styles['detail-title']}>{selectedItem.name}</h3>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>类型：</span>
-                  <span className={styles['detail-value']}>{selectedItem.type || '未知'}</span>
-                </div>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>颜色：</span>
-                  <span className={styles['detail-value']}>{selectedItem.color || '未知'}</span>
-                </div>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>适宜季节：</span>
-                  <span className={styles['detail-value']}>{selectedItem.season || '未知'}</span>
-                </div>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>风格：</span>
-                  <span className={styles['detail-value']}>{selectedItem.style || '未知'}</span>
-                </div>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>材质：</span>
-                  <span className={styles['detail-value']}>{selectedItem.material || '未知'}</span>
-                </div>
-                <div className={styles['detail-row']}>
-                  <span className={styles['detail-label']}>收藏：</span>
-                  <span className={styles['detail-value']}>
-                    {isFavorited(selectedItem.favorite) ? '已收藏' : '未收藏'}
-                  </span>
-                </div>
+              <div className={styles.sheetHandle} />
 
-                <div className={styles['delete-button-container']}>
-                  <button
-                    type="button"
-                    className={styles['log-button']}
-                    onClick={() => void handleCreateOutfitLog(selectedItem)}
-                  >
-                    记录穿搭
-                  </button>
-                  <button
-                    type="button"
-                    className={styles['log-button']}
-                    onClick={() =>
-                      navigate('/unified-agent', {
-                        state: buildAgentContextState({
-                          presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
-                          focus: {
-                            type: 'cloth',
-                            entity: selectedItem,
-                          },
-                        }),
-                      })
-                    }
-                  >
-                    交给 Agent
-                  </button>
-                  <button
-                    type="button"
-                    className={styles['favorite-button']}
-                    disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
-                    onClick={() => void toggleFavorite(selectedItem)}
-                  >
-                    {isFavorited(selectedItem.favorite) ? '取消收藏' : '收藏'}
-                  </button>
-                  <button
-                    className={styles['delete-button']}
-                    onClick={() =>
-                      Dialog.confirm({
-                        message: '确定删除该衣物吗？',
-                        onConfirm: () => handleDelete(),
-                      })
-                    }
-                  >
-                    删除衣物
-                  </button>
-                  <button
-                    className={styles['update-button']}
-                    onClick={() => navigate('/update', { state: selectedItem })}
-                  >
-                    更新衣物
-                  </button>
+              <div className={styles.sheetHeader}>
+                <img src={selectedItem.image || white} alt={selectedItem.name} loading="lazy" className={styles.sheetImage} />
+
+                <div className={styles.sheetIntro}>
+                  <h3 className={styles.sheetTitle}>{selectedCardModel?.title || selectedItem.name}</h3>
+                  <div className={styles.sheetMeta}>{selectedCardModel?.meta || selectedItem.type || '未分类'}</div>
+
+                  <div className={styles.sheetTags}>
+                    {selectedCardModel?.isFavorited ? <span className={styles.sheetBadgePrimary}>已收藏</span> : null}
+                    {selectedItem.color ? <span className={styles.sheetBadge}>{selectedItem.color}</span> : null}
+                    {selectedItem.season ? <span className={styles.sheetBadge}>{selectedItem.season}</span> : null}
+                    {selectedItem.material ? <span className={styles.sheetBadge}>{selectedItem.material}</span> : null}
+                  </div>
                 </div>
               </div>
+
+              <div className={styles.sheetSummary}>
+                {[selectedItem.type, selectedItem.style, selectedItem.season].filter(Boolean).join(' · ') || '完善这件单品的信息后，推荐和记录会更准确。'}
+              </div>
+
+              <div className={styles.primaryActionRow}>
+                <button
+                  type="button"
+                  className={styles.sheetPrimaryButton}
+                  onClick={() => void handleCreateOutfitLog(selectedItem)}
+                >
+                  记录穿搭
+                </button>
+                <button
+                  type="button"
+                  className={styles.sheetSecondaryButton}
+                  onClick={() =>
+                    navigate('/unified-agent', {
+                      state: buildAgentContextState({
+                        presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
+                        focus: {
+                          type: 'cloth',
+                          entity: selectedItem,
+                        },
+                      }),
+                    })
+                  }
+                >
+                  交给 Agent
+                </button>
+              </div>
+
+              <div className={styles.secondaryActionRow}>
+                <button
+                  type="button"
+                  className={styles.sheetTertiaryButton}
+                  disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
+                  onClick={() => void toggleFavorite(selectedItem)}
+                >
+                  {isFavorited(selectedItem.favorite) ? '取消收藏' : '收藏'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.sheetTertiaryButton}
+                  onClick={() => navigate('/update', { state: selectedItem })}
+                >
+                  编辑
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={styles.sheetDangerButton}
+                onClick={() =>
+                  Dialog.confirm({
+                    message: '确定删除该衣物吗？',
+                    onConfirm: () => handleDelete(),
+                  })
+                }
+              >
+                删除
+              </button>
             </>
           ) : null}
         </div>

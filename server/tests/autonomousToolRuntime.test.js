@@ -97,56 +97,62 @@ test('runAutonomousToolLoop emits tool events and continues streaming after tool
 
 test('runAutonomousToolLoop falls back to a safe reply when tool succeeds but final assistant reply is empty', async () => {
   let turn = 0
-  const result = await runAutonomousToolLoop({
-    userId: 1,
-    input: '把这件白色帆布鞋删除掉',
-    intent: 'clothing',
-    messages: [{ role: 'user', content: '把这件白色帆布鞋删除掉' }],
-    multimodal: { attachments: [] },
-    latestTask: {
-      selectedCloth: {
-        cloth_id: 12,
-        name: '白色帆布鞋',
+  const originalWarn = console.warn
+  console.warn = () => {}
+  try {
+    const result = await runAutonomousToolLoop({
+      userId: 1,
+      input: '把这件白色帆布鞋删除掉',
+      intent: 'clothing',
+      messages: [{ role: 'user', content: '把这件白色帆布鞋删除掉' }],
+      multimodal: { attachments: [] },
+      latestTask: {
+        selectedCloth: {
+          cloth_id: 12,
+          name: '白色帆布鞋',
+        },
       },
-    },
-    deps: {
-      streamAssistantTurn: async ({ messages }) => {
-        turn += 1
-        if (turn === 1) {
+      deps: {
+        streamAssistantTurn: async ({ messages }) => {
+          turn += 1
+          if (turn === 1) {
+            return {
+              role: 'assistant',
+              content: '我先确认一下当前这件衣物',
+              tool_calls: [
+                {
+                  id: 'tool-read-cloth-1',
+                  type: 'function',
+                  function: {
+                    name: 'get_cloth_detail',
+                    arguments: JSON.stringify({ cloth_id: 12 }),
+                  },
+                },
+              ],
+            }
+          }
+          assert.equal(messages[messages.length - 1].role, 'tool')
           return {
             role: 'assistant',
-            content: '我先确认一下当前这件衣物',
-            tool_calls: [
-              {
-                id: 'tool-read-cloth-1',
-                type: 'function',
-                function: {
-                  name: 'get_cloth_detail',
-                  arguments: JSON.stringify({ cloth_id: 12 }),
-                },
-              },
-            ],
+            content: '```json\n{}\n```',
           }
-        }
-        assert.equal(messages[messages.length - 1].role, 'tool')
-        return {
-          role: 'assistant',
-          content: '```json\n{}\n```',
-        }
+        },
+        executeTool: async () => ({
+          cloth_id: 12,
+          name: '白色帆布鞋',
+          type: '鞋类 / 帆布鞋',
+        }),
       },
-      executeTool: async () => ({
-        cloth_id: 12,
-        name: '白色帆布鞋',
-        type: '鞋类 / 帆布鞋',
-      }),
-    },
-    emit: () => {},
-    sanitizeAssistantReply: () => '',
-  })
+      emit: () => {},
+      sanitizeAssistantReply: () => '',
+    })
 
-  assert.equal(result.kind, 'reply')
-  assert.match(result.reply, /已读取“白色帆布鞋”详情/)
-  assert.match(result.reply, /继续删除/)
+    assert.equal(result.kind, 'reply')
+    assert.match(result.reply, /已读取“白色帆布鞋”详情/)
+    assert.match(result.reply, /继续删除/)
+  } finally {
+    console.warn = originalWarn
+  }
 })
 
 test('streamAssistantTurnFromCompletion parses DeepSeek streaming tool call deltas', async () => {
@@ -472,54 +478,60 @@ test('runAutonomousToolLoop exposes client context to assistant turn even withou
 test('runAutonomousToolLoop converts timed out tool execution into tool error and continues next turn', async () => {
   const emitted = []
   let turn = 0
-  const result = await runAutonomousToolLoop({
-    userId: 1,
-    input: '看看我的鞋子',
-    intent: 'clothing',
-    messages: [{ role: 'user', content: '看看我的鞋子' }],
-    multimodal: { attachments: [] },
-    deps: {
-      toolExecutionTimeoutMs: 5,
-      streamAssistantTurn: async ({ messages }) => {
-        turn += 1
-        if (turn === 1) {
+  const originalWarn = console.warn
+  console.warn = () => {}
+  try {
+    const result = await runAutonomousToolLoop({
+      userId: 1,
+      input: '看看我的鞋子',
+      intent: 'clothing',
+      messages: [{ role: 'user', content: '看看我的鞋子' }],
+      multimodal: { attachments: [] },
+      deps: {
+        toolExecutionTimeoutMs: 5,
+        streamAssistantTurn: async ({ messages }) => {
+          turn += 1
+          if (turn === 1) {
+            return {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'tool-read-timeout',
+                  type: 'function',
+                  function: {
+                    name: 'list_clothes',
+                    arguments: JSON.stringify({ type: '鞋', limit: 10 }),
+                  },
+                },
+              ],
+            }
+          }
+          const toolMessage = messages[messages.length - 1]
+          assert.equal(toolMessage.role, 'tool')
+          assert.match(toolMessage.content, /TOOL_TIMEOUT/)
           return {
             role: 'assistant',
-            content: '',
-            tool_calls: [
-              {
-                id: 'tool-read-timeout',
-                type: 'function',
-                function: {
-                  name: 'list_clothes',
-                  arguments: JSON.stringify({ type: '鞋', limit: 10 }),
-                },
-              },
-            ],
+            content: '工具超时了，我先给你保守答复。',
           }
-        }
-        const toolMessage = messages[messages.length - 1]
-        assert.equal(toolMessage.role, 'tool')
-        assert.match(toolMessage.content, /TOOL_TIMEOUT/)
-        return {
-          role: 'assistant',
-          content: '工具超时了，我先给你保守答复。',
-        }
+        },
+        executeTool: async () => new Promise(() => {}),
       },
-      executeTool: async () => new Promise(() => {}),
-    },
-    emit: (event) => emitted.push(event),
-    sanitizeAssistantReply: (reply) => reply,
-  })
+      emit: (event) => emitted.push(event),
+      sanitizeAssistantReply: (reply) => reply,
+    })
 
-  assert.equal(result.kind, 'reply')
-  assert.equal(result.reply, '工具超时了，我先给你保守答复。')
-  assert.deepEqual(
-    emitted.map((event) => event.type),
-    ['tool_call_started', 'tool_call_completed']
-  )
-  assert.equal(emitted[1].ok, false)
-  assert.match(emitted[1].summary, /工具执行超时/)
+    assert.equal(result.kind, 'reply')
+    assert.equal(result.reply, '工具超时了，我先给你保守答复。')
+    assert.deepEqual(
+      emitted.map((event) => event.type),
+      ['tool_call_started', 'tool_call_completed']
+    )
+    assert.equal(emitted[1].ok, false)
+    assert.match(emitted[1].summary, /工具执行超时/)
+  } finally {
+    console.warn = originalWarn
+  }
 })
 
 test('resolveToolExecutionTimeoutMs gives image tool a longer default budget', () => {
@@ -866,78 +878,84 @@ test('runAutonomousToolLoop can continue after show_context_images and then gene
 
 test('runAutonomousToolLoop falls back to tool summary when final assistant turn fails after successful media tool', async () => {
   let turn = 0
-  const result = await runAutonomousToolLoop({
-    userId: 1,
-    input: '把这两件衣物的图片发我',
-    intent: 'clothing',
-    messages: [{ role: 'user', content: '把这两件衣物的图片发我' }],
-    multimodal: { attachments: [] },
-    latestTask: {
-      taskType: 'closet_query',
-      result: {
-        total: 2,
-        items: [
-          { cloth_id: 23, name: '白色衬衫上衣', type: '上衣 / 衬衫', color: '白色', hasImage: true },
-          { cloth_id: 28, name: '绿色长裤', type: '下衣 / 长裤', color: '绿色', hasImage: true },
-        ],
+  const originalWarn = console.warn
+  console.warn = () => {}
+  try {
+    const result = await runAutonomousToolLoop({
+      userId: 1,
+      input: '把这两件衣物的图片发我',
+      intent: 'clothing',
+      messages: [{ role: 'user', content: '把这两件衣物的图片发我' }],
+      multimodal: { attachments: [] },
+      latestTask: {
+        taskType: 'closet_query',
+        result: {
+          total: 2,
+          items: [
+            { cloth_id: 23, name: '白色衬衫上衣', type: '上衣 / 衬衫', color: '白色', hasImage: true },
+            { cloth_id: 28, name: '绿色长裤', type: '下衣 / 长裤', color: '绿色', hasImage: true },
+          ],
+        },
       },
-    },
-    deps: {
-      requestAssistantTurn: async (messages) => {
-        turn += 1
-        if (turn === 1) {
-          return {
-            role: 'assistant',
-            content: '',
-            tool_calls: [
-              {
-                id: 'tool-show-selected-clothes',
-                type: 'function',
-                function: {
-                  name: 'show_clothes_images',
-                  arguments: JSON.stringify({ cloth_ids: [23, 28] }),
+      deps: {
+        requestAssistantTurn: async (messages) => {
+          turn += 1
+          if (turn === 1) {
+            return {
+              role: 'assistant',
+              content: '',
+              tool_calls: [
+                {
+                  id: 'tool-show-selected-clothes',
+                  type: 'function',
+                  function: {
+                    name: 'show_clothes_images',
+                    arguments: JSON.stringify({ cloth_ids: [23, 28] }),
+                  },
                 },
-              },
-            ],
+              ],
+            }
           }
-        }
-        const error = new Error('DeepSeek unavailable')
-        error.status = 503
-        throw error
+          const error = new Error('DeepSeek unavailable')
+          error.status = 503
+          throw error
+        },
+        executeTool: async () => ({
+          kind: 'media_result',
+          summary: '已准备 2 张衣物图片。',
+          attachments: [
+            {
+              type: 'image',
+              mimeType: 'image/jpeg',
+              dataUrl: 'data:image/jpeg;base64,shirt',
+              source: 'wardrobe',
+              variant: 'original',
+              objectType: 'cloth',
+              objectId: 23,
+            },
+            {
+              type: 'image',
+              mimeType: 'image/jpeg',
+              dataUrl: 'data:image/jpeg;base64,pants',
+              source: 'wardrobe',
+              variant: 'original',
+              objectType: 'cloth',
+              objectId: 28,
+            },
+          ],
+        }),
       },
-      executeTool: async () => ({
-        kind: 'media_result',
-        summary: '已准备 2 张衣物图片。',
-        attachments: [
-          {
-            type: 'image',
-            mimeType: 'image/jpeg',
-            dataUrl: 'data:image/jpeg;base64,shirt',
-            source: 'wardrobe',
-            variant: 'original',
-            objectType: 'cloth',
-            objectId: 23,
-          },
-          {
-            type: 'image',
-            mimeType: 'image/jpeg',
-            dataUrl: 'data:image/jpeg;base64,pants',
-            source: 'wardrobe',
-            variant: 'original',
-            objectType: 'cloth',
-            objectId: 28,
-          },
-        ],
-      }),
-    },
-    emit: () => {},
-    sanitizeAssistantReply: (reply) => reply,
-  })
+      emit: () => {},
+      sanitizeAssistantReply: (reply) => reply,
+    })
 
-  assert.equal(result.kind, 'reply')
-  assert.match(result.reply, /已准备 2 张衣物图片/)
-  assert.equal(result.attachments.length, 2)
-  assert.deepEqual(result.attachments.map((item) => item.objectId), [23, 28])
+    assert.equal(result.kind, 'reply')
+    assert.match(result.reply, /已准备 2 张衣物图片/)
+    assert.equal(result.attachments.length, 2)
+    assert.deepEqual(result.attachments.map((item) => item.objectId), [23, 28])
+  } finally {
+    console.warn = originalWarn
+  }
 })
 
 test('runAutonomousToolLoop upgrades generate_scene_suits into recommendation task context', async () => {
