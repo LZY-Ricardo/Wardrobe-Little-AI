@@ -17,13 +17,27 @@ const {
 
 const { sign, verify, refreshToken } = require('../utils/jwt')
 const { escape } = require('../utils/security')
+const {
+    validateLoginInput,
+    validateRegistrationInput,
+    validatePasswordChangeInput,
+} = require('../utils/authPolicy')
 
 
 router.prefix('/user')
 
 // 用户登录
 router.post('/login', async (ctx) => {
-    let { username, password } = ctx.request.body
+    const payload = validateLoginInput(ctx.request.body || {})
+    if (!payload.ok) {
+        ctx.body = {
+            code: 0,
+            msg: payload.message,
+        }
+        return
+    }
+
+    let { username, password } = payload.value
     username = escape(username)
     password = escape(password)
     try {
@@ -72,7 +86,16 @@ router.post('/login', async (ctx) => {
 
 // 用户注册
 router.post('/register', async (ctx) => {
-    let { username, password } = ctx.request.body
+    const payload = validateRegistrationInput(ctx.request.body || {})
+    if (!payload.ok) {
+        ctx.body = {
+            code: 0,
+            msg: payload.message,
+        }
+        return
+    }
+
+    let { username, password } = payload.value
     username = escape(username)
     password = escape(password)
     try {
@@ -518,7 +541,18 @@ router.put('/updateSex', verify(), async (ctx) => {
 // 修改密码
 router.put('/updatePassword', verify(), async (ctx) => {
     const id = ctx.userId
-    const { oldPassword, newPassword } = ctx.request.body
+    const payload = validatePasswordChangeInput(ctx.request.body || {})
+    if (!payload.ok) {
+        ctx.body = {
+            code: 0,
+            msg: payload.message,
+        }
+        return
+    }
+
+    let { oldPassword, newPassword } = payload.value
+    oldPassword = escape(oldPassword)
+    newPassword = escape(newPassword)
     try {
         const res = await updatePassword(id, oldPassword, newPassword)
         if (res) {

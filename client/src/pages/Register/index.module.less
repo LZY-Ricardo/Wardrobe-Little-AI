@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--bg-body);
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
@@ -106,6 +106,13 @@
     animation: fadeIn 0.8s ease-out 0.2s both;
   }
 
+  .fieldHint {
+    margin-top: -4px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #64748b;
+  }
+
   .textInput {
     height: 54px;
     width: 100%;
@@ -146,6 +153,33 @@
       transform: translateY(-1px);
     }
   }
+
+  .passwordInput {
+    position: relative;
+    display: flex;
+    align-items: center;
+
+    .textInput {
+      padding-right: 48px;
+    }
+
+    .eye {
+      position: absolute;
+      right: 16px;
+      display: flex;
+      align-items: center;
+      color: #94a3b8;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-size: 20px;
+
+      &:hover {
+        color: #7c3aed;
+        transform: scale(1.1);
+      }
+    }
+  }
+
   .primaryButton {
     --border-radius: 999px;
     --text-color: #ffffff;

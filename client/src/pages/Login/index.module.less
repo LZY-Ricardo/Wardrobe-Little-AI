@@ -4,7 +4,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
+  background: var(--bg-body);
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
@@ -104,6 +104,13 @@
     flex-direction: column;
     gap: 16px;
     animation: fadeIn 0.8s ease-out 0.2s both;
+  }
+
+  .fieldHint {
+    margin-top: -6px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #64748b;
   }
 
   .textInput {

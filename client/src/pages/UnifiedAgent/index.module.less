@@ -3,14 +3,14 @@
   min-height: 100%;
   padding: calc(env(safe-area-inset-top) + 4px) 16px calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom) + 20px);
   box-sizing: border-box;
-  background: #f3f6fb;
+  background: var(--bg-body);
 }
 
 .heroBg {
   position: absolute;
   inset: 0 0 auto;
   height: 220px;
-  background: linear-gradient(180deg, #e9eef9 0%, rgba(233, 238, 249, 0) 100%);
+  background: linear-gradient(180deg, rgba(244, 241, 236, 0.96) 0%, rgba(244, 241, 236, 0) 100%);
   pointer-events: none;
 }
 
@@ -163,7 +163,7 @@
   border-radius: 19px;
   padding: 0 18px;
   height: 38px;
-  background: #fff;
+  background: var(--bg-surface);
   color: #0f172a;
   font-size: 14px;
   font-weight: 600;
@@ -180,7 +180,7 @@
   width: 100%;
   padding: 18px;
   border-radius: 20px;
-  background: #fff;
+  background: var(--bg-surface);
   text-align: left;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }

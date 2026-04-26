@@ -3,7 +3,7 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #f3f6fb;
+  background: var(--bg-body);
   overflow: hidden;
 }
 
@@ -11,7 +11,7 @@
   position: absolute;
   inset: 0 0 auto;
   height: 220px;
-  background: linear-gradient(180deg, #e9eef9 0%, rgba(233, 238, 249, 0) 100%);
+  background: linear-gradient(180deg, rgba(244, 241, 236, 0.96) 0%, rgba(244, 241, 236, 0) 100%);
   pointer-events: none;
 }
 
@@ -41,7 +41,7 @@
   justify-content: center;
   border: none;
   border-radius: 12px;
-  background: #fff;
+  background: var(--bg-surface);
   color: #0f172a;
   font-size: 18px;
   font-weight: 700;
@@ -161,7 +161,7 @@
   padding: 0 18px;
   border: none;
   border-radius: 19px;
-  background: #fff;
+  background: var(--bg-surface);
   color: #0f172a;
   font-size: 14px;
   font-weight: 600;
@@ -189,7 +189,7 @@
 }
 
 .assistantBubble {
-  background: #fff;
+  background: var(--bg-surface);
   color: #0f172a;
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
 }

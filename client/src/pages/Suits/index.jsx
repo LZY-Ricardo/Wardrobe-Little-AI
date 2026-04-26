@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import { Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -7,80 +7,63 @@ import { buildAgentContextState, createFocusReader } from '@/utils/agentContext'
 import useAgentPageEntry from '@/hooks/useAgentPageEntry'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 import { buildReturnTargetAttr, resolveReturnEntityId, useReturnScroll } from '@/utils/returnNavigation'
-import { buildAutoSuitName, isGenericSuitName } from '@/utils/suitName'
 import { useSuitStore } from '@/store'
+import { buildCollectionViewModel, buildSuitCardModel } from './viewModel'
 import styles from './index.module.less'
 
-const formatTime = (ts) => {
-  if (!ts) return ''
-  const date = new Date(Number(ts))
-  if (Number.isNaN(date.getTime())) return ''
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-    date.getDate()
-  ).padStart(2, '0')}`
-}
-
-const coverOf = (suit) => {
-  if (suit?.cover) return suit.cover
-  const items = Array.isArray(suit?.items) ? suit.items : []
-  const img = items.find((c) => c?.image)?.image
-  return img || ''
-}
-
-const SuitCard = ({ suit, onDelete, onAgent }) => {
-  const img = coverOf(suit)
-  const items = Array.isArray(suit?.items) ? suit.items.slice(0, 6) : []
-  const previewNames = items
-    .map((item) => item?.name || item?.type || '')
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(' · ')
-  const displayName = !suit.name || isGenericSuitName(suit.name)
-    ? buildAutoSuitName(suit.scene || '', suit.create_time)
-    : suit.name
-
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardCover}>
-        {img ? <img src={img} alt={displayName} /> : <div className={styles.cardPlaceholder}>搭配</div>}
-      </div>
-      <div className={styles.cardBody}>
-        <div className={styles.cardHeaderRow}>
-          <div className={styles.cardTitleText}>{displayName}</div>
-          <div className={styles.cardActions}>
-            <button type="button" className={styles.cardAgent} onClick={() => onAgent(suit)}>
-              交给 Agent
-            </button>
-            <button type="button" className={styles.cardDelete} onClick={() => onDelete(suit)}>
-              删除
-            </button>
-          </div>
-        </div>
-        <div className={styles.cardMetaRow}>
-          <span className={styles.metaScene}>{suit.scene || '通用场景'}</span>
-          <span className={styles.metaCount}>{suit.item_count || items.length} 件单品</span>
-          <span className={styles.metaTime}>{formatTime(suit.create_time)}</span>
-        </div>
-        {previewNames ? <div className={styles.cardSubtitle}>{previewNames}</div> : null}
-        <div className={styles.thumbRow}>
-          {items.length ? (
-            items.map((item, idx) => (
-              <div className={styles.thumb} key={`${suit.suit_id}-${item.cloth_id || idx}`}>
-                {item?.image ? (
-                  <img src={item.image} alt={item.name || item.type || '单品'} />
-                ) : (
-                  <div className={styles.thumbPlaceholder} />
-                )}
-              </div>
-            ))
+const SuitCard = ({ model, highlighted, onDelete, onAgent }) => (
+  <article className={`${styles.card} ${highlighted ? styles.cardHighlighted : ''}`}>
+    <div className={styles.cardTop}>
+      <div className={styles.coverMosaic}>
+        <div className={styles.coverPrimary}>
+          {model.coverItems[0]?.image ? (
+            <img src={model.coverItems[0].image} alt={model.coverItems[0].alt} />
           ) : (
-            <div className={styles.cardEmpty}>单品信息缺失</div>
+            <div className={styles.coverFallback} />
           )}
+        </div>
+        <div className={styles.coverSecondaryRow}>
+          {model.coverItems.slice(1, 3).map((item) => (
+            <div key={item.id} className={styles.coverSecondary}>
+              {item.image ? <img src={item.image} alt={item.alt} /> : <div className={styles.coverFallback} />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.cardInfo}>
+        <h3 className={styles.cardTitle}>{model.title}</h3>
+        <div className={styles.cardMetaRow}>
+          <span className={styles.sceneBadge}>{model.sceneLabel}</span>
+          <span className={styles.metaText}>{model.countLabel}</span>
+          <span className={styles.metaText}>{model.timeLabel}</span>
+        </div>
+        {model.previewText ? <div className={styles.cardPreview}>{model.previewText}</div> : null}
+
+        <div className={styles.cardActions}>
+          <button type="button" className={styles.agentButton} onClick={() => onAgent(model.raw)}>
+            交给 Agent
+          </button>
+          <button type="button" className={styles.deleteButton} onClick={() => onDelete(model.raw)}>
+            删除
+          </button>
         </div>
       </div>
     </div>
-  )
-}
+
+    <div className={styles.thumbStrip}>
+      {model.thumbs.length ? (
+        model.thumbs.map((item) => (
+          <div className={styles.thumb} key={item.id}>
+            {item.image ? <img src={item.image} alt={item.alt} /> : <div className={styles.thumbPlaceholder} />}
+          </div>
+        ))
+      ) : (
+        <div className={styles.cardEmpty}>单品信息缺失</div>
+      )}
+    </div>
+  </article>
+)
 
 export default function Suits({ embedded = false }) {
   const navigate = useNavigate()
@@ -92,7 +75,10 @@ export default function Suits({ embedded = false }) {
   ])
 
   const loading = status === 'loading'
-  const hasData = useMemo(() => Array.isArray(suits) && suits.length > 0, [suits])
+  const suitList = useMemo(() => (Array.isArray(suits) ? suits : []), [suits])
+  const hasData = suitList.length > 0
+  const collectionModel = useMemo(() => buildCollectionViewModel(suitList), [suitList])
+  const cardModels = useMemo(() => suitList.map((suit) => buildSuitCardModel(suit)), [suitList])
 
   const fetchSuits = useCallback(async (forceRefresh = false) => {
     try {
@@ -111,7 +97,7 @@ export default function Suits({ embedded = false }) {
     presetTask: '帮我看看我的套装库，并告诉我下一步可以怎么整理',
   })
 
-  useReturnScroll({ prefix: 'suit', id: highlightedSuitId, watch: suits.length })
+  useReturnScroll({ prefix: 'suit', id: highlightedSuitId, watch: suitList.length })
 
   const handleDelete = (suit) => {
     Dialog.confirm({
@@ -141,33 +127,42 @@ export default function Suits({ embedded = false }) {
     })
   }, [navigate])
 
+  const handleCreate = useCallback(() => {
+    navigate('/suits/create')
+  }, [navigate])
+
   const renderContent = () => {
     if (loading) return <Loading text="加载套装库..." />
     if (error) return <ErrorBanner message={error} onAction={fetchSuits} />
     if (!hasData) {
       return (
         <div className={styles.emptyWrap}>
-          <Empty description="暂无套装，去生成或自定义一个吧" />
+          <Empty description="暂无套装，先从推荐里保存一套吧" />
           <div className={styles.emptyActions}>
-            <button type="button" onClick={() => navigate('/match?tab=recommend')}>
+            <button type="button" className={styles.emptyGhost} onClick={() => navigate('/match?tab=recommend')}>
               去场景推荐
             </button>
-            <button type="button" onClick={() => navigate('/suits/create')}>
+            <button type="button" className={styles.emptyPrimary} onClick={handleCreate}>
               新建套装
             </button>
           </div>
         </div>
       )
     }
+
     return (
       <div className={styles.cardList}>
-        {suits.map((suit) => (
+        {cardModels.map((model) => (
           <div
-            key={suit.suit_id}
-            className={highlightedSuitId === suit.suit_id ? styles.cardHighlighted : ''}
-            data-return-target={buildReturnTargetAttr('suit', suit.suit_id)}
+            key={model.id}
+            data-return-target={buildReturnTargetAttr('suit', model.id)}
           >
-            <SuitCard suit={suit} onDelete={handleDelete} onAgent={handleAgent} />
+            <SuitCard
+              model={model}
+              highlighted={highlightedSuitId === model.id}
+              onDelete={handleDelete}
+              onAgent={handleAgent}
+            />
           </div>
         ))}
       </div>
@@ -175,36 +170,33 @@ export default function Suits({ embedded = false }) {
   }
 
   return (
-    <div className={styles.suits}>
-      {embedded ? null : (
-        <div className={styles.header}>
-          <div className={styles.headerTitle}>搭配合集</div>
-          <div className={styles.headerActions}>
-            <button
-              type="button"
-              className={styles.headerAction}
-              onClick={() => navigate('/suits/create')}
-            >
-              新建套装
-            </button>
+    <div className={`${styles.suits} ${embedded ? styles.suitsEmbedded : ''}`}>
+      <div className={styles.hero}>
+        <div className={styles.heroTop}>
+          <div>
+            <div className={styles.heroTitle}>套装库</div>
+            <div className={styles.heroMeta}>{collectionModel.heroMeta}</div>
+          </div>
+          <button type="button" className={styles.createButton} onClick={handleCreate}>
+            新建套装
+          </button>
+        </div>
+
+        <div className={styles.heroStats}>
+          <div className={styles.statCard}>
+            <div className={styles.statLabel}>{collectionModel.primaryStat.label}</div>
+            <div className={styles.statValue}>{collectionModel.primaryStat.value}</div>
+          </div>
+          <div className={styles.statCard}>
+            <div className={styles.statLabel}>{collectionModel.secondaryStat.label}</div>
+            <div className={styles.statValue}>{collectionModel.secondaryStat.value}</div>
           </div>
         </div>
-      )}
-      <div className={styles.body}>
-        {embedded ? (
-          <div className={styles.inlineAction}>
-            <button type="button" onClick={() => navigate('/suits/create')}>
-              新建套装
-            </button>
-          </div>
-        ) : null}
-        {renderContent()}
+
+        <div className={styles.heroHint}>{collectionModel.heroHint}</div>
       </div>
-      {embedded ? null : (
-        <button type="button" className={styles.fab} onClick={() => navigate('/suits/create')} aria-label="新建套装">
-          +
-        </button>
-      )}
+
+      <div className={styles.body}>{renderContent()}</div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { Loading } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
@@ -7,6 +7,7 @@ import axios from '@/api'
 import { buildAgentContextState } from '@/utils/agentContext'
 import test from '@/assets/test.jpg'
 import { useAuthStore, useMatchStore } from '@/store'
+import { buildPreviewStageModel } from './viewModel'
 
 import styles from './index.module.less'
 
@@ -30,23 +31,84 @@ const PROGRESS_STAGES = [
   { label: '即将完成...', sub: '搭配效果马上呈现', duration: Infinity },
 ]
 
+const renderSlotPlaceholder = (slotKey) => {
+  if (slotKey === 'top') {
+    return (
+      <svg
+        className={styles.slotPlaceholderIcon}
+        viewBox="0 0 64 64"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+      >
+        <path
+          d="M22 20h20l4 8v18c0 2-2 4-4 4H22c-2 0-4-2-4-4V28l4-8z"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M28 20a4 4 0 0 0 8 0"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+
+  return (
+    <svg
+      className={styles.slotPlaceholderIcon}
+      viewBox="0 0 64 64"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M20 18h24"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M24 18v28c0 2 2 4 4 4h8c2 0 4-2 4-4V18"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M32 18v32"
+        stroke="currentColor"
+        strokeWidth="2.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 export default function Match({ embedded = false }) {
   const navigate = useNavigate()
   const authUserInfo = useAuthStore((s) => s.userInfo)
   const accessToken = useAuthStore((s) => s.accessToken)
   const setAuthUserInfo = useAuthStore((s) => s.setUserInfo)
-  const [activeTab, setActiveTab] = useState('top') // 'top' 为上衣，'bottom' 为下衣
-  const [showPreview, setShowPreview] = useState(false) // 是否展示预览图
-  const [topClothes, setTopClothes] = useState(null) // 上衣
-  const [bottomClothes, setBottomClothes] = useState(null) // 下衣
+  const [activeTab, setActiveTab] = useState('top')
+  const [showPreview, setShowPreview] = useState(false)
+  const [topClothes, setTopClothes] = useState(null)
+  const [bottomClothes, setBottomClothes] = useState(null)
   const { topItems, bottomItems, fetchedAt, ownerId, setClothes, clear } = useMatchStore()
-  const topClothesData = topItems
-  const bottomClothesData = bottomItems
-  const [previewImageUrl, setPreviewImageUrl] = useState('') // 预览图URL
+  const [previewImageUrl, setPreviewImageUrl] = useState('')
   const [userInfo, setUserInfo] = useState(() => authUserInfo || safeParseUserInfo())
   const [userLoading, setUserLoading] = useState(false)
-  const [loading, setLoading] = useState(false) // 加载中
+  const [loading, setLoading] = useState(false)
   const [progressStage, setProgressStage] = useState(0)
+  const materialScrollRef = useRef(null)
+
   const currentUserId = userInfo?.id || authUserInfo?.id || null
   const sex = userInfo?.sex || ''
   const characterModelRaw = userInfo?.characterModel || ''
@@ -54,14 +116,22 @@ export default function Match({ embedded = false }) {
     typeof characterModelRaw === 'string' && characterModelRaw.startsWith('/')
       ? `${API_BASE_URL}${characterModelRaw}`
       : characterModelRaw
-  const hasInstantLook = Boolean(topClothes?.image) && Boolean(bottomClothes?.image)
-  const materialScrollRef = useRef(null)
-  const cacheForUser =
-    ownerId && currentUserId && String(ownerId) === String(currentUserId)
-  const hasCache =
-    cacheForUser && (topItems.length > 0 || bottomItems.length > 0 || fetchedAt > 0)
-  const cacheFresh =
-    hasCache && fetchedAt > 0 && Date.now() - fetchedAt < MATCH_CACHE_TTL
+  const cacheForUser = ownerId && currentUserId && String(ownerId) === String(currentUserId)
+  const hasCache = cacheForUser && (topItems.length > 0 || bottomItems.length > 0 || fetchedAt > 0)
+  const cacheFresh = hasCache && fetchedAt > 0 && Date.now() - fetchedAt < MATCH_CACHE_TTL
+  const currentLookClothes = [topClothes, bottomClothes].filter(Boolean)
+  const canHandOffLook = currentLookClothes.length >= 2
+  const visibleMaterials = activeTab === 'top' ? topItems : bottomItems
+
+  const stageModel = useMemo(
+    () =>
+      buildPreviewStageModel({
+        topClothes,
+        bottomClothes,
+        showPreview,
+      }),
+    [topClothes, bottomClothes, showPreview]
+  )
 
   const clearPreview = () => {
     setShowPreview(false)
@@ -78,16 +148,6 @@ export default function Match({ embedded = false }) {
     if (!materialScrollRef.current) return
     materialScrollRef.current.scrollLeft = 0
   }, [activeTab])
-  const stageHint =
-    !topClothes && !bottomClothes
-      ? '点击上方衣物，即刻预览搭配效果'
-      : topClothes && !bottomClothes
-        ? '已选上衣，再点选一件下衣，即刻预览搭配效果'
-        : !topClothes && bottomClothes
-          ? '已选下衣，再点选一件上衣，即刻预览搭配效果'
-          : '搭配已就绪，点击下方按钮生成预览图'
-  const currentLookClothes = [topClothes, bottomClothes].filter(Boolean)
-  const canHandOffLook = currentLookClothes.length >= 2
 
   const openAgentForCurrentLook = useCallback(() => {
     if (!canHandOffLook) {
@@ -104,9 +164,7 @@ export default function Match({ embedded = false }) {
       return
     }
 
-    const itemNames = currentLookClothes
-      .map((item) => item?.name || item?.type || '')
-      .filter(Boolean)
+    const itemNames = currentLookClothes.map((item) => item?.name || item?.type || '').filter(Boolean)
 
     navigate('/unified-agent', {
       state: buildAgentContextState({
@@ -152,9 +210,7 @@ export default function Match({ embedded = false }) {
         setAuthUserInfo(nextUser)
       }
     } catch (error) {
-      console.error('获取用户信息失败:', error);
-      // 不再显示 Toast，避免频繁提示
-      // 如果是网络错误或 token 失效，会在其他地方处理
+      console.error('获取用户信息失败:', error)
     } finally {
       setUserLoading(false)
     }
@@ -177,8 +233,6 @@ export default function Match({ embedded = false }) {
     }
   }, [ownerId, currentUserId, clear])
 
-
-  // 获取衣服数据
   const getClothesData = useCallback(async () => {
     try {
       const [resTop, resBot] = await Promise.all([
@@ -192,7 +246,6 @@ export default function Match({ embedded = false }) {
     }
   }, [setClothes, currentUserId])
 
-  // 生成预览图
   const handleGenerate = async () => {
     if (!topClothes?.image || !bottomClothes?.image) {
       Toast.show({ content: '请选择上衣和下衣', duration: 1000 })
@@ -231,7 +284,6 @@ export default function Match({ embedded = false }) {
       setLoading(true)
       setProgressStage(0)
 
-      // 驱动进度阶段自动推进
       const stageTimers = []
       PROGRESS_STAGES.forEach((stage, i) => {
         if (i === 0 || stage.duration === Infinity) return
@@ -261,31 +313,29 @@ export default function Match({ embedded = false }) {
     }
   }
 
-
   useEffect(() => {
     if (!currentUserId) return
     if (cacheFresh) return
     void getClothesData()
   }, [cacheFresh, getClothesData, currentUserId])
 
-
   return (
-
     <div className={styles.match}>
-
-      <div className={styles['match-loading']} style={{ display: (loading || userLoading) ? 'flex' : 'none' }}>
+      <div className={styles.loadingOverlay} style={{ display: loading || userLoading ? 'flex' : 'none' }}>
         {userLoading ? (
-          <Loading size="24px" textColor="#3f45ff" color='#3f45ff'>正在获取用户信息...</Loading>
+          <Loading size="24px" textColor="#2a64f6" color="#2a64f6">
+            正在获取用户信息...
+          </Loading>
         ) : (
-          <div className={styles['progress-panel']}>
-            <div className={styles['progress-spinner']}>
-              <Loading size="32px" color='#3f45ff' />
+          <div className={styles.progressPanel}>
+            <div className={styles.progressSpinner}>
+              <Loading size="32px" color="#2a64f6" />
             </div>
-            <div className={styles['progress-label']}>{PROGRESS_STAGES[progressStage]?.label}</div>
-            <div className={styles['progress-sub']}>{PROGRESS_STAGES[progressStage]?.sub}</div>
-            <div className={styles['progress-bar-track']}>
+            <div className={styles.progressLabel}>{PROGRESS_STAGES[progressStage]?.label}</div>
+            <div className={styles.progressSub}>{PROGRESS_STAGES[progressStage]?.sub}</div>
+            <div className={styles.progressBarTrack}>
               <div
-                className={styles['progress-bar-fill']}
+                className={styles.progressBarFill}
                 style={{ width: `${Math.min(90, ((progressStage + 1) / PROGRESS_STAGES.length) * 100)}%` }}
               />
             </div>
@@ -294,271 +344,154 @@ export default function Match({ embedded = false }) {
       </div>
 
       {embedded ? null : (
-        <div className={styles['match-header']}>
-          <div className={styles['match-header-title']}>
-            搭配中心
-          </div>
+        <div className={styles.matchHeader}>
+          <div className={styles.matchHeaderTitle}>搭配中心</div>
         </div>
       )}
 
-      <div className={styles['match-content']}>
-        <div className={styles['match-content-title']}>
-          <div
-            className={`${styles['match-content-title-indicator']} ${activeTab === 'bottom' ? styles['match-content-title-indicator-bottom'] : ''}`}
-          />
-          <div
-            className={`${styles['match-content-title-left']} ${
-              activeTab === 'top' ? styles.active : styles.inactive
-            }`}
-            onClick={() => handleTabChange('top')}
-          >
-            上衣
-          </div>
-          <div
-            className={`${styles['match-content-title-right']} ${
-              activeTab === 'bottom' ? styles.active : styles.inactive
-            }`}
-            onClick={() => handleTabChange('bottom')}
-          >
-            下衣
-          </div>
-        </div>
-        <div className={styles['match-content-material']}>
-          <div className={styles['match-content-material-display']} ref={materialScrollRef}>
-            {
-              activeTab === 'top' ? (
-                topClothesData.map((item, index) => (
-                  <div
-                    className={`${styles['match-content-material-display-item']} ${topClothes === item ? styles['active'] : ''}`}
-                    key={index}
-                    onClick={() => {
-                      setTopClothes(item)
-                      clearPreview()
-                    }}
-                  >
-                    <div className={styles['match-content-material-display-item-img']}>
-                      <img
-                        src={item?.image || test}
-                        alt={item?.name || '上衣'}
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.src = test
-                        }}
-                      />
-                    </div>
-                    <div className={styles['match-content-material-display-item-name']}>
-                      {item.name}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                bottomClothesData.map((item, index) => (
-                  <div
-                    className={`${styles['match-content-material-display-item']} ${bottomClothes === item ? styles['active'] : ''}`}
-                    key={index}
-                    onClick={() => {
-                      setBottomClothes(item)
-                      clearPreview()
-                    }}
-                  >
-                    <div className={styles['match-content-material-display-item-img']}>
-                      <img
-                        src={item?.image || test}
-                        alt={item?.name || '下衣'}
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.src = test
-                        }}
-                      />
-                    </div>
-                    <div className={styles['match-content-material-display-item-name']}>
-                      {item.name}
-                    </div>
-                  </div>
-                )
-                )
-              )
-            }
-          </div>
-        </div>
-        <div className={styles['match-content-show']}>
-          {
-            showPreview && previewImageUrl ? (
-              <div className={styles['preview']}>
-                <div className={styles['preview-img']}>
-                  <img
-                          src={previewImageUrl}
-                          alt="预览图"
-                          loading="lazy"
-                          onError={(e) => {
-                            console.error('图片加载失败:', previewImageUrl)
-                            e.currentTarget.src = test
-                          }}
-                        />
-                </div>
-              </div>
-            ) : (
-              <div className={styles['stage']}>
-                <div className={styles['stage-header']}>
-                  <div className={styles['stage-title']}>搭配预览</div>
-                  <div className={styles['stage-subtitle']}>{stageHint}</div>
-                </div>
-
-                {hasInstantLook ? (
-                  <div className={styles['stage-look']}>
-                    <div className={styles['stage-look-canvas']}>
-                      <div className={styles['stage-look-badge']}>实时拼贴</div>
-                      <div className={styles['stage-look-top']}>
-                        <img
-                          src={topClothes.image}
-                          alt={topClothes.name || '上衣'}
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = test
-                          }}
-                        />
-                      </div>
-                      <div className={styles['stage-look-divider']} />
-                      <div className={styles['stage-look-bottom']}>
-                        <img
-                          src={bottomClothes.image}
-                          alt={bottomClothes.name || '下衣'}
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = test
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className={styles['stage-look-names']}>
-                      <span className={styles['stage-look-chip']}>{topClothes.name || '上衣'}</span>
-                      <span className={styles['stage-look-plus']}>+</span>
-                      <span className={styles['stage-look-chip']}>{bottomClothes.name || '下衣'}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={styles['stage-slots']}>
-                  <div className={`${styles['stage-slot']} ${topClothes ? styles['stage-slot-active'] : ''}`}>
-                    <div className={styles['stage-slot-image']}>
-                      {topClothes?.image ? (
-                        <img
-                          src={topClothes.image}
-                          alt={topClothes.name || '上衣'}
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = test
-                          }}
-                        />
-                      ) : (
-                        <div
-                          className={styles['stage-slot-placeholder']}
-                        >
-                          <svg
-                            className={styles['stage-slot-placeholder-icon']}
-                            viewBox="0 0 64 64"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M32 14c4 0 7 3 7 7 0 2-1 4-3 6l-4 4"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M14 44l18-12 18 12"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M14 44h36"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div
-                      className={`${styles['stage-slot-title']} ${topClothes ? '' : styles['stage-slot-title-muted']}`}
-                    >
-                      {topClothes?.name || '上衣'}
-                    </div>
-                  </div>
-
-                  <div className={`${styles['stage-slot']} ${bottomClothes ? styles['stage-slot-active'] : ''}`}>
-                    <div className={styles['stage-slot-image']}>
-                      {bottomClothes?.image ? (
-                        <img
-                          src={bottomClothes.image}
-                          alt={bottomClothes.name || '下衣'}
-                          loading="lazy"
-                          onError={(e) => {
-                            e.target.src = test
-                          }}
-                        />
-                      ) : (
-                        <div
-                          className={styles['stage-slot-placeholder']}
-                        >
-                          <svg
-                            className={styles['stage-slot-placeholder-icon']}
-                            viewBox="0 0 64 64"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M18 20h28"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M24 20v26c0 2 2 4 4 4h8c2 0 4-2 4-4V20"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                            <path
-                              d="M32 20v30"
-                              stroke="currentColor"
-                              strokeWidth="2.6"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </div>
-                      )}
-                    </div>
-                    <div
-                      className={`${styles['stage-slot-title']} ${
-                        bottomClothes ? '' : styles['stage-slot-title-muted']
-                      }`}
-                    >
-                      {bottomClothes?.name || '下衣'}
-                    </div>
-                  </div>
-                </div>
-                )}
-              </div>
-            )
-          }
-        </div>
-
-        <div className={styles['match-content-actions']}>
-          <div className={styles['match-content-delete']}>
+      <div className={styles.matchBody}>
+        <section className={styles.selectorCard}>
+          <div className={styles.segmented}>
             <button
               type="button"
-              className={styles['delete-btn']}
+              className={`${styles.segmentButton} ${activeTab === 'top' ? styles.segmentButtonActive : ''}`}
+              onClick={() => handleTabChange('top')}
+            >
+              上衣
+            </button>
+            <button
+              type="button"
+              className={`${styles.segmentButton} ${activeTab === 'bottom' ? styles.segmentButtonActive : ''}`}
+              onClick={() => handleTabChange('bottom')}
+            >
+              下衣
+            </button>
+          </div>
+
+          <div className={styles.materialRail} ref={materialScrollRef}>
+            {visibleMaterials.map((item, index) => {
+              const selected = activeTab === 'top' ? topClothes === item : bottomClothes === item
+              return (
+                <button
+                  type="button"
+                  key={item?.cloth_id || index}
+                  className={`${styles.materialCard} ${selected ? styles.materialCardActive : ''}`}
+                  onClick={() => {
+                    if (activeTab === 'top') {
+                      setTopClothes(item)
+                    } else {
+                      setBottomClothes(item)
+                    }
+                    clearPreview()
+                  }}
+                >
+                  <div className={styles.materialImageWrap}>
+                    <img
+                      src={item?.image || test}
+                      alt={item?.name || (activeTab === 'top' ? '上衣' : '下衣')}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.src = test
+                      }}
+                    />
+                  </div>
+                  <div className={styles.materialName}>{item?.name || '未命名单品'}</div>
+                </button>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className={styles.stageCard}>
+          <div className={styles.stageHeader}>
+            <div className={styles.stageTitle}>搭配预览</div>
+            <div className={styles.stageSubtitle}>{stageModel.hint}</div>
+          </div>
+
+          {showPreview && previewImageUrl ? (
+            <div className={styles.generatedPreview}>
+              <div className={styles.generatedPreviewFrame}>
+                <img
+                  src={previewImageUrl}
+                  alt="预览图"
+                  loading="lazy"
+                  onError={(e) => {
+                    console.error('图片加载失败:', previewImageUrl)
+                    e.currentTarget.src = test
+                  }}
+                />
+              </div>
+            </div>
+          ) : stageModel.hasInstantLook ? (
+            <div className={styles.instantLook}>
+              <div className={styles.instantCanvas}>
+                <div className={styles.instantBadge}>实时拼贴</div>
+                <div className={styles.instantTop}>
+                  <img
+                    src={topClothes.image}
+                    alt={topClothes.name || '上衣'}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src = test
+                    }}
+                  />
+                </div>
+                <div className={styles.instantDivider} />
+                <div className={styles.instantBottom}>
+                  <img
+                    src={bottomClothes.image}
+                    alt={bottomClothes.name || '下衣'}
+                    loading="lazy"
+                    onError={(e) => {
+                      e.currentTarget.src = test
+                    }}
+                  />
+                </div>
+              </div>
+              <div className={styles.instantChips}>
+                {stageModel.slotChips.map((item) => (
+                  <span key={item} className={styles.instantChip}>
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className={styles.stageSlots}>
+              {stageModel.slots.map((slot) => (
+                <div
+                  key={slot.key}
+                  className={`${styles.stageSlot} ${slot.selected ? styles.stageSlotActive : ''}`}
+                >
+                  <div className={styles.stageSlotImage}>
+                    {slot.image ? (
+                      <img
+                        src={slot.image}
+                        alt={slot.name}
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.src = test
+                        }}
+                      />
+                    ) : (
+                      <div className={styles.slotPlaceholder}>{renderSlotPlaceholder(slot.key)}</div>
+                    )}
+                  </div>
+                  <div className={styles.stageSlotMeta}>
+                    <div className={`${styles.stageSlotLabel} ${slot.selected ? '' : styles.stageSlotLabelMuted}`}>
+                      {slot.label}
+                    </div>
+                    <div className={styles.stageSlotState}>{slot.selected ? slot.name : '待选择'}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className={styles.actionRow}>
+            <button
+              type="button"
+              className={styles.ghostAction}
               onClick={() => {
                 clearPreview()
                 setTopClothes(null)
@@ -572,18 +505,14 @@ export default function Match({ embedded = false }) {
             >
               清空
             </button>
-          </div>
-          <div className={styles['match-content-agent']}>
-            <button type="button" className={styles['agent-btn']} onClick={openAgentForCurrentLook}>
+            <button type="button" className={styles.secondaryAction} onClick={openAgentForCurrentLook}>
               交给 Agent
             </button>
-          </div>
-          <div className={styles['match-content-generate']}>
-            <button type="button" className={styles['save-btn']} onClick={handleGenerate}>
+            <button type="button" className={styles.primaryAction} onClick={handleGenerate}>
               生成预览图
             </button>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )

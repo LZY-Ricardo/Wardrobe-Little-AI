@@ -13,6 +13,8 @@ import styles from './index.module.less'
 import { defaultWeather } from '@/config/homeConfig'
 
 const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache_v1'
+const WEATHER_DATA_CACHE_KEY = 'weather_today_cache_v1'
+const WEATHER_STALE_MS = 10 * 60 * 1000
 
 const readSessionJson = (key) => {
   try {
@@ -28,6 +30,31 @@ const writeSessionJson = (key, value) => {
     sessionStorage.setItem(key, JSON.stringify(value))
   } catch {
     // ignore
+  }
+}
+
+const normalizeWeatherData = (value) => {
+  if (!value || typeof value !== 'object') return null
+
+  return {
+    city: value.city || defaultWeather.city,
+    temp: value.temp || defaultWeather.temp,
+    text: value.text || defaultWeather.text,
+    weatherCode: typeof value.weatherCode === 'number' ? value.weatherCode : defaultWeather.weatherCode,
+    isDay: typeof value.isDay === 'boolean' ? value.isDay : defaultWeather.isDay,
+  }
+}
+
+const readCachedWeather = () => {
+  const cached = readSessionJson(WEATHER_DATA_CACHE_KEY)
+  return normalizeWeatherData(cached?.weather ?? cached)
+}
+
+const readCachedWeatherMeta = () => {
+  const cached = readSessionJson(WEATHER_DATA_CACHE_KEY)
+  return {
+    weather: normalizeWeatherData(cached?.weather ?? cached),
+    fetchedAt: typeof cached?.fetchedAt === 'number' ? cached.fetchedAt : null,
   }
 }
 
@@ -118,11 +145,14 @@ const GEO_STATUS = {
 }
 
 export default function Home() {
+  const cachedWeatherMeta = readCachedWeatherMeta()
   const navigate = useNavigate()
   const [clothesData, setClothesData] = useState([])
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState('')
-  const [weather, setWeather] = useState(null)
+  const [weather, setWeather] = useState(() => cachedWeatherMeta.weather ?? readCachedWeather())
+  const [weatherFetchedAt, setWeatherFetchedAt] = useState(() => cachedWeatherMeta.fetchedAt)
+  const [weatherRefreshing, setWeatherRefreshing] = useState(false)
   const [geoStatus, setGeoStatus] = useState(GEO_STATUS.IDLE)
 
   const closetStats = useMemo(() => {
@@ -154,6 +184,11 @@ export default function Home() {
       adviceTags,
     }
   }, [adviceTags, adviceText, weather])
+  const weatherIsStale = useMemo(() => {
+    if (!weather || typeof weatherFetchedAt !== 'number') return false
+    return Date.now() - weatherFetchedAt > WEATHER_STALE_MS
+  }, [weather, weatherFetchedAt])
+  const weatherStatusText = weatherRefreshing ? '更新中' : weatherIsStale ? '稍早' : ''
 
   useAgentPageEntry(
     weather
@@ -188,6 +223,7 @@ export default function Home() {
     }
 
     const fetchWeather = async (coords) => {
+      setWeatherRefreshing(true)
       try {
         const res = coords
           ? await axios.get('/weather/today', {
@@ -201,12 +237,13 @@ export default function Home() {
           return null
         }
         if (res?.data) {
-          setWeather({
-            city: res.data.city || defaultWeather.city,
-            temp: res.data.temp || defaultWeather.temp,
-            text: res.data.text || defaultWeather.text,
-            weatherCode: typeof res.data.weatherCode === 'number' ? res.data.weatherCode : defaultWeather.weatherCode,
-            isDay: typeof res.data.isDay === 'boolean' ? res.data.isDay : defaultWeather.isDay,
+          const nextWeather = normalizeWeatherData(res.data)
+          const fetchedAt = Date.now()
+          setWeather(nextWeather)
+          setWeatherFetchedAt(fetchedAt)
+          writeSessionJson(WEATHER_DATA_CACHE_KEY, {
+            weather: nextWeather,
+            fetchedAt,
           })
         }
         return res?.data || null
@@ -214,6 +251,8 @@ export default function Home() {
         console.warn('天气接口不可用', err)
         if (coords) setGeoStatus(GEO_STATUS.WEATHER_ERROR)
         return null
+      } finally {
+        setWeatherRefreshing(false)
       }
     }
 
@@ -351,6 +390,7 @@ export default function Home() {
   }, [])
 
   const fetchWeather = async (coords) => {
+    setWeatherRefreshing(true)
     try {
       const res = coords
         ? await axios.get('/weather/today', {
@@ -364,12 +404,13 @@ export default function Home() {
         return null
       }
       if (res?.data) {
-        setWeather({
-          city: res.data.city || defaultWeather.city,
-          temp: res.data.temp || defaultWeather.temp,
-          text: res.data.text || defaultWeather.text,
-          weatherCode: typeof res.data.weatherCode === 'number' ? res.data.weatherCode : defaultWeather.weatherCode,
-          isDay: typeof res.data.isDay === 'boolean' ? res.data.isDay : defaultWeather.isDay,
+        const nextWeather = normalizeWeatherData(res.data)
+        const fetchedAt = Date.now()
+        setWeather(nextWeather)
+        setWeatherFetchedAt(fetchedAt)
+        writeSessionJson(WEATHER_DATA_CACHE_KEY, {
+          weather: nextWeather,
+          fetchedAt,
         })
       }
       return res?.data || null
@@ -377,6 +418,8 @@ export default function Home() {
       console.warn('天气接口不可用', err)
       if (coords) setGeoStatus(GEO_STATUS.WEATHER_ERROR)
       return null
+    } finally {
+      setWeatherRefreshing(false)
     }
   }
 
@@ -426,7 +469,7 @@ export default function Home() {
       {
         key: 'person',
         title: '我的',
-        desc: '资料/人物模特设置',
+        desc: '资料/个人形象设置',
         to: '/person',
         icon: <Icon type="iconfont icon-icon-myself-1" className={styles['entry-icon']} />,
       },
@@ -521,6 +564,7 @@ export default function Home() {
                 <div className={styles['today-title']}>今日建议</div>
                 <div className={styles['today-subtitle']}>
                   {weather.city} · {weather.temp} · {weather.text}
+                  {weatherStatusText ? <span className={styles['weather-status-chip']}>{weatherStatusText}</span> : null}
                 </div>
               </div>
               <div className={styles['today-tags']}>

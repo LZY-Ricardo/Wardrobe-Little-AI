@@ -1,5 +1,6 @@
 const { log } = require('../utils/logger')
 const jwt = require('jsonwebtoken')
+const { resolveJwtSecret } = require('../utils/jwtConfig')
 
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(String(value ?? ''), 10)
@@ -15,7 +16,7 @@ const ANALYZE_MAX = parsePositiveInt(process.env.RATE_LIMIT_ANALYZE_MAX, 10)
 
 const buckets = new Map()
 
-const JWT_SECRET = process.env.JWT_SECRET || 'lzy'
+const JWT_SECRET = resolveJwtSecret()
 
 const tryGetUserIdFromAuthHeader = (ctx) => {
   const authHeader = ctx.get('authorization') || ''

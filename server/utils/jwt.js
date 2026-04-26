@@ -1,7 +1,10 @@
 const jwt = require('jsonwebtoken')
+const { resolveJwtSecret } = require('./jwtConfig')
+
+const JWT_SECRET = resolveJwtSecret()
 
 function sign(options, time = '24h') {
-    return jwt.sign(options, 'lzy', {
+    return jwt.sign(options, JWT_SECRET, {
         expiresIn: time // 不传时间 默认一天过期
     })
 }
@@ -14,7 +17,7 @@ function verify() {
             // 处理Bearer token格式
             const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader
             try {
-                let res = jwt.verify(token, 'lzy')
+                let res = jwt.verify(token, JWT_SECRET)
                 console.log('短Token验证成功:', res);
                 ctx.userId = res.id
                 await next()
@@ -46,7 +49,7 @@ function refreshToken(refresh_token) {
     try {
         // 处理可能的Bearer前缀
         const token = refresh_token.startsWith('Bearer ') ? refresh_token.slice(7) : refresh_token;
-        let res = jwt.verify(token, 'lzy');
+        let res = jwt.verify(token, JWT_SECRET);
         if (res.id) {   
             return res;
         }

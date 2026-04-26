@@ -1,8 +1,8 @@
-﻿import React, { useState } from 'react'
+﻿import React, { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import styles from './index.module.less'
 import SvgIcon from '@/components/SvgIcon'
-import { Button, Toast } from 'antd-mobile'
+import { Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
 import { buildAgentContextState } from '@/utils/agentContext'
@@ -10,6 +10,7 @@ import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { getTodayInChina } from '@/utils/date'
 import { useSuitStore } from '@/store'
+import { buildRecommendCardModel, buildRecommendViewModel } from './viewModel'
 
 const loadImage = (src) => new Promise((resolve, reject) => {
   const img = new Image()
@@ -167,13 +168,6 @@ const normalizeSuits = (raw = [], fallbackScene = '') => {
   }))
 }
 
-const getSceneTone = (scene = '') => {
-  const name = scene || ''
-  if (['约会', '恋爱'].some((k) => name.includes(k))) return 'tone-romance'
-  if (['运动', '健身'].some((k) => name.includes(k))) return 'tone-sport'
-  return 'tone-neutral'
-}
-
 const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
 
 export default function Recommend({ embedded = false }) {
@@ -309,12 +303,6 @@ export default function Recommend({ embedded = false }) {
     )
   }
 
-  const isSuitSaved = (suit) => {
-    const signature = toSuitSignature(extractClothIds(suit?.items))
-    if (!signature) return false
-    return savedSuitSignatures.has(signature)
-  }
-
   const toggleClothFavorite = async (cloth) => {
     const clothId = cloth?.cloth_id
     if (!clothId) return
@@ -427,183 +415,239 @@ export default function Recommend({ embedded = false }) {
     void generateSceneSuits(presetScene)
   }, [generateSceneSuits, presetScene])
 
+  const pageModel = useMemo(
+    () =>
+      buildRecommendViewModel({
+        scene,
+        sceneSuits,
+        serviceUnavailable,
+      }),
+    [scene, sceneSuits, serviceUnavailable]
+  )
+
+  const cardModels = useMemo(
+    () =>
+      sceneSuits.map((item) => {
+        const signature = toSuitSignature(extractClothIds(item?.items))
+        return buildRecommendCardModel(item, {
+          isSaved: Boolean(signature && savedSuitSignatures.has(signature)),
+          isSaving: Boolean(signature && suitSaving[signature]),
+        })
+      }),
+    [sceneSuits, suitSaving, savedSuitSignatures]
+  )
+
+  const handleQuickSceneClick = (nextScene) => {
+    setScene(nextScene)
+  }
+
   const renderContent = () => {
     if (loading) {
       return (
-        <div className={styles['loading']}>AI 正在生成推荐...</div>
+        <div className={styles.stateCard}>AI 正在生成推荐...</div>
       )
     }
     if (error) {
       return (
-        <div className={styles['error']}>
-          <span>{error}</span>
-          <Button size="mini" onClick={handleBtnClick} disabled={serviceUnavailable}>
+        <div className={styles.stateCard}>
+          <div className={styles.stateText}>{error}</div>
+          <button type="button" className={styles.inlineRetry} onClick={handleBtnClick} disabled={serviceUnavailable}>
             重新尝试
-          </Button>
+          </button>
         </div>
       )
     }
     if (!sceneSuits.length) {
-      return <div className={styles['empty']}>暂无推荐，请输入场景后生成</div>
+      return <div className={styles.stateCard}>暂无推荐，请输入场景后生成</div>
     }
     return (
-      <div className={styles['recommend-body-content']}>
-        {sceneSuits.map((item) => (
-          <div className={`${styles['content-item']} ${styles[getSceneTone(item.scene)]}`} key={item.id}>
-            <div className={styles['item-img']}>
-              {item.cover ? <img src={item.cover} alt={item.scene} loading="lazy" /> : <div className={styles['placeholder']}>No Image</div>}
-              <div className={styles['item-actions-overlay']}>
-                {(() => {
-                  const signature = toSuitSignature(extractClothIds(item.items))
-                  const saved = isSuitSaved(item)
-                  const saving = suitSaving[signature]
-                  return saved ? (
-                  <HeartFill
-                    className={`${styles['action-icon']} ${styles['action-icon-active']}`}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      void saveSuitToLibrary(item)
-                    }}
-                  />
-                  ) : (
-                  <HeartOutline
-                      className={styles['action-icon']}
-                      onClick={(e) => {
-                        if (saving) return
-                        e.stopPropagation()
-                        void saveSuitToLibrary(item)
-                      }}
-                  />
-                  )
-                })()}
+      <div className={styles.resultsList}>
+        {cardModels.map((model) => (
+          <article key={model.id} className={`${styles.resultCard} ${styles[`tone-${model.sceneTone}`]}`}>
+            <div className={styles.resultHead}>
+              <span className={styles.sceneBadge}>{model.sceneLabel}</span>
+              <span className={styles.sourceBadge}>{model.sourceLabel}</span>
+            </div>
+
+            <div className={styles.previewBoard}>
+              <button
+                type="button"
+                className={styles.saveButton}
+                disabled={model.isSaving || model.isSaved}
+                onClick={() => void saveSuitToLibrary(model.raw)}
+                aria-label={model.saveLabel}
+              >
+                {model.isSaved ? (
+                  <HeartFill className={`${styles.saveIcon} ${styles.saveIconActive}`} />
+                ) : (
+                  <HeartOutline className={styles.saveIcon} />
+                )}
+              </button>
+
+              <div className={styles.previewMain}>
+                {model.previewImages.main?.image ? (
+                  <img src={model.previewImages.main.image} alt={model.previewImages.main.alt} loading="lazy" />
+                ) : (
+                  <div className={styles.previewPlaceholder}>暂无封面</div>
+                )}
+              </div>
+
+              <div className={styles.previewSecondaryRow}>
+                {model.previewImages.secondary.map((preview) => (
+                  <div key={preview.id} className={styles.previewSecondary}>
+                    {preview.image ? (
+                      <img src={preview.image} alt={preview.alt} loading="lazy" />
+                    ) : (
+                      <div className={styles.previewSecondaryEmpty} />
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
-            <div className={styles['item-content']}>
-              <div className={styles['item-header']}>
-                <div className={styles['item-scene']}>{item.scene}</div>
-                <div className={`${styles['item-source']} ${styles[`item-source-${item.source}`]}`}>
-                  {item.source === 'rule' ? '规则推荐' : '模型推荐'}
-                </div>
-              </div>
-              <div className={styles['item-message']}>{item.description}</div>
-              <div className={styles['item-actions-inline']}>
-                <button
-                  type="button"
-                  className={styles['secondary-action']}
-                  onClick={() => void createOutfitLogFromSuit(item)}
-                >
-                  记录穿搭
-                </button>
-                <button
-                  type="button"
-                  className={styles['secondary-action']}
-                  onClick={() =>
-                    navigate('/unified-agent', {
-                      state: buildAgentContextState({
-                        presetTask: `继续处理当前${item.scene || scene || '推荐'}结果`,
-                        latestTask: {
-                          taskType: 'recommendation',
-                          summary: item.description,
-                          result: {
-                            suits: [item],
-                            recommendationHistoryId: latestRecommendationId,
-                          },
+
+            <div className={styles.resultMessage}>{model.message}</div>
+
+            <div className={styles.resultActions}>
+              <button
+                type="button"
+                className={styles.secondaryAction}
+                onClick={() => void createOutfitLogFromSuit(model.raw)}
+              >
+                记录穿搭
+              </button>
+              <button
+                type="button"
+                className={styles.secondaryAction}
+                onClick={() =>
+                  navigate('/unified-agent', {
+                    state: buildAgentContextState({
+                      presetTask: `继续处理当前${model.sceneLabel || scene || '推荐'}结果`,
+                      latestTask: {
+                        taskType: 'recommendation',
+                        summary: model.message,
+                        result: {
+                          suits: [model.raw],
+                          recommendationHistoryId: latestRecommendationId,
                         },
-                      }),
-                    })
-                  }
-                >
-                  交给 Agent
-                </button>
-              </div>
-              {Boolean(item.items?.length) && (
-                <div className={styles['item-list']}>
-                  {item.items.map((cloth, idx) => (
-                    <div className={styles['item-row']} key={`${item.id}-${cloth.cloth_id || idx}`}>
-                      <div className={styles['item-row-header']}>
-                        <div className={styles['item-row-name']}>
-                          {(cloth.type || '单品') + '：'}{cloth.name || cloth.color || '搭配单品'}
-                        </div>
-                        {cloth.cloth_id ? (
-                          <button
-                            type="button"
-                            className={styles['item-row-action']}
-                            disabled={Boolean(favoriteUpdating[cloth.cloth_id])}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void toggleClothFavorite(cloth)
-                            }}
-                            aria-label={isFavorited(cloth.favorite) ? '取消收藏' : '收藏'}
-                          >
-                            {isFavorited(cloth.favorite) ? (
-                              <HeartFill
-                                className={`${styles['item-row-fav-icon']} ${styles['item-row-fav-icon-active']}`}
-                              />
-                            ) : (
-                              <HeartOutline className={styles['item-row-fav-icon']} />
-                            )}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={styles['item-row-tags']}>
-                        {[cloth.color, cloth.style, cloth.season]
-                          .filter(Boolean)
-                          .map((tag, tagIdx) => (
-                            <span className={styles['item-tag']} key={`${item.id}-${cloth.cloth_id || idx}-tag-${tagIdx}`}>
-                              {tag}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                      },
+                    }),
+                  })
+                }
+              >
+                交给 Agent
+              </button>
             </div>
-          </div>
+
+            <div className={styles.featureCard}>
+              <div className={styles.featureTitle}>{model.featuredItem.title}</div>
+              <div className={styles.featureTags}>
+                {model.featuredItem.tags.map((tag) => (
+                  <span key={`${model.id}-${tag}`} className={styles.featureTag}>
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {model.items.length > 1 ? (
+              <div className={styles.itemList}>
+                {model.items.slice(1).map((cloth, idx) => (
+                  <div className={styles.itemRow} key={`${model.id}-${cloth.cloth_id || idx}`}>
+                    <div className={styles.itemRowTop}>
+                      <div className={styles.itemRowName}>
+                        {(cloth.type || '单品') + '：'}
+                        {cloth.name || cloth.color || '搭配单品'}
+                      </div>
+                      {cloth.cloth_id ? (
+                        <button
+                          type="button"
+                          className={styles.itemRowAction}
+                          disabled={Boolean(favoriteUpdating[cloth.cloth_id])}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            void toggleClothFavorite(cloth)
+                          }}
+                          aria-label={isFavorited(cloth.favorite) ? '取消收藏' : '收藏'}
+                        >
+                          {isFavorited(cloth.favorite) ? (
+                            <HeartFill className={`${styles.itemRowFavIcon} ${styles.itemRowFavIconActive}`} />
+                          ) : (
+                            <HeartOutline className={styles.itemRowFavIcon} />
+                          )}
+                        </button>
+                      ) : null}
+                    </div>
+                    <div className={styles.itemRowTags}>
+                      {[cloth.color, cloth.style, cloth.season]
+                        .filter(Boolean)
+                        .map((tag, tagIdx) => (
+                          <span className={styles.itemTag} key={`${model.id}-${cloth.cloth_id || idx}-tag-${tagIdx}`}>
+                            {tag}
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </article>
         ))}
       </div>
     )
   }
 
   return (
-    <div className={styles['recommend']}>
-      <div className={styles['recommend-header']}>
-        <SvgIcon iconName="icon-icon-sousuo" className={styles['search-icon']} />
-        <input
-          type="text"
-          placeholder="请输入场景，如约会、运动、商务"
-          value={scene}
-          onChange={(e) => setScene(e.target.value)}
-          disabled={loading}
-        />
-        <button onClick={handleBtnClick} disabled={loading || serviceUnavailable}>
-          {loading ? '生成中...' : '生成推荐'}
-        </button>
-        <button
-          type="button"
-          className={styles['history-button']}
-          onClick={() => navigate('/recommendations/history')}
-        >
-          历史
-        </button>
-      </div>
+    <div className={styles.recommend}>
+      <section className={styles.heroCard}>
+        <div className={styles.composerRow}>
+          <label className={styles.inputCard}>
+            <SvgIcon iconName="icon-icon-sousuo" className={styles.searchIcon} />
+            <input
+              type="text"
+              placeholder="请输入场景，如约会、运动、商务"
+              value={scene}
+              onChange={(e) => setScene(e.target.value)}
+              disabled={loading}
+            />
+          </label>
 
-      <div className={styles['recommend-body']}>
-        <div className={styles['recommend-body-history']}>
-          <div className={styles['history-item']} onClick={() => setScene('商务')}>商务</div>
-          <div className={styles['history-item']} onClick={() => setScene('约会')}>约会</div>
-          <div className={styles['history-item']} onClick={() => setScene('运动')}>运动</div>
+          <button type="button" className={styles.primaryAction} onClick={handleBtnClick} disabled={loading || serviceUnavailable}>
+            {loading ? '生成中...' : '生成推荐'}
+          </button>
+
+          <button
+            type="button"
+            className={styles.historyButton}
+            onClick={() => navigate('/recommendations/history')}
+          >
+            历史
+          </button>
         </div>
+
+        <div className={styles.quickSceneRow}>
+          {pageModel.quickScenes.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`${styles.quickSceneChip} ${styles[`quickSceneChip-${item.tone}`]}`}
+              onClick={() => handleQuickSceneClick(item.label)}
+            >
+              {item.label}
+            </button>
+          ))}
+          {sceneSuits.length ? <span className={styles.resultsMeta}>{pageModel.resultMeta}</span> : null}
+        </div>
+      </section>
+
+      <section className={styles.resultsPanel}>
         {renderContent()}
-        {serviceUnavailable && (
-          <div className={styles['recommend-body-footer']}>
-            <div className={styles['footer-btn']}>
-              <SvgIcon iconName="icon-shuaxin" className={styles['btn-icon']} />
-              服务暂不可用，请稍后重试
-            </div>
+        {serviceUnavailable && pageModel.serviceStatus ? (
+          <div className={styles.serviceFooter}>
+            <SvgIcon iconName="icon-shuaxin" className={styles.serviceIcon} />
+            <span>{pageModel.serviceStatus}</span>
           </div>
-        )}
-      </div>
+        ) : null}
+      </section>
     </div>
   )
 }

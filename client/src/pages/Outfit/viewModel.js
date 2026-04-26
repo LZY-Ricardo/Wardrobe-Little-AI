@@ -2,10 +2,17 @@ const isFavorited = (value) => value === 1 || value === true || value === '1' ||
 
 const toArray = (value) => (Array.isArray(value) ? value : [])
 
+const normalizeCardField = (value = '') =>
+  String(value || '')
+    .split(/[（(；;，,、]/)[0]
+    .trim()
+
 export const buildCardModel = (cloth = {}) => {
   const title = cloth.name || '未命名'
-  const meta = [cloth.type, cloth.style].filter(Boolean).join(' · ') || cloth.type || '暂未分类'
-  const tags = [cloth.color, cloth.season].filter(Boolean).slice(0, 2)
+  const typeText = normalizeCardField(cloth.type)
+  const styleText = normalizeCardField(cloth.style)
+  const meta = [typeText, styleText].filter(Boolean).join(' · ') || typeText || '暂未分类'
+  const tags = [normalizeCardField(cloth.color), normalizeCardField(cloth.season)].filter(Boolean).slice(0, 2)
 
   return {
     id: cloth.cloth_id,

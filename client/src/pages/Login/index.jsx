@@ -24,16 +24,19 @@ export default function Login() {
   }, [state])
 
   const onLogin = async () => {
-    if (!username) {
+    if (!username.trim()) {
       Toast.show({ content: '请输入用户名', duration: 1000 })
       return
     }
-    if (!password) {
+    if (!password.trim()) {
       Toast.show({ content: '请输入密码', duration: 1000 })
       return
     }
     try {
-      const res = await axios.post('/user/login', { username, password })
+      const res = await axios.post('/user/login', {
+        username,
+        password,
+      })
       const { access_token, refresh_token, id, createTime, sex, characterModel, avatar } = res.data || {}
       setTokens({ accessToken: access_token, refreshToken: refresh_token })
       localStorage.setItem('access_token', access_token)

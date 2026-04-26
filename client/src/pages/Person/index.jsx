@@ -11,6 +11,16 @@ import { Loading, ErrorBanner } from '@/components/Feedback'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000'
 const PROFILE_STORAGE_KEY = 'outfit-profile-v1'
+const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MAX_LENGTH = 64
+const PASSWORD_RULE_MESSAGE = `密码需为 ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} 位，且包含大写字母、小写字母、数字和特殊字符`
+
+const isStrongPassword = (value) =>
+  /[a-z]/.test(value) &&
+  /[A-Z]/.test(value) &&
+  /\d/.test(value) &&
+  /[^A-Za-z0-9]/.test(value) &&
+  !/\s/.test(value)
 
 const emptyProfile = {
   city: '',
@@ -147,6 +157,46 @@ export default function Person() {
   const [, setConfirmDialogVisible] = useState(false)
 
   const hasCharacterModel = Boolean(userInfo?.characterModel || uploadedImage)
+  const maskedAccount = userInfo.username
+    ? `${userInfo.username.slice(0, 3)}×××${userInfo.username.slice(-3)}`
+    : ''
+  const genderText = sex === 'man' ? '男' : sex === 'woman' ? '女' : '未设置'
+  const assetCards = [
+    {
+      key: 'clothes',
+      label: '衣物总数',
+      value: assetLoading ? '--' : assetStats.clothesCount,
+      onClick: () => navigate('/outfit'),
+    },
+    {
+      key: 'favorite',
+      label: '收藏',
+      value: assetLoading ? '--' : assetStats.favoriteCount,
+      onClick: () => navigate('/outfit'),
+    },
+  ]
+  const quickActions = [
+    { key: 'closet', label: '去衣橱', onClick: () => navigate('/outfit') },
+    { key: 'add', label: '新增衣物', onClick: () => navigate('/add') },
+    { key: 'match', label: '搭配预览', onClick: () => navigate('/match') },
+    { key: 'recommend', label: '推荐', onClick: () => navigate('/recommend') },
+    { key: 'history', label: '推荐历史', onClick: () => navigate('/recommendations/history') },
+    { key: 'logs', label: '穿搭记录', onClick: () => navigate('/outfit-logs') },
+    { key: 'insight', label: '偏好画像', onClick: () => navigate('/profile-insights') },
+    { key: 'analytics', label: '衣橱分析', onClick: () => navigate('/wardrobe-analytics') },
+    { key: 'agent', label: 'Agent', onClick: () => navigate('/unified-agent') },
+  ]
+  const profileSummary = [
+    { key: 'city', label: '城市', value: profile.city || '-' },
+    { key: 'heightCm', label: '身高', value: profile.heightCm ? `${profile.heightCm}cm` : '-' },
+    { key: 'weightKg', label: '体重', value: profile.weightKg ? `${profile.weightKg}kg` : '-' },
+    { key: 'topSize', label: '上装尺码', value: profile.topSize || '-' },
+    { key: 'bottomSize', label: '下装尺码', value: profile.bottomSize || '-' },
+    { key: 'shoeSize', label: '鞋码', value: profile.shoeSize || '-' },
+    { key: 'style', label: '风格', value: profile.style || '-' },
+    { key: 'colors', label: '偏好颜色', value: profile.colors || '-' },
+    { key: 'scenes', label: '常用场景', value: profile.scenes || '-' },
+  ]
   useAgentPageEntry({
     enabled: !userLoading,
     presetTask: '根据我当前的穿搭档案和个人信息，给我一些更适合我的穿搭建议',
@@ -367,7 +417,7 @@ export default function Person() {
     fileInputRef.current?.click()
   }
 
-  // 删除人物模特（后端清理 + 本地清理）
+  // 删除形象照（后端清理 + 本地清理）
   const handleDeleteCharacterModel = () => {
     if (modelDeleting) return
 
@@ -380,7 +430,7 @@ export default function Person() {
 
     setConfirmDialogVisible(true)
     Dialog.confirm({
-      message: '确定删除当前人物模特吗？删除后将无法生成搭配预览图。',
+      message: '确定删除当前形象照吗？删除后将无法生成搭配预览图。',
       onCancel: () => {
         setConfirmDialogVisible(false)
       },
@@ -389,13 +439,13 @@ export default function Person() {
         setModelDeleting(true)
         try {
           await axios.delete('/user/characterModel')
-          Toast.show({ icon: 'success', content: '人物模特已删除', duration: 1200 })
+          Toast.show({ icon: 'success', content: '形象照已删除', duration: 1200 })
           setModelPreviewVisible(false)
           setUploadedImage(null)
           useAuthStore.getState().invalidateUserCache()
           getUserInfo(true)
         } catch (error) {
-          console.error('删除人物模特失败:', error)
+          console.error('删除形象照失败:', error)
           Toast.show({ icon: 'fail', content: '删除失败，请重试', duration: 1200 })
         } finally {
           setModelDeleting(false)
@@ -713,7 +763,11 @@ export default function Person() {
   // 修改密码
   const handlePasswordChange = async () => {
     if (passwordSaving) return
-    if (!oldPassword || !newPassword || !confirmPassword) {
+    const normalizedOldPassword = oldPassword.trim()
+    const normalizedNewPassword = newPassword.trim()
+    const normalizedConfirmPassword = confirmPassword.trim()
+
+    if (!normalizedOldPassword || !normalizedNewPassword || !normalizedConfirmPassword) {
       Toast.show({
         icon: 'fail',
         content: '请填写完整信息',
@@ -721,10 +775,37 @@ export default function Person() {
       })
       return
     }
-    if (newPassword !== confirmPassword) {
+    if (normalizedNewPassword !== normalizedConfirmPassword) {
       Toast.show({
         icon: 'fail',
         content: '两次输入密码不一致',
+        duration: 2000,
+      })
+      return
+    }
+    if (
+      normalizedNewPassword.length < PASSWORD_MIN_LENGTH ||
+      normalizedNewPassword.length > PASSWORD_MAX_LENGTH
+    ) {
+      Toast.show({
+        icon: 'fail',
+        content: PASSWORD_RULE_MESSAGE,
+        duration: 2000,
+      })
+      return
+    }
+    if (!isStrongPassword(normalizedNewPassword)) {
+      Toast.show({
+        icon: 'fail',
+        content: PASSWORD_RULE_MESSAGE,
+        duration: 2000,
+      })
+      return
+    }
+    if (normalizedOldPassword === normalizedNewPassword) {
+      Toast.show({
+        icon: 'fail',
+        content: '新密码不能与旧密码相同',
         duration: 2000,
       })
       return
@@ -733,8 +814,8 @@ export default function Person() {
     setPasswordSaving(true)
     try {
       const res = await axios.put('/user/updatePassword', {
-        oldPassword,
-        newPassword,
+        oldPassword: normalizedOldPassword,
+        newPassword: normalizedNewPassword,
       })
       console.log('修改密码成功:', res)
       Toast.show({
@@ -780,199 +861,195 @@ export default function Person() {
         <ErrorBanner message={userError} actionText="重试" onAction={getUserInfo} />
       ) : null}
       {userLoading && !userInfo?.id ? <Loading text="正在获取用户信息..." /> : null}
-      {/* 用户信息区域 */}
-      <div className={styles.userInfo}>
-        <div className={styles.avatar} onClick={handleAvatarClick}>
-          <div className={styles.avatarIcon}>
-            {avatar ? (
-              <img className={styles.avatarImg} src={avatar} alt="avatar" loading="lazy" />
-            ) : (
-            <svg viewBox="0 0 1024 1024" width="40" height="40">
-              <path d="M512 512m-160 0a160 160 0 1 0 320 0 160 160 0 1 0-320 0Z" fill="#ccc" />
-              <path d="M512 704c-123.2 0-224 100.8-224 224h448c0-123.2-100.8-224-224-224z" fill="#ccc" />
-            </svg>
-            )}
-          </div>
-        </div>
-        <input
-          ref={avatarInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleAvatarChange}
-          style={{ display: 'none' }}
-        />
-        <div className={styles.userDetails}>
-          <div className={styles.userName}>
-            {isEditingName ? (
-              <div className={styles.editNameContainer}>
-                <input
-                  type="text"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  className={styles.nameInput}
-                  placeholder="请输入昵称"
-                  maxLength={20}
-                  autoFocus
-                />
-                <div className={styles.editButtons}>
-                  <button className={styles.saveBtn} onClick={handleSaveName}>
-                    保存
-                  </button>
-                  <button className={styles.cancelBtn} onClick={handleCancelEdit}>
-                    取消
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {userInfo.name || '未命名'}
-                <svg className={styles.editIcon} viewBox="0 0 1024 1024" width="16" height="16" onClick={handleEditName}>
-                  <path d="M257.7 752c2 0 4-.2 6-.5L431.9 722c2-.4 3.9-1.3 5.3-2.8l423.9-423.9c3.9-3.9 3.9-10.2 0-14.1L694.9 114.9c-1.9-1.9-4.4-2.9-7.1-2.9s-5.2 1-7.1 2.9L256.8 538.8c-1.5 1.5-2.4 3.3-2.8 5.3l-29.5 168.2c-1.9 11.1 1.5 21.9 9.4 29.8 6.6 6.4 15.6 9.9 25.8 9.9z" fill="#999" />
-                </svg>
-              </>
-            )}
-          </div>
-          <div className={styles.userAccount}>账号：{userInfo.username ? `${userInfo.username.slice(0, 3)}×××${userInfo.username.slice(-3)}` : ''}</div>
-          <div className={styles.modelUploadRow}>
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleAvatarChange}
+        style={{ display: 'none' }}
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileChange}
+        style={{ display: 'none' }}
+      />
+
+      <div className={styles.pageStack}>
+        <section className={styles.heroCard}>
+          <div className={styles.heroTop}>
             <button
               type="button"
-              className={styles.uploadPhoto}
-              onClick={handleUploadClick}
-              disabled={uploading || modelDeleting}
+              className={styles.avatarButton}
+              onClick={handleAvatarClick}
+              disabled={userLoading || avatarUploading}
             >
-              <svg viewBox="0 0 1024 1024" width="16" height="16">
-                <path d="M864 248H728l-32.4-90.8a32.07 32.07 0 0 0-30.2-21.2H358.6c-13.5 0-25.6 8.5-30.1 21.2L296 248H160c-44.2 0-80 35.8-80 80v456c0 44.2 35.8 80 80 80h704c44.2 0 80-35.8 80-80V328c0-44.2-35.8-80-80-80zM512 716c-88.4 0-160-71.6-160-160s71.6-160 160-160 160 71.6 160 160-71.6 160-160 160z" fill="#999" />
-              </svg>
-              {uploading ? '上传中...' : hasCharacterModel ? '重新上传人物模特' : '上传人物模特'}
+              <div className={styles.avatarSurface}>
+                {avatar ? (
+                  <img className={styles.avatarImg} src={avatar} alt="avatar" loading="lazy" />
+                ) : (
+                  <svg viewBox="0 0 1024 1024" width="40" height="40">
+                    <path d="M512 512m-160 0a160 160 0 1 0 320 0 160 160 0 1 0-320 0Z" fill="#c5beb4" />
+                    <path d="M512 704c-123.2 0-224 100.8-224 224h448c0-123.2-100.8-224-224-224z" fill="#c5beb4" />
+                  </svg>
+                )}
+              </div>
             </button>
-            {hasCharacterModel ? (
-              <button
-                type="button"
-                className={styles.modelInlineAction}
-                onClick={() => setModelPreviewVisible(true)}
-                disabled={uploading || modelDeleting}
-              >
-                管理
+            <div className={styles.identityBlock}>
+              <div className={styles.identityLabel}>个人主页</div>
+              <div className={styles.userName}>
+                {isEditingName ? (
+                  <div className={styles.editNameContainer}>
+                    <input
+                      type="text"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                      className={styles.nameInput}
+                      placeholder="请输入昵称"
+                      maxLength={20}
+                      autoFocus
+                    />
+                    <div className={styles.editButtons}>
+                      <button className={styles.saveBtn} onClick={handleSaveName} disabled={nameSaving}>
+                        {nameSaving ? '保存中...' : '保存'}
+                      </button>
+                      <button className={styles.cancelBtn} onClick={handleCancelEdit} disabled={nameSaving}>
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className={styles.userNameText}>{userInfo.name || '未命名'}</span>
+                    <button type="button" className={styles.inlineIconButton} onClick={handleEditName}>
+                      <svg className={styles.editIcon} viewBox="0 0 1024 1024" width="16" height="16">
+                        <path d="M257.7 752c2 0 4-.2 6-.5L431.9 722c2-.4 3.9-1.3 5.3-2.8l423.9-423.9c3.9-3.9 3.9-10.2 0-14.1L694.9 114.9c-1.9-1.9-4.4-2.9-7.1-2.9s-5.2 1-7.1 2.9L256.8 538.8c-1.5 1.5-2.4 3.3-2.8 5.3l-29.5 168.2c-1.9 11.1 1.5 21.9 9.4 29.8 6.6 6.4 15.6 9.9 25.8 9.9z" fill="currentColor" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+              </div>
+              <div className={styles.userAccount}>账号 {maskedAccount}</div>
+            </div>
+          </div>
+
+          <div className={styles.actionRow}>
+            <button type="button" className={styles.metaChip} onClick={() => setSexVisible(true)}>
+              性别 {genderText}
+            </button>
+            <button type="button" className={styles.metaChip} onClick={() => setPasswordVisible(true)}>
+              修改密码
+            </button>
+            <button
+              type="button"
+              className={`${styles.metaChip} ${styles.metaChipDanger}`}
+              onClick={() => {
+                setConfirmDialogVisible(true)
+                Dialog.confirm({
+                  message: '确定退出登录吗？',
+                  onCancel: () => {
+                    setConfirmDialogVisible(false)
+                  },
+                  onConfirm: () => {
+                    setConfirmDialogVisible(false)
+                    handleLogout()
+                  },
+                })
+              }}
+            >
+              退出登录
+            </button>
+          </div>
+
+          <div className={styles.modelPanel}>
+            <div className={styles.modelSummary}>
+              <div className={styles.modelInfo}>
+                <div className={styles.sectionEyebrow}>个人形象</div>
+                <div className={styles.modelTitle}>
+                  {hasCharacterModel ? '形象已就绪' : '上传个人形象'}
+                </div>
+                <div className={styles.modelText}>
+                  {hasCharacterModel ? '用于搭配预览与上身展示' : '完成设置后可在搭配页查看上身效果'}
+                </div>
+              </div>
+              <div className={styles.modelActions}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  onClick={handleUploadClick}
+                  disabled={uploading || modelDeleting}
+                >
+                  {uploading ? '上传中...' : hasCharacterModel ? '重新上传' : '立即上传'}
+                </button>
+                {hasCharacterModel ? (
+                  <button
+                  type="button"
+                  className={styles.secondaryButton}
+                  onClick={() => setModelPreviewVisible(true)}
+                  disabled={uploading || modelDeleting}
+                >
+                  管理
+                </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.panelCard}>
+          <div className={styles.sectionHead}>
+            <div>
+              <div className={styles.sectionEyebrow}>资产概览</div>
+              <div className={styles.sectionTitle}>我的资产</div>
+            </div>
+            <button
+              type="button"
+              className={styles.sectionAction}
+              onClick={() => fetchAssetStats(true)}
+              disabled={assetLoading || userLoading}
+            >
+              {assetLoading ? '刷新中...' : '刷新'}
+            </button>
+          </div>
+          {assetError ? <div className={styles.cardError}>{assetError}</div> : null}
+          <div className={styles.statsGrid}>
+            {assetCards.map((item) => (
+              <button key={item.key} type="button" className={styles.statItem} onClick={item.onClick}>
+                <div className={styles.statValue}>{item.value}</div>
+                <div className={styles.statLabel}>{item.label}</div>
               </button>
-            ) : (
-              <span className={styles.modelInlineHint}>用于搭配预览</span>
-            )}
+            ))}
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
-        </div>
-      </div>
-
-      {/* 资产概览 */}
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div className={styles.cardTitle}>我的资产</div>
-          <button
-            type="button"
-            className={styles.cardAction}
-            onClick={() => fetchAssetStats(true)}
-            disabled={assetLoading || userLoading}
-          >
-            {assetLoading ? '刷新中...' : '刷新'}
-          </button>
-        </div>
-        {assetError ? <div className={styles.cardError}>{assetError}</div> : null}
-        <div className={styles.statsGrid}>
-          <div className={styles.statItem} onClick={() => navigate('/outfit')} role="button" tabIndex={0}>
-            <div className={styles.statValue}>{assetLoading ? '--' : assetStats.clothesCount}</div>
-            <div className={styles.statLabel}>衣物总数</div>
+          <div className={styles.quickGrid}>
+            {quickActions.map((item) => (
+              <button key={item.key} type="button" className={styles.quickButton} onClick={item.onClick}>
+                {item.label}
+              </button>
+            ))}
           </div>
-          <div className={styles.statItem} onClick={() => navigate('/outfit')} role="button" tabIndex={0}>
-            <div className={styles.statValue}>{assetLoading ? '--' : assetStats.favoriteCount}</div>
-            <div className={styles.statLabel}>收藏</div>
-          </div>
-        </div>
+        </section>
 
-        <div className={styles.quickGrid}>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/outfit')}>
-            去衣橱
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/add')}>
-            新增衣物
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/match')}>
-            搭配预览
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/recommend')}>
-            推荐
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/recommendations/history')}>
-            推荐历史
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/outfit-logs')}>
-            穿搭记录
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/profile-insights')}>
-            偏好画像
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/wardrobe-analytics')}>
-            衣橱分析
-          </button>
-          <button type="button" className={styles.quickButton} onClick={() => navigate('/unified-agent')}>
-            Agent
-          </button>
-        </div>
-      </div>
-
-      {/* 穿搭档案（本地持久化） */}
-      <div className={styles.card}>
-        <div className={styles.cardHeader}>
-          <div className={styles.cardTitle}>穿搭档案</div>
-          <div className={styles.cardActions}>
-            <button type="button" className={styles.cardAction} onClick={openProfilePopup} disabled={userLoading}>
+        <section className={styles.panelCard}>
+          <div className={styles.sectionHead}>
+            <div>
+              <div className={styles.sectionEyebrow}>穿搭档案</div>
+              <div className={styles.sectionTitle}>我的档案</div>
+            </div>
+            <button type="button" className={styles.sectionAction} onClick={openProfilePopup} disabled={userLoading}>
               编辑
             </button>
           </div>
-        </div>
-        <div className={styles.profileGrid}>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>城市</span>
-            <span className={styles.profileValue}>{profile.city || '-'}</span>
+          <div className={styles.profileGrid}>
+            {profileSummary.map((item) => (
+              <div key={item.key} className={styles.profileItem}>
+                <span className={styles.profileLabel}>{item.label}</span>
+                <span className={styles.profileValue}>{item.value}</span>
+              </div>
+            ))}
           </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>身高</span>
-            <span className={styles.profileValue}>{profile.heightCm ? `${profile.heightCm}cm` : '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>体重</span>
-            <span className={styles.profileValue}>{profile.weightKg ? `${profile.weightKg}kg` : '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>上装尺码</span>
-            <span className={styles.profileValue}>{profile.topSize || '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>下装尺码</span>
-            <span className={styles.profileValue}>{profile.bottomSize || '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>鞋码</span>
-            <span className={styles.profileValue}>{profile.shoeSize || '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>风格</span>
-            <span className={styles.profileValue}>{profile.style || '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>偏好颜色</span>
-            <span className={styles.profileValue}>{profile.colors || '-'}</span>
-          </div>
-          <div className={styles.profileItem}>
-            <span className={styles.profileLabel}>常用场景</span>
-            <span className={styles.profileValue}>{profile.scenes || '-'}</span>
-          </div>
-        </div>
-        <div className={styles.profileHint}>仅保存在本机，用于后续推荐更贴合你。</div>
+          <div className={styles.profileHint}>仅保存在本机</div>
+        </section>
       </div>
 
       <Popup
@@ -1205,7 +1282,7 @@ export default function Person() {
       <Popup
         visible={modelPreviewVisible}
         closeable
-        title="人物模特预览"
+        title="形象照预览"
         style={{ height: '75%' }}
         position="bottom"
         round
@@ -1213,7 +1290,7 @@ export default function Person() {
       >
         <div className={styles.modelPreviewBody}>
           <div className={styles.modelPreviewImage}>
-            {uploadedImage ? <img src={uploadedImage} alt="人物模特预览" loading="lazy" /> : null}
+            {uploadedImage ? <img src={uploadedImage} alt="形象照预览" loading="lazy" /> : null}
           </div>
           <div className={styles.modelPreviewActions}>
             <button
@@ -1236,120 +1313,67 @@ export default function Person() {
         </div>
       </Popup>
 
-      {/* 功能列表 */}
-      <div className={styles.menuList}>
-        <div className={styles.menuItem} onClick={() => setPasswordVisible(true)}>
-          <Popup
-            visible={passwordVisible}
-            closeable
-            style={{ height: '45%' }}
-            position='bottom'
-            title='修改密码'
-            round
-            onClose={() => { if (passwordSaving) return; closePasswordPopup() }}
+      <Popup
+        visible={passwordVisible}
+        closeable
+        style={{ height: '45%' }}
+        position="bottom"
+        title="修改密码"
+        round
+        onClose={() => {
+          if (passwordSaving) return
+          closePasswordPopup()
+        }}
+      >
+        <div className={styles.passwordInput}>
+          <input
+            type="password"
+            placeholder="请输入旧密码"
+            value={oldPassword}
+            onChange={(e) => setOldPassword(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="请输入新密码"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="请确认新密码"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+          <button onClick={handlePasswordChange} disabled={passwordSaving}>
+            {passwordSaving ? '修改中...' : '确认修改'}
+          </button>
+        </div>
+      </Popup>
+
+      <Popup
+        visible={sexVisible}
+        closeable
+        title="请选择您的性别"
+        style={{ height: '30%' }}
+        position="bottom"
+        round
+        onClose={() => setSexVisible(false)}
+      >
+        <div className={styles.genderOptions}>
+          <div
+            className={`${styles.genderOption} ${sex === 'man' ? styles.active : ''}`}
+            onClick={() => handleSexChange('man')}
           >
-            <div className={styles.passwordInput}>
-              <input
-                type="password"
-                placeholder="请输入旧密码"
-                value={oldPassword}
-                onChange={(e) => setOldPassword(e.target.value)}
-              />
-              <input
-                type="password"
-                placeholder="请输入新密码"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-              <input
-                type="password"
-                placeholder="请确认新密码"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-              <button onClick={handlePasswordChange} disabled={passwordSaving}>{passwordSaving ? '修改中...' : '确认修改'}</button>
-            </div>
-          </Popup>
-          <div className={styles.menuLeft}>
-            <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
-              <path d="M832 464h-68V240c0-70.7-57.3-128-128-128H388c-70.7 0-128 57.3-128 128v224h-68c-17.7 0-32 14.3-32 32v384c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V496c0-17.7-14.3-32-32-32zM332 240c0-30.9 25.1-56 56-56h248c30.9 0 56 25.1 56 56v224H332V240zm496 600H196V536h632v304z" fill="#666" />
-            </svg>
-            修改密码
+            男
           </div>
-          <svg className={styles.arrow} viewBox="0 0 1024 1024" width="16" height="16">
-            <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z" fill="#ccc" />
-          </svg>
-        </div>
-
-        <div className={styles.menuItem} onClick={() => setSexVisible(true)}>
-          <Popup
-            visible={sexVisible}
-            closeable
-            title='请选择您的性别'
-            style={{ height: '30%' }}
-            position='bottom'
-            round
-            onClose={() => setSexVisible(false)}
+          <div
+            className={`${styles.genderOption} ${sex === 'woman' ? styles.active : ''}`}
+            onClick={() => handleSexChange('woman')}
           >
-            <div className={styles.genderOptions}>
-              <div 
-                className={`${styles.genderOption} ${sex === 'man' ? styles.active : ''}`} 
-                onClick={() => handleSexChange('man')}
-              >
-                男
-              </div>
-              <div 
-                className={`${styles.genderOption} ${sex === 'woman' ? styles.active : ''}`} 
-                onClick={() => handleSexChange('woman')}
-              >
-                女
-              </div>
-            </div>
-          </Popup>
-          <div className={styles.menuLeft}>
-            <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
-              <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z" fill="#666" />
-              <path d="M464 336a48 48 0 1 0 96 0 48 48 0 1 0-96 0zm72 112h-48c-4.4 0-8 3.6-8 8v272c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V456c0-4.4-3.6-8-8-8z" fill="#666" />
-            </svg>
-            性别
-          </div>
-          <div className={styles.menuRight}>
-            <span className={styles.genderValue}>{sex  === 'man' ? '男' : sex === 'woman' ? '女' : ''}</span>
-
-            <svg className={styles.arrow} viewBox="0 0 1024 1024" width="16" height="16">
-              <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z" fill="#ccc" />
-            </svg>
+            女
           </div>
         </div>
-
-        <div
-          className={styles.menuItem}
-          onClick={() => {
-            setConfirmDialogVisible(true)
-            Dialog.confirm({
-              message: '确定退出登录吗？',
-              onCancel: () => {
-                setConfirmDialogVisible(false)
-              },
-              onConfirm: () => {
-                setConfirmDialogVisible(false)
-                handleLogout()
-              },
-            })
-          }}
-        >
-          <div className={styles.menuLeft}>
-            <svg className={styles.menuIcon} viewBox="0 0 1024 1024" width="20" height="20">
-              <path d="M868 732h-70.3c-4.8 0-9.3 2.1-12.3 5.8-7 8.5-14.5 16.7-22.4 24.5a353.84 353.84 0 0 1-112.7 75.9A352.8 352.8 0 0 1 512.4 866c-47.9 0-94.3-9.4-137.9-27.8a353.84 353.84 0 0 1-112.7-75.9 353.28 353.28 0 0 1-76-112.5C167.3 606.2 158 559.9 158 512s9.4-94.2 27.8-137.8c17.8-42.1 43.4-80 76-112.5s70.5-58.1 112.7-75.9c43.6-18.4 90-27.8 137.9-27.8 47.9 0 94.3 9.3 137.9 27.8 42.2 17.8 80.1 43.4 112.7 75.9 7.9 7.9 15.3 16.1 22.4 24.5 3 3.7 7.6 5.8 12.3 5.8H868c6.3 0 10.2-7 6.7-12.3C836 274.2 704.5 158 512.4 158 283.9 158 96 345.8 96 574.3s187.9 416.3 416.4 416.3c192.2 0 323.6-116.2 361.9-279.4 3.4-5.3-.4-12.3-6.3-12.3z" fill="#ff4d4f" />
-              <path d="M912 462H516c-4.4 0-8 3.6-8 8v84c0 4.4 3.6 8 8 8h396c4.4 0 8-3.6 8-8v-84c0-4.4-3.6-8-8-8z" fill="#ff4d4f" />
-            </svg>
-            退出登录
-          </div>
-          <svg className={styles.arrow} viewBox="0 0 1024 1024" width="16" height="16">
-            <path d="M765.7 486.8L314.9 134.7A7.97 7.97 0 0 0 302 141v77.3c0 4.9 2.3 9.6 6.1 12.6l360 281.1-360 281.1c-3.9 3-6.1 7.7-6.1 12.6V883c0 6.7 7.7 10.4 12.9 6.3l450.8-352.1a31.96 31.96 0 0 0 0-50.4z" fill="#ccc" />
-          </svg>
-        </div>
-      </div>
+      </Popup>
     </div>
   )
 }

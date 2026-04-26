@@ -4,53 +4,80 @@ import axios from '@/api'
 import styles from './index.module.less'
 import logo from '@/assets/tlogin.png'
 import { Button, Toast } from 'antd-mobile'
+import { EyeInvisibleOutline, EyeOutline } from 'antd-mobile-icons'
+
+const USERNAME_MIN_LENGTH = 6
+const USERNAME_MAX_LENGTH = 32
+const PASSWORD_MIN_LENGTH = 8
+const PASSWORD_MAX_LENGTH = 64
+const PASSWORD_RULE_MESSAGE = `密码需为 ${PASSWORD_MIN_LENGTH}-${PASSWORD_MAX_LENGTH} 位，且包含大写字母、小写字母、数字和特殊字符`
+
+const isStrongPassword = (value) =>
+  /[a-z]/.test(value) &&
+  /[A-Z]/.test(value) &&
+  /\d/.test(value) &&
+  /[^A-Za-z0-9]/.test(value) &&
+  !/\s/.test(value)
 
 export default function Register() {
   const navigate = useNavigate()
+  const [passwordVisible, setPasswordVisible] = useState(false)
+  const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleRegister = async () => {
-    if (!username.trim()) {
+    const normalizedUsername = username.trim()
+    const normalizedPassword = password.trim()
+    const normalizedConfirmPassword = confirmPassword.trim()
+
+    if (!normalizedUsername) {
       Toast.show({
         content: '请输入用户名',
         position: 'center',
       })
       return
     }
-    if (!password.trim()) {
+    if (!normalizedPassword) {
       Toast.show({
         content: '请输入密码',
         position: 'center',
       })
       return
     }
-    if (!confirmPassword.trim()) {
+    if (!normalizedConfirmPassword) {
       Toast.show({
         content: '请确认密码',
         position: 'center',
       })
       return
     }
-    if (password !== confirmPassword) {
+    if (normalizedPassword !== normalizedConfirmPassword) {
       Toast.show({
         content: '两次输入的密码不一致',
         position: 'center',
       })
       return
     }
-    if (username.length < 6) {
+    if (normalizedUsername.length < USERNAME_MIN_LENGTH || normalizedUsername.length > USERNAME_MAX_LENGTH) {
       Toast.show({
-        content: '用户名长度不能少于6位',
+        content: `用户名长度需为 ${USERNAME_MIN_LENGTH}-${USERNAME_MAX_LENGTH} 位`,
         position: 'center',
       })
       return
     }
-    if (password.length < 6) {
+    if (normalizedPassword.length < PASSWORD_MIN_LENGTH || normalizedPassword.length > PASSWORD_MAX_LENGTH) {
       Toast.show({
-        content: '密码长度不能少于6位',
+        content: PASSWORD_RULE_MESSAGE,
+        position: 'center',
+      })
+      return
+    }
+    if (!isStrongPassword(normalizedPassword)) {
+      Toast.show({
+        content: PASSWORD_RULE_MESSAGE,
         position: 'center',
       })
       return
@@ -59,8 +86,8 @@ export default function Register() {
     try {
       setLoading(true)
       await axios.post('/user/register', {
-        username,
-        password,
+        username: normalizedUsername,
+        password: normalizedPassword,
       })
       Toast.show({
         content: '注册成功',
@@ -70,8 +97,8 @@ export default function Register() {
       setTimeout(() => {
         navigate('/login', {
           state: {
-            username,
-            password,
+            username: normalizedUsername,
+            password: normalizedPassword,
           },
         })
       }, 600)
@@ -107,22 +134,33 @@ export default function Register() {
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="off"
           />
-          <input
-            className={styles.textInput}
-            type="password"
-            placeholder="密码"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-          <input
-            className={styles.textInput}
-            type="password"
-            placeholder="确认密码"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            autoComplete="new-password"
-          />
+          <div className={styles.passwordInput}>
+            <input
+              className={styles.textInput}
+              type={passwordVisible ? 'text' : 'password'}
+              placeholder="密码"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+            <div className={styles.eye} onClick={() => setPasswordVisible((value) => !value)}>
+              {passwordVisible ? <EyeOutline /> : <EyeInvisibleOutline />}
+            </div>
+          </div>
+          <div className={styles.passwordInput}>
+            <input
+              className={styles.textInput}
+              type={confirmPasswordVisible ? 'text' : 'password'}
+              placeholder="确认密码"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+            />
+            <div className={styles.eye} onClick={() => setConfirmPasswordVisible((value) => !value)}>
+              {confirmPasswordVisible ? <EyeOutline /> : <EyeInvisibleOutline />}
+            </div>
+          </div>
+          <div className={styles.fieldHint}>{PASSWORD_RULE_MESSAGE}</div>
         </div>
 
         <Button block className={styles.primaryButton} loading={loading} onClick={handleRegister}>

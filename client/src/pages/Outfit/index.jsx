@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Overlay, Dialog } from 'react-vant'
+import { createPortal } from 'react-dom'
+import { Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline, FilterOutline, SearchOutline } from 'antd-mobile-icons'
 import { useLocation, useNavigate } from 'react-router-dom'
-import SvgIcon from '@/components/SvgIcon'
 import white from '@/assets/white.jpg'
 import styles from './index.module.less'
 import axios from '@/api'
@@ -23,6 +23,7 @@ const FILTER_OPTIONS = {
 }
 
 const PAGE_SIZE = 12
+const DETAIL_SHEET_DIALOG_Z_INDEX = 7101
 
 const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
 
@@ -31,6 +32,8 @@ export default function Outfit() {
   const location = useLocation()
   const [selectedItem, setSelectedItem] = useState(null)
   const [visible, setVisible] = useState(false)
+  const [sheetMounted, setSheetMounted] = useState(false)
+  const [sheetActive, setSheetActive] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
   const debouncedSearch = useDebouncedValue(searchKeyword, 300)
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
@@ -88,6 +91,44 @@ export default function Outfit() {
     setSelectedItem(cloth)
     setVisible(true)
   }, [location.state])
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return undefined
+    const { body } = document
+    const previousOverflow = body.style.overflow
+
+    if (sheetMounted) {
+      body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      body.style.overflow = previousOverflow
+    }
+  }, [sheetMounted])
+
+  useEffect(() => {
+    if (!visible) {
+      setSheetActive(false)
+      if (!sheetMounted) return undefined
+
+      const closeTimer = window.setTimeout(() => {
+        setSheetMounted(false)
+      }, 220)
+
+      return () => window.clearTimeout(closeTimer)
+    }
+
+    setSheetMounted(true)
+    const frameId = window.requestAnimationFrame(() => {
+      setSheetActive(true)
+    })
+
+    return () => window.cancelAnimationFrame(frameId)
+  }, [visible, sheetMounted])
+
+  const closeDetailSheet = useCallback(() => {
+    setVisible(false)
+  }, [])
 
   const filteredClothes = useMemo(() => {
     const list = Array.isArray(items) ? items : []
@@ -365,7 +406,7 @@ export default function Outfit() {
                 onClick={() => navigate('/add')}
                 aria-label="新增衣物"
               >
-                <SvgIcon iconName="icon-jiahao-copy" />
+                <span className={styles.addGlyph}>+</span>
               </button>
             </div>
           </div>
@@ -544,102 +585,111 @@ export default function Outfit() {
 
       <div className={styles.container}>{renderContent()}</div>
 
-      <Overlay
-        visible={visible}
-        onClick={() => setVisible(false)}
-        style={{
-          height: '100%',
-          display: 'flex',
-          alignItems: 'flex-end',
-          justifyContent: 'center',
-        }}
-      >
-        <div className={styles.sheet} onClick={(e) => e.stopPropagation()}>
-          {selectedItem ? (
-            <>
-              <div className={styles.sheetHandle} />
-
-              <div className={styles.sheetHeader}>
-                <img src={selectedItem.image || white} alt={selectedItem.name} loading="lazy" className={styles.sheetImage} />
-
-                <div className={styles.sheetIntro}>
-                  <h3 className={styles.sheetTitle}>{selectedCardModel?.title || selectedItem.name}</h3>
-                  <div className={styles.sheetMeta}>{selectedCardModel?.meta || selectedItem.type || '未分类'}</div>
-
-                  <div className={styles.sheetTags}>
-                    {selectedCardModel?.isFavorited ? <span className={styles.sheetBadgePrimary}>已收藏</span> : null}
-                    {selectedItem.color ? <span className={styles.sheetBadge}>{selectedItem.color}</span> : null}
-                    {selectedItem.season ? <span className={styles.sheetBadge}>{selectedItem.season}</span> : null}
-                    {selectedItem.material ? <span className={styles.sheetBadge}>{selectedItem.material}</span> : null}
-                  </div>
-                </div>
-              </div>
-
-              <div className={styles.sheetSummary}>
-                {[selectedItem.type, selectedItem.style, selectedItem.season].filter(Boolean).join(' · ') || '完善这件单品的信息后，推荐和记录会更准确。'}
-              </div>
-
-              <div className={styles.primaryActionRow}>
-                <button
-                  type="button"
-                  className={styles.sheetPrimaryButton}
-                  onClick={() => void handleCreateOutfitLog(selectedItem)}
-                >
-                  记录穿搭
-                </button>
-                <button
-                  type="button"
-                  className={styles.sheetSecondaryButton}
-                  onClick={() =>
-                    navigate('/unified-agent', {
-                      state: buildAgentContextState({
-                        presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
-                        focus: {
-                          type: 'cloth',
-                          entity: selectedItem,
-                        },
-                      }),
-                    })
-                  }
-                >
-                  交给 Agent
-                </button>
-              </div>
-
-              <div className={styles.secondaryActionRow}>
-                <button
-                  type="button"
-                  className={styles.sheetTertiaryButton}
-                  disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
-                  onClick={() => void toggleFavorite(selectedItem)}
-                >
-                  {isFavorited(selectedItem.favorite) ? '取消收藏' : '收藏'}
-                </button>
-                <button
-                  type="button"
-                  className={styles.sheetTertiaryButton}
-                  onClick={() => navigate('/update', { state: selectedItem })}
-                >
-                  编辑
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className={styles.sheetDangerButton}
-                onClick={() =>
-                  Dialog.confirm({
-                    message: '确定删除该衣物吗？',
-                    onConfirm: () => handleDelete(),
-                  })
-                }
+      {sheetMounted && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className={`${styles.sheetOverlay} ${sheetActive ? styles.sheetOverlayActive : styles.sheetOverlayClosing}`}
+              onClick={closeDetailSheet}
+            >
+              <div
+                className={`${styles.sheet} ${sheetActive ? styles.sheetActive : styles.sheetClosing}`}
+                onClick={(e) => e.stopPropagation()}
               >
-                删除
-              </button>
-            </>
-          ) : null}
-        </div>
-      </Overlay>
+                {selectedItem ? (
+                  <>
+                    <div className={styles.sheetHandle} />
+
+                    <div className={styles.sheetHeader}>
+                      <img
+                        src={selectedItem.image || white}
+                        alt={selectedItem.name}
+                        loading="lazy"
+                        className={styles.sheetImage}
+                      />
+
+                      <div className={styles.sheetIntro}>
+                        <h3 className={styles.sheetTitle}>{selectedCardModel?.title || selectedItem.name}</h3>
+                        <div className={styles.sheetMeta}>{selectedCardModel?.meta || selectedItem.type || '未分类'}</div>
+
+                        <div className={styles.sheetTags}>
+                          {selectedCardModel?.isFavorited ? <span className={styles.sheetBadgePrimary}>已收藏</span> : null}
+                          {selectedItem.color ? <span className={styles.sheetBadge}>{selectedItem.color}</span> : null}
+                          {selectedItem.season ? <span className={styles.sheetBadge}>{selectedItem.season}</span> : null}
+                          {selectedItem.material ? <span className={styles.sheetBadge}>{selectedItem.material}</span> : null}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className={styles.sheetSummary}>
+                      {[selectedItem.type, selectedItem.style, selectedItem.season].filter(Boolean).join(' · ') ||
+                        '完善这件单品的信息后，推荐和记录会更准确。'}
+                    </div>
+
+                    <div className={styles.primaryActionRow}>
+                      <button
+                        type="button"
+                        className={styles.sheetPrimaryButton}
+                        onClick={() => void handleCreateOutfitLog(selectedItem)}
+                      >
+                        记录穿搭
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.sheetSecondaryButton}
+                        onClick={() =>
+                          navigate('/unified-agent', {
+                            state: buildAgentContextState({
+                              presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
+                              focus: {
+                                type: 'cloth',
+                                entity: selectedItem,
+                              },
+                            }),
+                          })
+                        }
+                      >
+                        交给 Agent
+                      </button>
+                    </div>
+
+                    <div className={styles.secondaryActionRow}>
+                      <button
+                        type="button"
+                        className={styles.sheetTertiaryButton}
+                        disabled={Boolean(favoriteUpdating[selectedItem.cloth_id])}
+                        onClick={() => void toggleFavorite(selectedItem)}
+                      >
+                        {isFavorited(selectedItem.favorite) ? '取消收藏' : '收藏'}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.sheetTertiaryButton}
+                        onClick={() => navigate('/update', { state: selectedItem })}
+                      >
+                        编辑
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      className={styles.sheetDangerButton}
+                      onClick={() =>
+                        Dialog.confirm({
+                          message: '确定删除该衣物吗？',
+                          zIndex: DETAIL_SHEET_DIALOG_Z_INDEX,
+                          onConfirm: () => handleDelete(),
+                        })
+                      }
+                    >
+                      删除
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   )
 }
