@@ -2,13 +2,15 @@
 import { Overlay, Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline, FilterOutline } from 'antd-mobile-icons'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import SvgIcon from '@/components/SvgIcon'
 import white from '@/assets/white.jpg'
 import styles from './index.module.less'
 import axios from '@/api'
+import { buildAgentContextState, createFocusReader } from '@/utils/agentContext'
 import useDebouncedValue from '@/utils/useDebouncedValue'
 import { getTodayInChina } from '@/utils/date'
+import { resolveReturnObject } from '@/utils/returnNavigation'
 import { useClosetStore, useMatchStore } from '@/store'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 
@@ -25,6 +27,7 @@ const isFavorited = (value) => value === 1 || value === true || value === '1' ||
 
 export default function Outfit() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [selectedItem, setSelectedItem] = useState(null)
   const [visible, setVisible] = useState(false)
   const [searchKeyword, setSearchKeyword] = useState('')
@@ -32,6 +35,7 @@ export default function Outfit() {
   const [favoriteUpdating, setFavoriteUpdating] = useState({})
   const [filtersExpanded, setFiltersExpanded] = useState(false)
   const [backupBusy, setBackupBusy] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const importInputRef = React.useRef(null)
 
   const {
@@ -73,6 +77,16 @@ export default function Outfit() {
     loadClothes()
     return () => reset()
   }, [loadClothes, reset])
+
+  useEffect(() => {
+    const cloth = resolveReturnObject(location.state, [
+      createFocusReader('cloth'),
+      (state) => state.selectedCloth,
+    ])
+    if (!cloth?.cloth_id) return
+    setSelectedItem(cloth)
+    setVisible(true)
+  }, [location.state])
 
   const filteredClothes = useMemo(() => {
     const list = Array.isArray(items) ? items : []
@@ -328,32 +342,48 @@ export default function Outfit() {
           <button
             type="button"
             className={styles['header-action']}
-            disabled={backupBusy}
-            onClick={() => void handleExport(false)}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="更多操作"
           >
-            导出
+            ⋮
           </button>
-          <button
-            type="button"
-            className={styles['header-action']}
-            disabled={backupBusy}
-            onClick={() =>
-              Dialog.confirm({
-                message: '包含图片导出可能较大，且可能触发服务端大小限制，是否继续？',
-                onConfirm: () => handleExport(true),
-              })
-            }
-          >
-            含图
-          </button>
-          <button
-            type="button"
-            className={styles['header-action']}
-            disabled={backupBusy}
-            onClick={() => importInputRef.current?.click()}
-          >
-            导入
-          </button>
+          {menuOpen ? (
+            <>
+              <div className={styles['menu-backdrop']} onClick={() => setMenuOpen(false)} />
+              <div className={styles['header-menu']}>
+                <button
+                  type="button"
+                  className={styles['header-menu-item']}
+                  disabled={backupBusy}
+                  onClick={() => { setMenuOpen(false); void handleExport(false) }}
+                >
+                  导出数据
+                </button>
+                <button
+                  type="button"
+                  className={styles['header-menu-item']}
+                  disabled={backupBusy}
+                  onClick={() => {
+                    setMenuOpen(false)
+                    Dialog.confirm({
+                      message: '包含图片导出可能较大，且可能触发服务端大小限制，是否继续？',
+                      onConfirm: () => handleExport(true),
+                    })
+                  }}
+                >
+                  含图导出
+                </button>
+                <button
+                  type="button"
+                  className={styles['header-menu-item']}
+                  disabled={backupBusy}
+                  onClick={() => { setMenuOpen(false); importInputRef.current?.click() }}
+                >
+                  导入数据
+                </button>
+              </div>
+            </>
+          ) : null}
           <div className={styles['header-right']} onClick={() => navigate('/add')}>
             <SvgIcon iconName="icon-jiahao-copy" />
           </div>
@@ -513,10 +543,13 @@ export default function Outfit() {
                     className={styles['log-button']}
                     onClick={() =>
                       navigate('/unified-agent', {
-                        state: {
+                        state: buildAgentContextState({
                           presetTask: `帮我处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
-                          selectedCloth: selectedItem,
-                        },
+                          focus: {
+                            type: 'cloth',
+                            entity: selectedItem,
+                          },
+                        }),
                       })
                     }
                   >

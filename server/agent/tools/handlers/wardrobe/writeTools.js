@@ -23,6 +23,7 @@ const pickCloth = (cloth) => ({
   material: safeString(cloth.material),
   favorite: coerceBoolean(cloth.favorite),
   hasImage: Boolean(cloth.image),
+  image: safeString(cloth.image),
 })
 
 const setClothFavorite = async (userId, args = {}) => {
@@ -91,6 +92,9 @@ const deleteCloth = async (userId, args = {}) => {
 }
 
 module.exports = {
+  __testables: {
+    pickCloth,
+  },
   createCloth,
   createClothesBatch,
   deleteCloth,

@@ -14,6 +14,9 @@ test('handler resolver can resolve catalog handler strings to executable functio
   const recommendationListTool = getToolByName('list_recommendations')
   const feedbackTool = getToolByName('submit_recommendation_feedback')
   const refreshProfileTool = getToolByName('refresh_profile_insight')
+  const showContextImagesTool = getToolByName('show_context_images')
+  const showClothesImagesTool = getToolByName('show_clothes_images')
+  const generateOutfitPreviewTool = getToolByName('generate_outfit_preview')
 
   const clothListHandler = resolveToolHandler(clothListTool)
   const imageHandler = resolveToolHandler(imageTool)
@@ -24,6 +27,9 @@ test('handler resolver can resolve catalog handler strings to executable functio
   const recommendationListHandler = resolveToolHandler(recommendationListTool)
   const feedbackHandler = resolveToolHandler(feedbackTool)
   const refreshProfileHandler = resolveToolHandler(refreshProfileTool)
+  const showContextImagesHandler = resolveToolHandler(showContextImagesTool)
+  const showClothesImagesHandler = resolveToolHandler(showClothesImagesTool)
+  const generateOutfitPreviewHandler = resolveToolHandler(generateOutfitPreviewTool)
 
   assert.equal(typeof clothListHandler, 'function')
   assert.equal(typeof imageHandler, 'function')
@@ -34,6 +40,9 @@ test('handler resolver can resolve catalog handler strings to executable functio
   assert.equal(typeof recommendationListHandler, 'function')
   assert.equal(typeof feedbackHandler, 'function')
   assert.equal(typeof refreshProfileHandler, 'function')
+  assert.equal(typeof showContextImagesHandler, 'function')
+  assert.equal(typeof showClothesImagesHandler, 'function')
+  assert.equal(typeof generateOutfitPreviewHandler, 'function')
 })
 
 test('handler resolver keeps compatibility aliases only for non-conventional exports', () => {

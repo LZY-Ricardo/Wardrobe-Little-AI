@@ -12,7 +12,7 @@ const {
   sendUnifiedAgentMessageStream,
   updateAgentSessionMemory,
 } = require('../controllers/unifiedAgentRuntime')
-const { deleteSession, renameSession } = require('../controllers/unifiedAgentSessions')
+const { clearSessionMessages, deleteAllSessions, deleteSession, renameSession } = require('../controllers/unifiedAgentSessions')
 const { setSseHeaders, writeSse, endSse } = require('../utils/sseHelpers')
 const { buildErrorEvent } = require('../utils/unifiedAgentSseEvents')
 
@@ -68,6 +68,16 @@ router.patch('/sessions/:id', async (ctx) => {
   }
 })
 
+router.delete('/sessions', async (ctx) => {
+  try {
+    await deleteAllSessions(ctx.userId)
+    ctx.body = { code: 1, data: true, msg: '删除成功' }
+  } catch (error) {
+    ctx.status = error.status || 500
+    ctx.body = { code: 0, msg: error.message || '删除全部会话失败' }
+  }
+})
+
 router.delete('/sessions/:id', async (ctx) => {
   try {
     const sessionId = Number.parseInt(ctx.params.id, 10)
@@ -81,6 +91,22 @@ router.delete('/sessions/:id', async (ctx) => {
   } catch (error) {
     ctx.status = error.status || 500
     ctx.body = { code: 0, msg: error.message || '删除会话失败' }
+  }
+})
+
+router.delete('/sessions/:id/messages', async (ctx) => {
+  try {
+    const sessionId = Number.parseInt(ctx.params.id, 10)
+    if (!Number.isFinite(sessionId)) {
+      ctx.status = 400
+      ctx.body = { code: 0, msg: '会话 ID 无效' }
+      return
+    }
+    const data = await clearSessionMessages(ctx.userId, sessionId)
+    ctx.body = { code: 1, data, msg: '清空成功' }
+  } catch (error) {
+    ctx.status = error.status || 500
+    ctx.body = { code: 0, msg: error.message || '清空会话失败' }
   }
 })
 
@@ -147,7 +173,7 @@ router.post('/sessions/:id/chat-stream', async (ctx) => {
   setSseHeaders(ctx.res)
 
   let clientGone = false
-  ctx.req.on('close', () => { clientGone = true })
+  ctx.res.on('close', () => { clientGone = true })
 
   try {
     await sendUnifiedAgentMessageStream(ctx.userId, sessionId, input, ctx, {

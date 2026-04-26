@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
 import SvgIcon from '@/components/SvgIcon'
 import Icon from '@/components/Icon'
-import DarkModeToggle from '@/components/DarkModeToggle'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
 import { useAuthStore, useClosetStore } from '@/store'
 import WeatherIcon from '@/components/WeatherIcon'
+import { buildAgentContextState } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
+import { requestFreshWeather } from './weatherRefresh'
 import styles from './index.module.less'
 import { defaultWeather } from '@/config/homeConfig'
 
@@ -152,6 +154,22 @@ export default function Home() {
       adviceTags,
     }
   }, [adviceTags, adviceText, weather])
+
+  useAgentPageEntry(
+    weather
+      ? {
+          presetTask: '结合当前天气和我的衣橱，直接告诉我今天怎么穿',
+          state: buildAgentContextState({
+            insight: {
+              type: 'weather',
+              entity: latestWeatherContext,
+            },
+          }),
+        }
+      : {
+          presetTask: '结合我当前的天气、衣橱和使用情况，直接给我一个今天的穿搭建议',
+        }
+  )
 
   useEffect(() => {
     const fetchClothes = async () => {
@@ -332,48 +350,6 @@ export default function Home() {
     void requestGeo()
   }, [])
 
-  const handleRetryGeo = () => {
-    writeSessionJson(WEATHER_GEO_CACHE_KEY, null)
-    setGeoStatus(GEO_STATUS.REQUESTING)
-
-    const onSuccess = async (position) => {
-      const coords = {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-      }
-      logWeatherGeo('[weather] 重试定位成功', coords)
-      writeSessionJson(WEATHER_GEO_CACHE_KEY, {
-        askedAt: Date.now(),
-        coords,
-        coordsAt: Date.now(),
-        lastErrorCode: null,
-        lastErrorAt: null,
-      })
-      setGeoStatus(GEO_STATUS.IDLE)
-      await fetchWeather(coords)
-    }
-
-    const onError = (geoError) => {
-      logWeatherGeo('[weather] 重试定位失败', { code: geoError?.code, message: geoError?.message })
-      if (geoError?.code === 1) {
-        setGeoStatus(GEO_STATUS.DENIED)
-      } else {
-        setGeoStatus(GEO_STATUS.ERROR)
-      }
-    }
-
-    if (!isGeoSupported() || !isSecureGeoContext()) {
-      setGeoStatus(GEO_STATUS.UNAVAILABLE)
-      return
-    }
-
-    navigator.geolocation.getCurrentPosition(onSuccess, onError, {
-      enableHighAccuracy: false,
-      timeout: 15000,
-      maximumAge: 0,
-    })
-  }
-
   const fetchWeather = async (coords) => {
     try {
       const res = coords
@@ -403,6 +379,19 @@ export default function Home() {
       return null
     }
   }
+
+  const handleRefreshWeather = () =>
+    requestFreshWeather({
+      setGeoStatus,
+      writeSessionJson,
+      isGeoSupported,
+      isSecureGeoContext,
+      getCurrentPosition: (...args) => navigator.geolocation.getCurrentPosition(...args),
+      fetchWeather,
+      geoStatus: GEO_STATUS,
+      weatherGeoCacheKey: WEATHER_GEO_CACHE_KEY,
+      log: logWeatherGeo,
+    })
 
   const quickEntries = useMemo(
     () => [
@@ -491,19 +480,6 @@ export default function Home() {
           <button type="button" className={styles['link-btn']} onClick={() => navigate('/outfit')}>
             去管理衣橱
           </button>
-          <button
-            type="button"
-            className={styles['link-btn']}
-            onClick={() =>
-              navigate('/unified-agent', {
-                state: {
-                  presetTask: '结合我当前的天气、衣橱和使用情况，直接给我一个今天的穿搭建议',
-                },
-              })
-            }
-          >
-            交给 Agent
-          </button>
         </div>
       </div>
     )
@@ -514,7 +490,14 @@ export default function Home() {
       <div className={styles.header}>
         <div className={styles['header-title']}>首页</div>
         {weather ? (
-          <div className={styles['header-weather']}>
+          <button
+            type="button"
+            className={styles['header-weather']}
+            onClick={handleRefreshWeather}
+            disabled={geoStatus === GEO_STATUS.REQUESTING}
+            aria-label="刷新天气定位"
+            title="点击刷新最新天气"
+          >
             <WeatherIcon
               weatherCode={weather.weatherCode}
               isDay={weather.isDay}
@@ -522,15 +505,12 @@ export default function Home() {
               className={styles['weather-icon']}
             />
             {weather.city} · {weather.temp} · {weather.text}
-          </div>
+          </button>
         ) : (
           <div className={styles['header-weather-pending']}>
             {geoStatus === GEO_STATUS.REQUESTING ? '定位中...' : '未获取定位'}
           </div>
         )}
-        <div className={styles['header-actions']}>
-          <DarkModeToggle />
-        </div>
       </div>
 
       <div className={styles.content}>
@@ -575,20 +555,6 @@ export default function Home() {
               >
                 {clothesData?.length ? '去场景推荐' : '去添加衣物'}
               </button>
-              <button
-                type="button"
-                className={styles['btn-secondary']}
-                onClick={() =>
-                  navigate('/unified-agent', {
-                    state: {
-                      presetTask: '结合当前天气和我的衣橱，直接告诉我今天怎么穿',
-                      latestWeather: latestWeatherContext,
-                    },
-                  })
-                }
-              >
-                交给 Agent
-              </button>
             </div>
           </div>
         ) : (
@@ -624,7 +590,7 @@ export default function Home() {
               <button
                 type="button"
                 className={styles['geo-prompt-btn']}
-                onClick={handleRetryGeo}
+                onClick={handleRefreshWeather}
                 disabled={geoStatus === GEO_STATUS.REQUESTING}
               >
                 {geoStatus === GEO_STATUS.REQUESTING ? '定位中...' : '开启定位'}

@@ -36,6 +36,7 @@ const buildBaseConfirmationViewModel = (confirmation = {}) => {
     scope: replaceKnownRoutesWithPageNames(String(confirmation.scope || '').trim()),
     risk: replaceKnownRoutesWithPageNames(String(confirmation.risk || '').trim()),
     details: confirmation.details || null,
+    previewImages: Array.isArray(confirmation.previewImages) ? confirmation.previewImages : [],
     targetPage,
   }
 }

@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Button } from 'antd-mobile'
 import axios from '@/api'
 import { ErrorBanner, Loading, Empty } from '@/components/Feedback'
-import { useNavigate } from 'react-router-dom'
+import { buildAgentContextState } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
+import { buildCompactStats } from './statsViewModel'
+import { buildWardrobeAnalyticsViewModel } from './viewModel'
 import styles from './index.module.less'
 
 const renderStats = (items = [], emptyText = '暂无数据') => {
@@ -13,7 +15,7 @@ const renderStats = (items = [], emptyText = '暂无数据') => {
     <div className={styles.list}>
       {items.map((item) => (
         <div key={item.label || item.date} className={styles.listItem}>
-          <span>{item.label || item.date}</span>
+          <span className={styles.listItemLabel}>{item.label || item.date}</span>
           <strong>{item.count}</strong>
         </div>
       ))}
@@ -22,7 +24,6 @@ const renderStats = (items = [], emptyText = '暂无数据') => {
 }
 
 export default function WardrobeAnalytics() {
-  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -45,34 +46,45 @@ export default function WardrobeAnalytics() {
     void loadData()
   }, [loadData])
 
+  useAgentPageEntry({
+    enabled: Boolean(data),
+    presetTask: '结合当前衣橱分析，给我总结重点并告诉我下一步该怎么整理',
+    state: data
+      ? buildAgentContextState({
+          insight: {
+            type: 'analytics',
+            entity: data,
+          },
+        })
+      : null,
+  })
+
   if (status === 'loading') return <Loading text="分析你的衣橱中..." />
   if (status === 'error') return <ErrorBanner message={error} onAction={loadData} />
   if (!data) return <Empty description="暂无分析数据" />
 
+  const viewModel = buildWardrobeAnalyticsViewModel(data)
+  const compactStyleDistribution = buildCompactStats(data.styleDistribution, {
+    maxItems: 4,
+    overflowLabel: '其他风格',
+  })
+
   return (
     <div className={styles.page}>
-      <div className={styles.hero}>
-        <div>
-          <div className={styles.title}>衣橱分析</div>
-          <div className={styles.subtitle}>从衣物结构、使用记录和推荐采纳情况观察你的穿搭习惯</div>
+      <section className={styles.hero}>
+        <div className={styles.heroTop}>
+          <div className={styles.heroText}>
+            <div className={styles.title}>衣橱分析</div>
+            <div className={styles.subtitle}>从衣物结构、使用记录和推荐采纳情况观察你的穿搭习惯</div>
+          </div>
         </div>
-        <Button
-          size="small"
-          fill="outline"
-          onClick={() =>
-            navigate('/unified-agent', {
-              state: {
-                presetTask: '结合当前衣橱分析，给我总结重点并告诉我下一步该怎么整理',
-                latestAnalytics: data,
-              },
-            })
-          }
-        >
-          交给 Agent
-        </Button>
-      </div>
+        <div className={styles.heroInsight}>
+          <div className={styles.heroInsightLabel}>{viewModel.heroInsightLabel}</div>
+          <div className={styles.heroInsightText}>{viewModel.heroInsightText}</div>
+        </div>
+      </section>
 
-      <div className={styles.summaryGrid}>
+      <section className={styles.summaryGrid}>
         <div className={styles.summaryCard}>
           <div className={styles.summaryValue}>{data.totalClothes}</div>
           <div className={styles.summaryLabel}>衣物总数</div>
@@ -89,30 +101,48 @@ export default function WardrobeAnalytics() {
           <div className={styles.summaryValue}>{data.recommendationSummary.adoptionRate}%</div>
           <div className={styles.summaryLabel}>采纳率</div>
         </div>
-      </div>
+      </section>
 
-      <div className={styles.grid}>
+      <section className={styles.distributionGrid}>
         <div className={styles.card}>
           <div className={styles.cardTitle}>类型分布</div>
           {renderStats(data.typeDistribution)}
         </div>
         <div className={styles.card}>
           <div className={styles.cardTitle}>风格分布</div>
-          {renderStats(data.styleDistribution)}
+          {renderStats(compactStyleDistribution)}
         </div>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>颜色分布</div>
-          {renderStats(data.colorDistribution)}
+      </section>
+
+      <section className={`${styles.card} ${styles.insightCard}`}>
+        <div className={styles.insightCardHeader}>
+          <div className={styles.cardTitle}>趋势与整理建议</div>
+          <span className={styles.insightBadge}>本周重点</span>
         </div>
-        <div className={styles.card}>
-          <div className={styles.cardTitle}>高频场景</div>
-          {renderStats(data.sceneDistribution)}
+        <div className={styles.insightTrend}>
+          <div className={styles.insightTrendText}>
+            推荐采纳率仍偏低，说明现有推荐与衣橱结构匹配度一般。
+          </div>
+          <div className={styles.insightTrendValue}>{data.recommendationSummary.adoptionRate}%</div>
         </div>
-        <div className={styles.cardWide}>
-          <div className={styles.cardTitle}>穿搭趋势</div>
-          {renderStats(data.outfitTrend, '记录更多穿搭后，这里会出现趋势')}
+        <div className={styles.trendList}>
+          {viewModel.trendItems.map((item, index) => (
+            <div key={item.key} className={styles.trendItem}>
+              <span className={styles.trendLabel}>{item.label}</span>
+              <div className={styles.trendTrack}>
+                <div
+                  className={`${styles.trendBar} ${index === 0 ? styles.trendBarPrimary : index === 1 ? styles.trendBarSecondary : styles.trendBarAccent}`}
+                  style={{ width: `${Math.round(item.value * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+        <div className={styles.focusNote}>
+          <span className={styles.focusNoteText}>{viewModel.focusNote.text}</span>
+          <span className={styles.focusNoteBadge}>{viewModel.focusNote.badge}</span>
+        </div>
+      </section>
     </div>
   )
 }

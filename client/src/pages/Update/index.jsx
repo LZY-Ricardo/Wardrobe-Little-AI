@@ -4,10 +4,18 @@ import SvgIcon from '@/components/SvgIcon'
 import { Button, Dialog, Toast } from 'antd-mobile'
 import { useLocation, useNavigate } from 'react-router-dom'
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
 import { getErrorMessage } from '@/utils/errorMessage'
 import { useMatchStore, useClosetStore } from '@/store'
+import {
+  hasAgentContextClothFocus,
+  mergeSelectedItemWithDetail,
+  resolveSelectedClothFromLocationState,
+  stripSelectedClothImageForAgentContext,
+  shouldFetchSelectedClothDetail,
+} from './selectedItemState'
 
 const VALID_TYPES = REQUIRED_CLOTHES_TYPES
 const MIN_FILE_SIZE = 5 * 1024
@@ -34,10 +42,15 @@ const ANALYSIS_TIPS = [
 
 export default function Update() {
   const navigate = useNavigate()
-  const { state: selectedItem } = useLocation()
+  const { state: locationState } = useLocation()
   const markMatchStale = useMatchStore((s) => s.markStale)
+  const initialSelectedItem = stripSelectedClothImageForAgentContext(
+    locationState,
+    resolveSelectedClothFromLocationState(locationState)
+  )
+  const [resolvedSelectedItem, setResolvedSelectedItem] = useState(initialSelectedItem)
 
-  const [imageUrl, setImageUrl] = useState(selectedItem?.image || '')
+  const [imageUrl, setImageUrl] = useState(initialSelectedItem?.image || '')
   const [status, setStatus] = useState('')
   const [compressing, setCompressing] = useState(false)
   const [, setOriginalSize] = useState(0)
@@ -88,17 +101,50 @@ export default function Update() {
   useEffect(() => () => stopAnalysisTimer(), [stopAnalysisTimer])
 
   useEffect(() => {
-    if (selectedItem) {
-      nameRef.current.value = selectedItem.name || ''
-      typeRef.current.value = selectedItem.type || ''
-      colorRef.current.value = selectedItem.color || ''
-      styleRef.current.value = selectedItem.style || ''
-      seasonRef.current.value = selectedItem.season || ''
-      materialRef.current.value = selectedItem.material || ''
-      favoriteRef.current.value = String(selectedItem.favorite ?? '0')
-      setImageUrl(selectedItem.image || '')
+    setResolvedSelectedItem(
+      stripSelectedClothImageForAgentContext(
+        locationState,
+        resolveSelectedClothFromLocationState(locationState)
+      )
+    )
+  }, [locationState])
+
+  useEffect(() => {
+    if (resolvedSelectedItem) {
+      nameRef.current.value = resolvedSelectedItem.name || ''
+      typeRef.current.value = resolvedSelectedItem.type || ''
+      colorRef.current.value = resolvedSelectedItem.color || ''
+      styleRef.current.value = resolvedSelectedItem.style || ''
+      seasonRef.current.value = resolvedSelectedItem.season || ''
+      materialRef.current.value = resolvedSelectedItem.material || ''
+      favoriteRef.current.value = String(resolvedSelectedItem.favorite ?? '0')
+      setImageUrl(resolvedSelectedItem.image || '')
     }
-  }, [selectedItem])
+  }, [resolvedSelectedItem])
+
+  useEffect(() => {
+    const selectedItem = resolveSelectedClothFromLocationState(locationState)
+    const shouldForceFetch = hasAgentContextClothFocus(locationState)
+    if (!shouldForceFetch && !shouldFetchSelectedClothDetail(selectedItem)) return
+
+    let cancelled = false
+
+    ;(async () => {
+      try {
+        const res = await axios.get(`/clothes/${selectedItem.cloth_id}`)
+        if (cancelled || res.code !== 1 || !res.data) return
+        setResolvedSelectedItem((prev) => mergeSelectedItemWithDetail(prev || selectedItem, res.data))
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('获取衣物详情失败，使用入口 state 回退:', error)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [locationState])
 
   const handleImageChange = async (e) => {
     const file = e.target.files[0]
@@ -255,7 +301,7 @@ export default function Update() {
   }
 
   const handleUpdateCloth = async () => {
-    if (!selectedItem?.cloth_id) {
+    if (!resolvedSelectedItem?.cloth_id) {
       Toast.show({ icon: 'fail', content: '缺少衣物标识，无法更新', duration: 1500 })
       return
     }
@@ -267,7 +313,7 @@ export default function Update() {
 
     try {
       const res = await axios.put(
-        `/clothes/${selectedItem.cloth_id}`,
+        `/clothes/${resolvedSelectedItem.cloth_id}`,
         {
           name: nameRef.current.value,
           type: typeRef.current.value,
@@ -331,17 +377,20 @@ export default function Update() {
         </div>
       </div>
 
-      {selectedItem?.cloth_id ? (
+      {resolvedSelectedItem?.cloth_id ? (
         <div style={{ padding: '0 16px 8px' }}>
           <Button
             block
             fill="outline"
             onClick={() =>
               navigate('/unified-agent', {
-                state: {
-                  presetTask: `帮我继续处理这件衣物：${selectedItem?.name || selectedItem?.type || '当前衣物'}`,
-                  selectedCloth: selectedItem,
-                },
+                state: buildAgentContextState({
+                  presetTask: `帮我继续处理这件衣物：${resolvedSelectedItem?.name || resolvedSelectedItem?.type || '当前衣物'}`,
+                  focus: {
+                    type: 'cloth',
+                    entity: resolvedSelectedItem,
+                  },
+                }),
               })
             }
           >

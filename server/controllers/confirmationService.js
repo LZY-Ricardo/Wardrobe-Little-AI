@@ -2,6 +2,11 @@ const crypto = require('crypto')
 
 const { executeTool } = require('../utils/toolRegistry')
 const { buildConfirmationViewModel } = require('../agent/tools/runtime/confirmationDescriptorResolver')
+const {
+  resolveDraftFromLatestTask,
+  resolveFocusFromLatestTask,
+} = require('../agent/context/agentContextProtocol')
+const { isProbablyBase64Image } = require('../utils/validate')
 const { getProfileInsight } = require('./profileInsights')
 const { updateRecommendationAdoption } = require('./recommendations')
 const { getTodayInChina } = require('../utils/date')
@@ -24,7 +29,94 @@ const CONFIRMABLE_AGENT_ACTIONS = new Set([
 
 const pendingAgentOps = new Map()
 
+const resolveSelectedCloth = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  if (focus?.type === 'cloth') return focus.entity
+  if (latestTask?.result?.selectedCloth) return latestTask.result.selectedCloth
+  if (latestTask?.result && Number.parseInt(latestTask.result?.cloth_id, 10) > 0) return latestTask.result
+  return null
+}
+
+const resolveSelectedSuit = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  return focus?.type === 'suit' ? focus.entity : latestTask?.result?.selectedSuit || null
+}
+
+const resolveSelectedOutfitLog = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  return focus?.type === 'outfitLog' ? focus.entity : latestTask?.result?.selectedOutfitLog || null
+}
+
+const resolveManualSuitDraft = (latestTask = null) => {
+  const draft = resolveDraftFromLatestTask(latestTask)
+  return draft?.type === 'suit' ? draft.entity : latestTask?.result?.manualSuitDraft || null
+}
+
+const resolveManualOutfitLogDraft = (latestTask = null) => {
+  const draft = resolveDraftFromLatestTask(latestTask)
+  return draft?.type === 'outfitLog' ? draft.entity : latestTask?.result?.manualOutfitLogDraft || null
+}
+
 const makeConfirmId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 10)
+
+const OMITTED_IMAGE_PLACEHOLDER = '[omitted]'
+
+const sanitizePersistedResultValue = (value, key = '', depth = 0) => {
+  if (value == null) return value
+  if (depth > 6) return null
+  if (typeof value === 'string') {
+    if (isProbablyBase64Image(value)) {
+      return ['cover', 'image', 'dataUrl'].includes(key) ? null : OMITTED_IMAGE_PLACEHOLDER
+    }
+    return value.length > 4000 ? `${value.slice(0, 4000)}...[truncated]` : value
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return value
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => sanitizePersistedResultValue(item, key, depth + 1))
+      .filter((item) => item != null)
+      .slice(0, 20)
+  }
+  if (typeof value !== 'object') return null
+
+  const next = {}
+  for (const [entryKey, entryValue] of Object.entries(value)) {
+    if (entryKey === 'previewImages') continue
+    const normalized = sanitizePersistedResultValue(entryValue, entryKey, depth + 1)
+    if (normalized == null) continue
+    next[entryKey] = normalized
+  }
+  return next
+}
+
+const buildPersistedConfirmedResultSummary = (pending = {}, confirmedSummary = '', result = null) => ({
+  confirmed: true,
+  summary: confirmedSummary,
+  result: sanitizePersistedResultValue(result),
+})
+
+const sanitizePersistedExecutePayload = (action = '', executePayload = null) => {
+  if (!executePayload || typeof executePayload !== 'object') return executePayload || null
+
+  if (action === 'create_cloth') {
+    const next = { ...executePayload }
+    delete next.image
+    return next
+  }
+
+  if (action === 'create_clothes_batch') {
+    return Array.isArray(executePayload)
+      ? executePayload.map((item) => {
+          if (!item || typeof item !== 'object') return item
+          const next = { ...item }
+          delete next.image
+          return next
+        })
+      : []
+  }
+
+  return executePayload
+}
 
 const summarizeConfirmedAction = (pending = {}, executed = {}) => {
   if (pending.action === 'create_cloth') {
@@ -88,7 +180,7 @@ const buildPersistedConfirmationPayload = (confirmId, confirmation, createdAt) =
   scope: confirmation.scope,
   risk: confirmation.risk,
   details: confirmation.details || null,
-  executePayload: confirmation.executePayload || null,
+  executePayload: sanitizePersistedExecutePayload(confirmation.action, confirmation.executePayload),
   recommendationHistoryId: confirmation.recommendationHistoryId || null,
 })
 
@@ -102,9 +194,44 @@ const normalizeRecoveredPendingTask = (row, confirmation = {}) => ({
   scope: confirmation.scope || '',
   risk: confirmation.risk || '',
   details: confirmation.details || null,
+  previewImages: Array.isArray(confirmation.previewImages) ? confirmation.previewImages : [],
   executePayload: confirmation.executePayload || {},
   recommendationHistoryId: confirmation.recommendationHistoryId || null,
 })
+
+const rehydratePendingTaskImages = async (pendingTask, deps = {}) => {
+  if (!pendingTask || !['create_cloth', 'create_clothes_batch'].includes(pendingTask.action)) return pendingTask
+  const getPendingConfirmationMessageMetaByConfirmId = deps.getPendingConfirmationMessageMetaByConfirmId
+  if (typeof getPendingConfirmationMessageMetaByConfirmId !== 'function') return pendingTask
+
+  const confirmationMeta = await getPendingConfirmationMessageMetaByConfirmId(pendingTask.userId, pendingTask.confirmId)
+  const previewImages = Array.isArray(confirmationMeta?.previewImages) ? confirmationMeta.previewImages : []
+  if (!previewImages.length) return pendingTask
+
+  if (pendingTask.action === 'create_cloth') {
+    if (pendingTask.executePayload?.image) return pendingTask
+    const firstImage = String(previewImages[0]?.dataUrl || '').trim()
+    if (!firstImage) return pendingTask
+    return {
+      ...pendingTask,
+      executePayload: {
+        ...(pendingTask.executePayload || {}),
+        image: firstImage,
+      },
+    }
+  }
+
+  const items = Array.isArray(pendingTask.executePayload) ? pendingTask.executePayload : []
+  if (!items.length) return pendingTask
+  return {
+    ...pendingTask,
+    executePayload: items.map((item, index) => {
+      if (!item || typeof item !== 'object' || item.image) return item
+      const dataUrl = String(previewImages[index]?.dataUrl || '').trim()
+      return dataUrl ? { ...item, image: dataUrl } : item
+    }),
+  }
+}
 
 const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   if (action === 'update_user_sex') {
@@ -125,7 +252,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'delete_outfit_log') {
-    const selectedOutfitLog = latestResult?.selectedOutfitLog || latestResult?.result?.selectedOutfitLog
+    const selectedOutfitLog = resolveSelectedOutfitLog(latestResult)
     const outfitLogId = Number.parseInt(selectedOutfitLog?.id, 10)
     if (!outfitLogId) {
       const error = new Error('当前没有可执行的穿搭记录对象')
@@ -144,7 +271,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'delete_suit') {
-    const selectedSuit = latestResult?.selectedSuit || latestResult?.result?.selectedSuit
+    const selectedSuit = resolveSelectedSuit(latestResult)
     const suitId = Number.parseInt(selectedSuit?.suit_id, 10)
     if (!suitId) {
       const error = new Error('当前没有可执行的套装对象')
@@ -163,7 +290,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'delete_cloth') {
-    const selectedCloth = latestResult?.selectedCloth || latestResult?.result?.selectedCloth
+    const selectedCloth = resolveSelectedCloth(latestResult)
     const clothId = Number.parseInt(selectedCloth?.cloth_id, 10)
     if (!clothId) {
       const error = new Error('当前没有可执行的衣物对象')
@@ -181,7 +308,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'update_cloth_fields') {
-    const selectedCloth = latestResult?.selectedCloth || latestResult?.result?.selectedCloth
+    const selectedCloth = resolveSelectedCloth(latestResult)
     const patch = latestResult?.patch || latestResult?.result?.patch || {}
     const clothId = Number.parseInt(selectedCloth?.cloth_id, 10)
     if (!clothId) {
@@ -220,7 +347,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'toggle_favorite') {
-    const selectedCloth = latestResult?.selectedCloth || latestResult?.result?.selectedCloth
+    const selectedCloth = resolveSelectedCloth(latestResult)
     const clothId = Number.parseInt(selectedCloth?.cloth_id, 10)
     if (!clothId) {
       const error = new Error('当前没有可执行的衣物对象')
@@ -255,6 +382,11 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
       error.status = 400
       throw error
     }
+    if (!isProbablyBase64Image(draftCloth?.image || '')) {
+      const error = new Error('当前待保存衣物缺少合法图片，请重新上传图片后再试')
+      error.status = 400
+      throw error
+    }
     const safeName = draftCloth?.name || `${draftCloth?.color || ''}${draftCloth?.type || '衣物'}`
     return {
       action,
@@ -269,6 +401,16 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
         season: draftCloth?.season || '',
         material: draftCloth?.material || '',
       },
+      previewImages: draftCloth?.image
+        ? [
+            {
+              type: 'image',
+              name: safeName,
+              mimeType: String(draftCloth.image).match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;[^,]+)?,/)?.[1] || 'image/jpeg',
+              dataUrl: draftCloth.image,
+            },
+          ]
+        : [],
       executePayload: draftCloth,
     }
   }
@@ -281,6 +423,11 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
 
     if (!draftClothes.length) {
       const error = new Error('当前没有可批量保存的衣物草稿')
+      error.status = 400
+      throw error
+    }
+    if (draftClothes.some((item) => !isProbablyBase64Image(item?.image || ''))) {
+      const error = new Error('当前批量待保存衣物存在缺少合法图片的项，请重新上传图片后再试')
       error.status = 400
       throw error
     }
@@ -304,12 +451,25 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
         count: String(draftClothes.length),
         items: compactItems,
       },
+      previewImages: draftClothes
+        .map((item, index) => {
+          const dataUrl = String(item?.image || '').trim()
+          if (!dataUrl) return null
+          return {
+            type: 'image',
+            name: item.name || `衣物 ${index + 1}`,
+            mimeType: dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;[^,]+)?,/)?.[1] || 'image/jpeg',
+            dataUrl,
+          }
+        })
+        .filter(Boolean)
+        .slice(0, 4),
       executePayload: draftClothes,
     }
   }
 
   if (action === 'save_suit') {
-    const manualSuitDraft = latestResult?.manualSuitDraft || latestResult?.result?.manualSuitDraft
+    const manualSuitDraft = resolveManualSuitDraft(latestResult)
     if (manualSuitDraft && typeof manualSuitDraft === 'object') {
       const clothIds = (Array.isArray(manualSuitDraft.items) ? manualSuitDraft.items : [])
         .map((item) => Number.parseInt(item, 10))
@@ -344,7 +504,7 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
   }
 
   if (action === 'create_outfit_log') {
-    const manualOutfitLogDraft = latestResult?.manualOutfitLogDraft || latestResult?.result?.manualOutfitLogDraft
+    const manualOutfitLogDraft = resolveManualOutfitLogDraft(latestResult)
     if (manualOutfitLogDraft && typeof manualOutfitLogDraft === 'object') {
       const clothIds = (Array.isArray(manualOutfitLogDraft.items) ? manualOutfitLogDraft.items : [])
         .map((item) => Number.parseInt(item, 10))
@@ -580,11 +740,7 @@ const confirmAgentTask = async (userId, confirmId, deps = {}) => {
   pendingAgentOps.delete(confirmId)
   const executed = await executeConfirmedAgentTask(pending)
   const confirmedSummary = summarizeConfirmedAction(pending, executed)
-  const resultPayload = {
-    confirmed: true,
-    summary: confirmedSummary,
-    result: executed.result,
-  }
+  const resultPayload = buildPersistedConfirmedResultSummary(pending, confirmedSummary, executed.result)
   await deps.updateAgentTaskHistory(pending.historyId, {
     status: 'success',
     confirmation_status: 'confirmed',
@@ -598,7 +754,15 @@ const confirmAgentTask = async (userId, confirmId, deps = {}) => {
     summary: confirmedSummary,
     relatedObjectType: executed.relatedObjectType,
     relatedObjectId: executed.relatedObjectId,
-    result: executed.result,
+    result:
+      pending.action === 'create_cloth'
+        ? { selectedCloth: executed.result }
+        : pending.action === 'create_clothes_batch'
+          ? {
+              createdClothes: Array.isArray(executed.result?.items) ? executed.result.items : [],
+            }
+          : executed.result,
+    ...(pending.action === 'create_cloth' && executed.result ? { selectedCloth: executed.result } : {}),
     historyId: pending.historyId,
   }
 }
@@ -625,6 +789,7 @@ module.exports = {
   LOW_RISK_ACTIONS,
   __clearPendingAgentOpsForTest: () => pendingAgentOps.clear(),
   buildConfirmationPayload,
+  buildPersistedConfirmedResultSummary,
   buildPersistedConfirmationPayload,
   cancelAgentTask,
   confirmAgentTask,
@@ -632,7 +797,7 @@ module.exports = {
   getPendingAgentTaskByConfirmId: async (userId, confirmId, deps = {}) => {
     const record = await deps.getPendingAgentTaskRecordByConfirmId(userId, confirmId, CONFIRMABLE_AGENT_ACTIONS)
     if (!record) return null
-    return normalizeRecoveredPendingTask(record.row, record.confirmation)
+    return rehydratePendingTaskImages(normalizeRecoveredPendingTask(record.row, record.confirmation), deps)
   },
   stageAgentConfirmation,
 }

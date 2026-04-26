@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { Toast } from 'antd-mobile'
 import { useAuthStore } from '@/store'
+import { extractCreatedSession } from './sessionBootstrap'
 import {
   migrateExpandedMessageId,
 } from './reasoningState'
@@ -21,7 +22,6 @@ const STREAM_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3
 const REASONING_THROTTLE_MS = 100
 const WEATHER_GEO_CACHE_KEY = 'weather_geo_cache_v1'
 const PROFILE_STORAGE_KEY = 'outfit-profile-v1'
-
 const readSessionJson = (key) => {
   try {
     const raw = sessionStorage.getItem(key)
@@ -107,11 +107,15 @@ export default function useAgentStreamSession({
           },
           body: JSON.stringify({ firstMessage: trimmedContent || '图片消息' }),
         })
+        if (!createRes.ok) {
+          throw new Error(`HTTP ${createRes.status}`)
+        }
         const createPayload = await createRes.json()
-        if (createPayload?.session?.id) {
-          activeSessionId = createPayload.session.id
-          setSession(createPayload.session)
-          navigate(`/aichat?sessionId=${activeSessionId}`, { replace: true, state: { session: createPayload.session } })
+        const createdSession = extractCreatedSession(createPayload)
+        if (createdSession?.id) {
+          activeSessionId = createdSession.id
+          setSession(createdSession)
+          navigate(`/aichat?sessionId=${activeSessionId}`, { replace: true, state: { session: createdSession } })
         } else {
           Toast.show({ icon: 'fail', content: '创建会话失败' })
           return
@@ -330,14 +334,32 @@ export default function useAgentStreamSession({
               }
             } else if (event.type === 'error') {
               flushReasoning({ endReasoning: true })
-              console.error('[AiChat] 服务端错误:', event.msg)
-              Toast.show({ icon: 'fail', content: '发送失败，请重试', duration: 2000 })
+              console.error('[AiChat] 服务端错误:', {
+                msg: event.msg || '',
+                detail: event.detail || '',
+                stage: event.stage || '',
+                status: event.status ?? null,
+                upstreamStatus: event.upstreamStatus ?? null,
+                code: event.code || '',
+                providerMessage: event.providerMessage || '',
+                retryable: event.retryable ?? null,
+                debugMessage: event.debugMessage || '',
+                requestSummary: event.requestSummary || null,
+              })
+              Toast.show({
+                icon: 'fail',
+                content: '发送失败，请重试',
+                duration: 2000,
+              })
               updateStreamMessage((message) => applyStreamFailure(message, {
                 fullText: fullText || '',
                 reasoningText,
                 reasoningStartTime,
                 reasoningDurationMs,
                 deliveryStatus: 'failed',
+                errorDetail: '',
+                errorStage: event.stage || '',
+                errorStatus: event.status ?? null,
               }))
               setLocalMessages((prev) => finalizeOptimisticUserMessage(prev, {
                 optimisticMessageId: optimisticMessage.id,
@@ -372,6 +394,7 @@ export default function useAgentStreamSession({
         reasoningStartTime,
         reasoningDurationMs,
         deliveryStatus: 'failed',
+        errorDetail: String(err?.message || '发送失败').trim(),
       }))
       setLocalMessages((prev) => finalizeOptimisticUserMessage(prev, {
         optimisticMessageId: optimisticMessage.id,

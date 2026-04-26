@@ -10,6 +10,7 @@ const recommendationReadTools = require('../handlers/recommendations/readTools')
 const recommendationWriteTools = require('../handlers/recommendations/writeTools')
 const visionTools = require('../handlers/vision/analyzeImageTool')
 const weatherReadTools = require('../handlers/weather/readTools')
+const mediaReadTools = require('../handlers/media/readTools')
 
 const MODULE_REGISTRY = {
   profile: {
@@ -37,6 +38,9 @@ const MODULE_REGISTRY = {
   },
   vision: {
     read: visionTools,
+  },
+  media: {
+    read: mediaReadTools,
   },
 }
 

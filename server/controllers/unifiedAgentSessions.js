@@ -5,6 +5,7 @@ const {
   normalizeConfirmationStatus,
   normalizeMessageMeta,
   normalizeMessageType,
+  parseMessageMeta,
 } = require('./unifiedAgentMessageMeta')
 
 const isUnknownMetaJsonColumnError = (error) =>
@@ -81,6 +82,38 @@ const renameSession = async (userId, sessionId, nextTitle) => {
     `UPDATE agent_sessions SET title = ?, update_time = ? WHERE user_id = ? AND id = ?`,
     [title, Date.now(), userId, sessionId]
   )
+  return getSessionById(userId, sessionId)
+}
+
+const deleteAllSessions = async (userId) => {
+  await withTransaction(async (connection) => {
+    const [sessions] = await connection.query('SELECT id FROM agent_sessions WHERE user_id = ?', [userId])
+    if (!sessions.length) return
+    const ids = sessions.map((s) => s.id)
+    await connection.query(`DELETE FROM agent_session_memory WHERE session_id IN (?)`, [ids])
+    await connection.query('DELETE FROM agent_messages WHERE user_id = ?', [userId])
+    await connection.query('DELETE FROM agent_sessions WHERE user_id = ?', [userId])
+  })
+}
+
+const clearSessionMessages = async (userId, sessionId) => {
+  const session = await getSessionById(userId, sessionId)
+  if (!session) {
+    const error = new Error('会话不存在')
+    error.status = 404
+    throw error
+  }
+
+  const now = Date.now()
+  await withTransaction(async (connection) => {
+    await connection.query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+    await connection.query('DELETE FROM agent_messages WHERE user_id = ? AND session_id = ?', [userId, sessionId])
+    await connection.query(
+      'UPDATE agent_sessions SET current_task_type = ?, last_message_at = ?, update_time = ? WHERE user_id = ? AND id = ?',
+      ['', now, now, userId, sessionId]
+    )
+  })
+
   return getSessionById(userId, sessionId)
 }
 
@@ -176,12 +209,38 @@ const listMessagesForSession = async (userId, sessionId) => {
   return Array.isArray(rows) ? rows.map(hydrateMessage) : []
 }
 
+const getPendingConfirmationMessageMetaByConfirmId = async (userId, confirmId) => {
+  const rows = await query(
+    `SELECT meta_json
+       FROM agent_messages
+      WHERE user_id = ?
+        AND message_type = 'confirm_request'
+        AND meta_json IS NOT NULL
+        AND meta_json LIKE ?
+      ORDER BY id DESC
+      LIMIT 20`,
+    [userId, `%${confirmId}%`]
+  )
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const meta = parseMessageMeta(row.meta_json)
+    if (meta?.pendingConfirmation?.confirmId === confirmId) {
+      return meta.pendingConfirmation
+    }
+  }
+
+  return null
+}
+
 module.exports = {
   appendMessage,
+  clearSessionMessages,
   createSession,
+  deleteAllSessions,
   deleteSession,
   findLatestSessionByTitle,
   getMessageById,
+  getPendingConfirmationMessageMetaByConfirmId,
   getSessionById,
   listMessagesForSession,
   listSessionsForUser,

@@ -1,5 +1,6 @@
 import React from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
 import Match from '@/pages/Match'
 import Recommend from '@/pages/Recommend'
 import Suits from '@/pages/Suits'
@@ -35,6 +36,10 @@ export default function MatchHub() {
   const navigate = useNavigate()
   const activeKey = parseTabKey(location.search)
 
+  useAgentPageEntry({
+    presetTask: AGENT_PRESET_MAP[activeKey] || AGENT_PRESET_MAP.preview,
+  })
+
   const handleTabClick = (key) => {
     if (key === activeKey) return
     navigate({ pathname: '/match', search: setTabKey(location.search, key) }, { replace: true })
@@ -49,21 +54,6 @@ export default function MatchHub() {
   return (
     <div className={styles.hub}>
       <div className={styles.header}>
-        <div className={styles.headerTop}>
-          <button
-            type="button"
-            className={styles.agentButton}
-            onClick={() =>
-              navigate('/unified-agent', {
-                state: {
-                  presetTask: AGENT_PRESET_MAP[activeKey] || AGENT_PRESET_MAP.preview,
-                },
-              })
-            }
-          >
-            交给 Agent
-          </button>
-        </div>
         <div className={styles.tabs}>
           {TABS.map((tab) => (
             <button

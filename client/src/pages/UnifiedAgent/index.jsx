@@ -2,6 +2,7 @@
 import { ErrorBanner, Empty, Loading } from '@/components/Feedback'
 import axios from '@/api'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { buildAgentContextState, normalizeAgentContext } from '@/utils/agentContext'
 import styles from './index.module.less'
 
 const QUICK_ACTIONS = ['今日穿什么', '场景推荐', '项目使用帮助']
@@ -64,23 +65,16 @@ export default function UnifiedAgent() {
   const navigate = useNavigate()
   const location = useLocation()
   const presetTask = String(location.state?.presetTask || '').trim()
-  const contextualState = useMemo(
-    () => ({
-      latestResult: location.state?.latestResult || null,
-      selectedCloth: location.state?.selectedCloth || null,
-      selectedSuit: location.state?.selectedSuit || null,
-      selectedOutfitLog: location.state?.selectedOutfitLog || null,
-      latestProfile: location.state?.latestProfile || null,
-      latestAnalytics: location.state?.latestAnalytics || null,
-      latestWeather: location.state?.latestWeather || null,
-      styleProfile: location.state?.styleProfile || null,
-      recommendationHistory: location.state?.recommendationHistory || null,
-      manualSuitDraft: location.state?.manualSuitDraft || null,
-      manualOutfitLogDraft: location.state?.manualOutfitLogDraft || null,
-      prefillImages: Array.isArray(location.state?.prefillImages) ? location.state.prefillImages : [],
-    }),
-    [location.state],
-  )
+  const contextualState = useMemo(() => {
+    const normalized = normalizeAgentContext(location.state)
+    return buildAgentContextState({
+      latestTask: normalized.latestTask,
+      focus: normalized.focus,
+      draft: normalized.draft,
+      insight: normalized.insight,
+      attachments: normalized.attachments,
+    })
+  }, [location.state])
 
   const [sessions, setSessions] = useState([])
   const [status, setStatus] = useState('loading')

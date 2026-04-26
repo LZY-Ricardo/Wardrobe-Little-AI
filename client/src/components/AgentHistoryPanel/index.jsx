@@ -146,6 +146,7 @@ export default function AgentHistoryPanel({
   sessionList,
   loadSessionList,
   requestDeleteSession,
+  onClearAll,
   onSelectSession,
   embedded = true,
   onClose,
@@ -331,6 +332,18 @@ export default function AgentHistoryPanel({
     await loadSessionList?.()
   }
 
+  const handleClearAll = async () => {
+    const confirmed = await Dialog.confirm({
+      content: '确认删除所有历史会话？此操作不可恢复。',
+      confirmText: '全部删除',
+      cancelText: '取消',
+    })
+
+    if (!confirmed) return
+
+    await onClearAll?.()
+  }
+
   const handleHandleTouchStart = (event) => {
     const touch = event.touches?.[0]
     handleTouchStateRef.current = {
@@ -382,9 +395,16 @@ export default function AgentHistoryPanel({
 
           <div className={styles.headerRow}>
             <div className={styles.sheetTitle}>历史会话</div>
-            <button type="button" className={styles.fullLink} onClick={onExpandFull}>
-              全屏查看
-            </button>
+            <div className={styles.headerActions}>
+              {sessionList.length > 0 && (
+                <button type="button" className={styles.clearAllBtn} onClick={handleClearAll}>
+                  清空全部
+                </button>
+              )}
+              <button type="button" className={styles.fullLink} onClick={onExpandFull}>
+                全屏查看
+              </button>
+            </div>
           </div>
         </>
       ) : null}
@@ -403,6 +423,11 @@ export default function AgentHistoryPanel({
         >
           近 30 天
         </button>
+        {!embedded && sessionList.length > 0 && (
+          <button type="button" className={styles.clearAllBtn} onClick={handleClearAll}>
+            清空全部
+          </button>
+        )}
       </div>
 
       <div

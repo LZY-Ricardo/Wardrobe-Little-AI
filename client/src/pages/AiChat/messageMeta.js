@@ -45,6 +45,8 @@ const normalizeAttachments = (attachments = []) => {
       const variant = clampString(item.variant, 32)
       const objectType = clampString(item.objectType, 32)
       const objectId = Number.parseInt(item.objectId, 10)
+      const suitIndex = Number.parseInt(item.suitIndex, 10)
+      const suitLabel = clampString(item.suitLabel, 60)
       if (!type || !dataUrl) return null
       return {
         type,
@@ -55,10 +57,12 @@ const normalizeAttachments = (attachments = []) => {
         ...(variant ? { variant } : {}),
         ...(objectType ? { objectType } : {}),
         ...(Number.isFinite(objectId) && objectId > 0 ? { objectId } : {}),
+        ...(Number.isFinite(suitIndex) && suitIndex >= 0 ? { suitIndex } : {}),
+        ...(suitLabel ? { suitLabel } : {}),
       }
     })
     .filter(Boolean)
-    .slice(0, 4)
+    .slice(0, 12)
 }
 
 const normalizeTargetPage = (targetPage) => {
@@ -109,6 +113,7 @@ const normalizePendingConfirmation = (pendingConfirmation) => {
   const risk = clampString(pendingConfirmation.risk, 200)
   const actionLabel = clampString(pendingConfirmation.actionLabel, 80)
   const targetPage = normalizeTargetPage(pendingConfirmation.targetPage)
+  const previewImages = normalizeAttachments(pendingConfirmation.previewImages)
   const details = normalizeJsonValue(pendingConfirmation.details)
 
   return {
@@ -118,6 +123,7 @@ const normalizePendingConfirmation = (pendingConfirmation) => {
     ...(risk ? { risk } : {}),
     ...(actionLabel ? { actionLabel } : {}),
     ...(targetPage ? { targetPage } : {}),
+    ...(previewImages.length ? { previewImages } : {}),
     ...(details ? { details } : {}),
   }
 }
@@ -161,6 +167,7 @@ export const normalizeMessageMeta = (meta) => {
   const pendingConfirmation = normalizePendingConfirmation(meta.pendingConfirmation)
   const toolCalls = normalizeToolCalls(meta.toolCalls)
   const toolResultsSummary = normalizeToolResultsSummary(meta.toolResultsSummary)
+  const latestTask = normalizeJsonValue(meta.latestTask)
 
   const normalized = {
     ...(attachments.length ? { attachments } : {}),
@@ -169,6 +176,7 @@ export const normalizeMessageMeta = (meta) => {
     ...(pendingConfirmation ? { pendingConfirmation } : {}),
     ...(toolCalls.length ? { toolCalls } : {}),
     ...(toolResultsSummary.length ? { toolResultsSummary } : {}),
+    ...(latestTask ? { latestTask } : {}),
   }
 
   return Object.keys(normalized).length ? normalized : null

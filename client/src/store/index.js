@@ -126,25 +126,23 @@ export const useAuthStore = create(
   )
 )
 
-export const useUiStore = create(
-  persist(
-    (set) => ({
-      theme: 'light',
-      globalLoading: false,
-      globalLoadingText: '',
-      setTheme: (theme) => set({ theme }),
-      setGlobalLoading: (loading, text = '') =>
-        set({ globalLoading: loading, globalLoadingText: text }),
+export const useUiStore = create((set) => ({
+  globalLoading: false,
+  globalLoadingText: '',
+  setGlobalLoading: (loading, text = '') =>
+    set({ globalLoading: loading, globalLoadingText: text }),
+}))
+
+export const useAgentEntryStore = create((set) => ({
+  currentEntry: null,
+  setCurrentEntry: (entry) => set({ currentEntry: entry || null }),
+  clearCurrentEntry: (owner) =>
+    set((state) => {
+      if (!owner) return { currentEntry: null }
+      if (state.currentEntry?.owner !== owner) return state
+      return { currentEntry: null }
     }),
-    {
-      name: 'ui-store',
-      storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        theme: state.theme,
-      }),
-    }
-  )
-)
+}))
 
 export const useClosetStore = create(
   persist(

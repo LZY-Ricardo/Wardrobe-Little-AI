@@ -9,7 +9,7 @@
 - 错误与编码：axios 文案乱码，错误码提示不统一；外部请求缺少超时/重试/降级。
 - 功能空白：Recommend 未渲染 /scene/generateSceneSuits；Home 天气/标签静态；Outfit 无空态/分页；Match 未做人物信息校验；AiChat 无加载/错误/断线处理。
 - 上传与分析：Add/Update 仅同步校验，缺少异常分支、上传/压缩失败提示；Coze 不可用时无手动兜底。
-- UI/体验：Icon className 组合异常；深色模式未持久化；缺少复用的 Loading/Empty/Error 组件；搜索/筛选无去抖与状态提示。
+- UI/体验：Icon className 组合异常；缺少复用的 Loading/Empty/Error 组件；搜索/筛选无去抖与状态提示。
 
 ## 迭代优先级（建议先 P0 再 P1/P2）
 ### P0 近期（稳定性/必需）
@@ -23,7 +23,6 @@
 - 全局状态：用轻量 store（如 zustand 或 RTK）集中管理用户/主题/偏好/衣物列表，持久化 token 与部分 UI 状态。
 - UI 基建：封装 Loading/Empty/ErrorBanner/ConfirmDialog/Skeleton；路由懒加载 fallback 使用骨架屏。
 - Outfit/Home：搜索去抖与分页/无限滚动，空态与错误提示；Home 天气/标签改为接口或配置驱动。
-- 深色模式：状态写入 store + localStorage，并同步到 html data-theme。
 - 上传可靠性：限制文件大小类型，压缩参数可配置，超时/重试/取消上传。
 - AiChat：SSE 断线重连（指数退避），手动停止按钮，错误提示与占位，防重复请求。
 
@@ -48,7 +47,7 @@
 
 ## 里程碑拆分
 - M1 稳定性：路由守卫 + axios 封装 + Recommend 打通 + Add/Update 异常提示 + Icon/乱码修复。
-- M2 体验：全局 store + UI 基建组件 + Outfit/Home 搜索与分页 + 深色模式持久化 + 上传可靠性增强 + AiChat 断线重连。
+- M2 体验：全局 store + UI 基建组件 + Outfit/Home 搜索与分页 + 上传可靠性增强 + AiChat 断线重连。
 - M3 拓展：场景推荐收藏/套装库 + 个人画像扩展 + 分享/埋点能力。
 
 ## 依赖与风险

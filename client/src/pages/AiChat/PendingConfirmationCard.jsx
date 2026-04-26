@@ -1,6 +1,7 @@
 import React from 'react'
 import {
   buildConfirmationItems,
+  buildConfirmationPreviewImages,
   formatConfirmationScope,
   getConfirmationTitle,
 } from './viewModels'
@@ -15,6 +16,7 @@ export default function PendingConfirmationCard({
   if (!pendingConfirmation) return null
 
   const { fields, items } = buildConfirmationItems(pendingConfirmation)
+  const previewImages = buildConfirmationPreviewImages(pendingConfirmation)
 
   return (
     <div className={styles.confirmCard}>
@@ -31,6 +33,18 @@ export default function PendingConfirmationCard({
         <div className={styles.confirmMetaRow}>
           <span className={styles.confirmMetaLabel}>相关页面</span>
           <span className={styles.confirmMetaValue}>{pendingConfirmation.targetPage.label}</span>
+        </div>
+      ) : null}
+      {previewImages.length ? (
+        <div className={styles.confirmPreviewGrid} data-count={previewImages.length}>
+          {previewImages.map((item, index) => (
+            <img
+              key={`${item.dataUrl}-${index}`}
+              src={item.dataUrl}
+              alt={item.name || '待确认图片'}
+              className={styles.confirmPreviewImage}
+            />
+          ))}
         </div>
       ) : null}
       {pendingConfirmation.details ? (

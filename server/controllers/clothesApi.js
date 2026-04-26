@@ -31,6 +31,133 @@ const ensureCozeConfig = (workflow) => {
     }
 }
 
+const parseImageDataUrl = (dataUrl = '', fallbackName = 'image') => {
+    const matched = String(dataUrl || '').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/)
+    if (!matched) {
+        const error = new Error('图片数据格式无效')
+        error.status = 400
+        throw error
+    }
+
+    return {
+        buffer: Buffer.from(matched[2], 'base64'),
+        mimeType: matched[1],
+        originalname: fallbackName,
+    }
+}
+
+const normalizePreviewImageInput = (input, fallbackName = 'image.jpg') => {
+    if (input?.buffer && Buffer.isBuffer(input.buffer)) {
+        return {
+            buffer: input.buffer,
+            mimeType: input.mimetype || input.mimeType || 'image/jpeg',
+            originalname: input.originalname || input.name || fallbackName,
+        }
+    }
+
+    if (typeof input?.dataUrl === 'string') {
+        return parseImageDataUrl(input.dataUrl, input.name || fallbackName)
+    }
+
+    if (typeof input === 'string') {
+        return parseImageDataUrl(input, fallbackName)
+    }
+
+    const error = new Error('缺少有效的图片输入')
+    error.status = 400
+    throw error
+}
+
+const uploadPreviewImage = async (file, label, headers, axiosPost) => {
+    const formData = new FormData()
+    formData.append('file', file.buffer, {
+        filename: file.originalname,
+        contentType: file.mimeType,
+    })
+
+    const res = await axiosPost(uploadUrl, formData, {
+        timeout: COZE_TIMEOUT_MS,
+        proxy: false,
+        headers,
+    })
+
+    if (res.data.code !== 0) {
+        const err = new Error(`${label}上传失败`)
+        err.status = 502
+        throw err
+    }
+
+    return res.data.data.id
+}
+
+const generatePreviewFromInputs = async ({
+    top,
+    bottom,
+    characterModel,
+    sex,
+    deps = {},
+} = {}) => {
+    ensureCozeConfig(workflow2_id)
+    const breaker = deps.breaker || cozeBreaker
+    const axiosPost = deps.axiosPost || axios.post
+
+    if (breaker.isOpen()) {
+        const error = new Error('预览生成服务繁忙，请稍后重试')
+        error.status = 503
+        throw error
+    }
+
+    const topFile = normalizePreviewImageInput(top, 'top.jpg')
+    const bottomFile = normalizePreviewImageInput(bottom, 'bottom.jpg')
+    const modelFile = normalizePreviewImageInput(characterModel, 'character-model.jpg')
+    const normalizedSex = String(sex || '').trim()
+
+    if (!normalizedSex) {
+        const error = new Error('请先设置性别')
+        error.status = 400
+        throw error
+    }
+
+    const { workflowResponse } = await breaker.exec(async () => {
+        const uploadHeaders = {
+            'Authorization': `Bearer ${patToken}`,
+            'Content-Type': 'multipart/form-data',
+        }
+
+        const [topFile_id, bottomFile_id, modelFile_id] = await Promise.all([
+            uploadPreviewImage(topFile, '上装图片', uploadHeaders, axiosPost),
+            uploadPreviewImage(bottomFile, '下装图片', uploadHeaders, axiosPost),
+            uploadPreviewImage(modelFile, '模特图片', uploadHeaders, axiosPost),
+        ])
+
+        const workflowResponse = await axiosPost(workflowUrl, {
+            workflow_id: workflow2_id,
+            parameters: {
+                topClothes: JSON.stringify({ file_id: topFile_id }),
+                bottomClothes: JSON.stringify({ file_id: bottomFile_id }),
+                characterModel: JSON.stringify({ file_id: modelFile_id }),
+                sex: normalizedSex,
+            }
+        }, {
+            timeout: COZE_TIMEOUT_MS,
+            proxy: false,
+            headers: {
+                'Authorization': `Bearer ${patToken}`,
+                'Content-Type': 'application/json',
+            }
+        })
+        if (workflowResponse.data.code !== 0) {
+            const err = new Error('分析失败')
+            err.status = 502
+            throw err
+        }
+
+        return { workflowResponse }
+    })
+
+    return JSON.parse(workflowResponse.data.data).output
+}
+
 
 // 上传图片到Coze并分析
 const analyzeClothes = async (ctx) => {
@@ -151,64 +278,12 @@ const generatePreview = async (ctx) => {
             return
         }
 
-        const { workflowResponse } = await cozeBreaker.exec(async () => {
-            // 1. 并行上传 3 张图片到 Coze
-            const uploadHeaders = {
-                'Authorization': `Bearer ${patToken}`,
-                'Content-Type': 'multipart/form-data'
-            }
-            const buildFormData = (file) => {
-                const fd = new FormData()
-                fd.append('file', file.buffer, { filename: file.originalname, contentType: file.mimetype })
-                return fd
-            }
-            const uploadOne = async (file, label) => {
-                const res = await axios.post(uploadUrl, buildFormData(file), {
-                    timeout: COZE_TIMEOUT_MS, proxy: false, headers: uploadHeaders
-                })
-                if (res.data.code !== 0) {
-                    const err = new Error(`${label}上传失败`)
-                    err.status = 502
-                    throw err
-                }
-                return res.data.data.id
-            }
-            const [topFile_id, bottomFile_id, modelFile_id] = await Promise.all([
-                uploadOne(topFile, '上装图片'),
-                uploadOne(bottomFile, '下装图片'),
-                uploadOne(modelFile, '模特图片'),
-            ])
-            console.log('图片上传完成:', { topFile_id, bottomFile_id, modelFile_id });
-
-            // 2. 调用 coze 工作流
-            const workflowResponse = await axios.post(workflowUrl, {
-                workflow_id: workflow2_id,
-                parameters: {
-                    topClothes: JSON.stringify({ file_id: topFile_id }),
-                    bottomClothes: JSON.stringify({ file_id: bottomFile_id }),
-                    characterModel: JSON.stringify({ file_id: modelFile_id }),
-                    sex
-                }
-            }, {
-                timeout: COZE_TIMEOUT_MS,
-                proxy: false,
-                headers: {
-                    'Authorization': `Bearer ${patToken}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            if (workflowResponse.data.code !== 0) {
-                const err = new Error('分析失败')
-                err.status = 502
-                throw err
-            }
-            console.log('工作流响应数据:', workflowResponse.data.data);
-
-            return { workflowResponse }
+        const analysisResult = await generatePreviewFromInputs({
+            top: topFile,
+            bottom: bottomFile,
+            characterModel: modelFile,
+            sex,
         })
-
-        // 解析返回结果
-        const analysisResult = JSON.parse(workflowResponse.data.data).output
 
         // 返回分析结果给前端
         ctx.body = { code: 1, data: analysisResult };
@@ -222,5 +297,6 @@ const generatePreview = async (ctx) => {
 
 module.exports = {
     analyzeClothes,
+    generatePreviewFromInputs,
     generatePreview,
 }

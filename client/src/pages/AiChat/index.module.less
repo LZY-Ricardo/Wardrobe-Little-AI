@@ -448,6 +448,32 @@
   margin-top: 8px;
 }
 
+.recommendationTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.recommendationTab {
+  flex: none;
+  min-width: 68px;
+  height: 32px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #6366f1;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.recommendationTabActive {
+  background: #111827;
+  color: #fff;
+}
+
 .messageImagesGrid {
   display: grid;
   gap: 6px;
@@ -651,6 +677,36 @@
   border-radius: 16px;
   background: #f8fafc;
   padding: 10px 12px;
+}
+
+.confirmPreviewGrid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+
+  &[data-count="1"] {
+    grid-template-columns: 1fr;
+  }
+
+  &[data-count="2"],
+  &[data-count="3"],
+  &[data-count="4"] {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.confirmPreviewImage {
+  width: 100%;
+  display: block;
+  border-radius: 14px;
+  object-fit: cover;
+  background: #e2e8f0;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+  aspect-ratio: 1;
+
+  .confirmPreviewGrid[data-count="1"] & {
+    max-width: 220px;
+  }
 }
 
 .confirmDetailRow {

@@ -1,73 +1,169 @@
 .page {
   min-height: 100%;
-  padding: 20px 16px 40px;
-  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  padding: 16px 16px calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom) + 18px);
+  background: linear-gradient(180deg, #f5f7fb 0%, #ffffff 100%);
+}
+
+.hero,
+.card {
+  background: #ffffff;
+  border-radius: 22px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
 }
 
 .hero {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.heroHeader {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+}
+
+.heroBadge {
+  flex: none;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .title {
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
+  line-height: 1.18;
   color: #0f172a;
 }
 
 .subtitle {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 13px;
+  line-height: 1.55;
   color: #64748b;
 }
 
-.summaryCard,
-.card {
-  padding: 16px;
-  border-radius: 18px;
-  background: #fff;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+.heroSignal {
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #f8fafc;
 }
 
-.cardTitle {
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
+.heroSignalLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
 }
 
-.summaryText {
-  margin-top: 12px;
-  font-size: 14px;
-  line-height: 1.7;
+.heroSignalText {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.65;
   color: #334155;
 }
 
+.heroActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.primaryAction,
+.secondaryAction {
+  height: 42px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.primaryAction {
+  :global(.adm-button) {
+    background: #2563eb;
+  }
+}
+
+.secondaryAction {
+  min-width: 108px;
+}
+
+.heroMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .updateTime {
-  margin-top: 10px;
   font-size: 12px;
+  line-height: 1.4;
   color: #94a3b8;
 }
 
-.preferenceRow {
+.preferenceInline {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 14px;
-  padding-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid #e2e8f0;
-  color: #334155;
+}
+
+.preferenceLabel {
   font-size: 13px;
+  color: #334155;
+}
+
+.preferenceButton {
+  :global(.adm-button) {
+    min-width: 76px;
+    border-radius: 12px;
+    background: #2563eb;
+  }
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
   margin-top: 16px;
+}
+
+.card {
+  padding: 14px;
+}
+
+.cardCompact {
+  min-height: 108px;
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #0f172a;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardHeaderHint {
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .tagList {
@@ -83,10 +179,87 @@
   background: #e2e8f0;
   color: #334155;
   font-size: 12px;
+  line-height: 1.2;
 }
 
 .emptyText {
   margin-top: 12px;
   font-size: 13px;
+  line-height: 1.55;
   color: #94a3b8;
+}
+
+.trendCard {
+  margin-top: 12px;
+}
+
+.trendList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.trendItem {
+  display: grid;
+  grid-template-columns: minmax(88px, auto) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.trendLabel {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.trendTrack {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.trendBar {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.trendBarPrimary {
+  background: #2563eb;
+}
+
+.trendBarSecondary {
+  background: #38bdf8;
+}
+
+.trendBarAccent {
+  background: #8b5cf6;
+}
+
+.recommendationNote {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: #f8fafc;
+}
+
+.recommendationText {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #0f172a;
+}
+
+.recommendationBadge {
+  flex: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 11px;
+  font-weight: 600;
 }

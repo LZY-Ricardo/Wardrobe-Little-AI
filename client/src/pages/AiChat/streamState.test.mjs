@@ -90,12 +90,18 @@ test('applyStreamFailure marks stream message as failed or cancelled', () => {
       fullText: '部分回复',
       reasoningText: '部分思考',
       deliveryStatus: 'cancelled',
+      errorDetail: '阶段：stream_reply | 状态码：503',
+      errorStage: 'stream_reply',
+      errorStatus: 503,
     }
   )
 
   assert.equal(failed.deliveryStatus, 'cancelled')
   assert.equal(failed.content, '部分回复')
   assert.equal(failed.reasoningContent, '部分思考')
+  assert.equal(failed.errorDetail, '阶段：stream_reply | 状态码：503')
+  assert.equal(failed.errorStage, 'stream_reply')
+  assert.equal(failed.errorStatus, 503)
 })
 
 test('finalizeOptimisticUserMessage removes optimistic message before persistence', () => {

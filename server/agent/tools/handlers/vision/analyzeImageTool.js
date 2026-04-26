@@ -89,6 +89,7 @@ const executeAnalyzeImageTool = async ({
     kind: 'tool_result',
     toolName: IMAGE_TOOL_NAME,
     content: JSON.stringify(result),
+    result,
     meta: buildImageToolMeta(result, 'success'),
   }
 }

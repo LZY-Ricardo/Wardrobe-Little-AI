@@ -62,7 +62,9 @@ test('chat-stream route keeps autonomous tools enabled for streaming runtime', a
     req: {
       on: () => {},
     },
-    res: {},
+    res: {
+      on: () => {},
+    },
   }
 
   try {
@@ -145,6 +147,7 @@ test('chat-stream route emits sse error event when runtime throws after headers 
     },
     res: {
       headersSent: false,
+      on: () => {},
     },
   }
 
@@ -162,5 +165,86 @@ test('chat-stream route emits sse error event when runtime throws after headers 
     else delete require.cache[sseModulePath]
     if (originalSseEventsModule) require.cache[sseEventsModulePath] = originalSseEventsModule
     else delete require.cache[sseEventsModulePath]
+  }
+})
+
+test('chat-stream route does not treat request close as client disconnect for SSE', async () => {
+  let capturedIsClientGone = null
+  let reqCloseHandler = null
+  let resCloseHandler = null
+
+  require.cache[runtimeModulePath] = {
+    exports: {
+      appendAgentMessage: async () => ({}),
+      cancelUnifiedAgentAction: async () => ({}),
+      confirmUnifiedAgentAction: async () => ({}),
+      createAgentSession: async () => ({}),
+      listAgentSessions: async () => ([]),
+      restoreAgentSession: async () => ({}),
+      sendUnifiedAgentMessage: async () => ({}),
+      sendUnifiedAgentMessageStream: async (_userId, _sessionId, _input, _ctx, deps) => {
+        capturedIsClientGone = deps.isClientGone
+      },
+      updateAgentSessionMemory: async () => ({}),
+    },
+  }
+
+  require.cache[jwtModulePath] = {
+    exports: {
+      verify: () => async (ctx, next) => {
+        ctx.userId = 123
+        await next()
+      },
+    },
+  }
+
+  require.cache[sseModulePath] = {
+    exports: {
+      setSseHeaders: () => {},
+    },
+  }
+
+  delete require.cache[routeModulePath]
+  const router = require('../routes/unifiedAgent')
+  const middleware = router.routes()
+
+  const ctx = {
+    method: 'POST',
+    path: '/unified-agent/sessions/42/chat-stream',
+    request: {
+      body: {
+        input: '你好',
+        attachments: [],
+      },
+    },
+    req: {
+      on: (event, handler) => {
+        if (event === 'close') reqCloseHandler = handler
+      },
+    },
+    res: {
+      on: (event, handler) => {
+        if (event === 'close') resCloseHandler = handler
+      },
+    },
+  }
+
+  try {
+    await middleware(ctx, async () => {})
+    assert.equal(typeof capturedIsClientGone, 'function')
+
+    reqCloseHandler?.()
+    assert.equal(capturedIsClientGone(), false)
+
+    resCloseHandler?.()
+    assert.equal(capturedIsClientGone(), true)
+  } finally {
+    delete require.cache[routeModulePath]
+    if (originalRuntimeModule) require.cache[runtimeModulePath] = originalRuntimeModule
+    else delete require.cache[runtimeModulePath]
+    if (originalJwtModule) require.cache[jwtModulePath] = originalJwtModule
+    else delete require.cache[jwtModulePath]
+    if (originalSseModule) require.cache[sseModulePath] = originalSseModule
+    else delete require.cache[sseModulePath]
   }
 })

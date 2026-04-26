@@ -31,7 +31,15 @@ test('summarizeAgentResult summarizes recommendation result', () => {
     taskType: 'recommendation',
     result: { suits: [{}, {}] },
   })
-  assert.equal(summary, '生成了 2 套推荐')
+  assert.equal(summary, '当前展示第 1 套，共 2 套推荐')
+})
+
+test('summarizeAgentResult summarizes single recommendation result', () => {
+  const summary = summarizeAgentResult({
+    taskType: 'recommendation',
+    result: { suits: [{}] },
+  })
+  assert.equal(summary, '当前展示 1 套推荐')
 })
 
 test('summarizeAgentResult summarizes suit detail result', () => {

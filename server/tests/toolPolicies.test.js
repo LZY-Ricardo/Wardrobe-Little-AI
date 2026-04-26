@@ -79,4 +79,15 @@ test('image tool visibility depends on current input mode', () => {
     isToolVisibleForLlm(listClothes, { hasImage: false, intent: 'clothing' }),
     true
   )
+
+  assert.equal(
+    isToolVisibleForLlm(
+      {
+        name: 'show_context_images',
+        llmVisible: true,
+      },
+      { hasImage: false, intent: 'clothing' }
+    ),
+    true
+  )
 })

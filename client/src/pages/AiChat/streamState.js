@@ -11,6 +11,9 @@ export const createStreamPlaceholder = ({ imageCount = 0, streamMessageId = '' }
   toolPhase: imageCount > 0 ? '正在准备图片消息…' : '',
   reasoningStartTime: null,
   reasoningDurationMs: null,
+  errorDetail: '',
+  errorStage: '',
+  errorStatus: null,
 })
 
 export const applyStreamContent = (message, {
@@ -81,6 +84,9 @@ export const applyStreamFailure = (message, {
   reasoningStartTime = null,
   reasoningDurationMs = null,
   deliveryStatus = 'failed',
+  errorDetail = '',
+  errorStage = '',
+  errorStatus = null,
 } = {}) => ({
   ...message,
   deliveryStatus,
@@ -88,6 +94,9 @@ export const applyStreamFailure = (message, {
   reasoningContent: reasoningText,
   reasoningStartTime,
   reasoningDurationMs,
+  errorDetail: String(errorDetail || '').trim(),
+  errorStage: String(errorStage || '').trim(),
+  errorStatus: Number.isFinite(Number(errorStatus)) ? Number(errorStatus) : null,
 })
 
 export const finalizeOptimisticUserMessage = (messages = [], {

@@ -18,10 +18,41 @@ const buildContentEvent = (text = '') => ({
   text: String(text || ''),
 })
 
-const buildErrorEvent = (msg = '') => ({
-  type: 'error',
-  msg: String(msg || ''),
-})
+const buildErrorEvent = (input = '') => {
+  if (input && typeof input === 'object' && !Array.isArray(input)) {
+    const msg = String(input.msg || input.message || '').trim()
+    const detail = String(input.detail || '').trim()
+    const stage = String(input.stage || '').trim()
+    const code = String(input.code || '').trim()
+    const providerMessage = String(input.providerMessage || '').trim()
+    const debugMessage = String(input.debugMessage || '').trim()
+    const status = Number(input.status)
+    const upstreamStatus = Number(input.upstreamStatus)
+    const requestSummary =
+      input.requestSummary && typeof input.requestSummary === 'object' && !Array.isArray(input.requestSummary)
+        ? input.requestSummary
+        : null
+
+    return {
+      type: 'error',
+      msg,
+      ...(detail ? { detail } : {}),
+      ...(stage ? { stage } : {}),
+      ...(code ? { code } : {}),
+      ...(providerMessage ? { providerMessage } : {}),
+      ...(debugMessage ? { debugMessage } : {}),
+      ...(Number.isFinite(status) ? { status } : {}),
+      ...(Number.isFinite(upstreamStatus) ? { upstreamStatus } : {}),
+      ...(requestSummary ? { requestSummary } : {}),
+      ...(typeof input.retryable === 'boolean' ? { retryable: input.retryable } : {}),
+    }
+  }
+
+  return {
+    type: 'error',
+    msg: String(input || ''),
+  }
+}
 
 const buildTaskResultEvent = ({ message = null, latest_task = null, restored = null } = {}) => ({
   type: 'task_result',

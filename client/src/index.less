@@ -66,77 +66,9 @@ html {
   color: var(--text-primary);
 }
 
-html[data-theme='light'] {
-  --bg-body: #f5f7fb;
-  --bg-surface: #ffffff;
-  --text-primary: #1f2937;
-  --text-secondary: #4b5563;
-  --border-subtle: rgba(0, 0, 0, 0.08);
-  --shadow-soft: 0 8px 32px rgba(15, 23, 42, 0.12);
-  --shadow-header: 0 4px 20px rgba(15, 23, 42, 0.1);
-  --chip-bg: #ffffff;
-  --chip-border: #e5e7eb;
-  --muted: #6b7280;
-  --accent-primary: #667eea;
-  --accent-strong: #f8c537;
-  --nav-bg: #ffffff;
-  --nav-shadow: 0 -2px 8px rgba(0, 0, 0, 0.08);
-}
-
-html[data-theme='dark'] {
-  --bg-body: #0b1220;
-  --bg-surface: #111827;
-  --text-primary: #e5e7eb;
-  --text-secondary: #cbd5e1;
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --shadow-soft: 0 8px 32px rgba(0, 0, 0, 0.45);
-  --shadow-header: 0 4px 20px rgba(0, 0, 0, 0.55);
-  --chip-bg: rgba(255, 255, 255, 0.08);
-  --chip-border: rgba(255, 255, 255, 0.12);
-  --muted: #94a3b8;
-  --accent-primary: #60a5fa;
-  --accent-strong: #fbbf24;
-  --nav-bg: #0f172a;
-  --nav-shadow: 0 -2px 12px rgba(0, 0, 0, 0.45);
-}
-
-html[data-theme='dark'] .dark-mode-toggle {
-  filter: none !important;
-}
-
 body {
   background-color: var(--bg-body);
   color: var(--text-primary);
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* react-vant: dark theme overrides (Popup/Dialog/Picker etc.) */
-html[data-theme='dark'] {
-  --rv-text-color: var(--text-primary);
-  --rv-text-color-weak: var(--muted);
-  --rv-border-color: var(--border-subtle);
-  --rv-background-color: var(--bg-body);
-  --rv-background-color-light: var(--bg-surface);
-
-  --rv-popup-background-color: var(--bg-surface);
-  --rv-popup-title-color: var(--text-primary);
-  --rv-popup-description-color: var(--text-secondary);
-  --rv-popup-close-icon-color: rgba(229, 231, 235, 0.72);
-  --rv-popup-close-icon-active-color: rgba(229, 231, 235, 0.92);
-
-  --rv-dialog-background-color: var(--bg-surface);
-  --rv-dialog-has-title-message-text-color: var(--text-secondary);
-  --rv-dialog-confirm-button-text-color: var(--accent-primary);
-
-  --rv-picker-background-color: var(--bg-surface);
-  --rv-picker-option-text-color: var(--text-primary);
-  --rv-picker-cancel-action-color: var(--muted);
-  --rv-picker-confirm-action-color: var(--accent-primary);
-  --rv-picker-loading-mask-color: rgba(17, 24, 39, 0.92);
-  --rv-picker-mask-background-image: linear-gradient(
-      180deg,
-      rgba(17, 24, 39, 0.9),
-      rgba(17, 24, 39, 0.4)
-    ),
-    linear-gradient(0deg, rgba(17, 24, 39, 0.9), rgba(17, 24, 39, 0.4));
-}

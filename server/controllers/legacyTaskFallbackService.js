@@ -1,4 +1,5 @@
 const { executeTool } = require('../utils/toolRegistry')
+const { resolveFocusFromLatestTask, resolveInsightFromLatestTask } = require('../agent/context/agentContextProtocol')
 const {
   getProfileInsight,
   gatherSourceData,
@@ -16,6 +17,7 @@ const {
   executeConfirmedAgentTask,
   stageAgentConfirmation,
 } = require('./confirmationService')
+const { isProbablyBase64Image } = require('../utils/validate')
 
 const formatResultPayload = ({ taskType, input, result }) => ({
   taskType,
@@ -23,6 +25,44 @@ const formatResultPayload = ({ taskType, input, result }) => ({
   result,
   summary: summarizeAgentResult({ taskType, result }),
 })
+
+const pickRuntimeImageAttachments = (runtimeContext = {}) =>
+  (Array.isArray(runtimeContext?.multimodal?.attachments) ? runtimeContext.multimodal.attachments : [])
+    .map((item) => String(item?.dataUrl || '').trim())
+    .filter((value) => isProbablyBase64Image(value))
+
+const normalizeDraftClothWithRuntimeImage = (draftCloth = {}, imageDataUrl = '') => {
+  const next = { ...(draftCloth && typeof draftCloth === 'object' ? draftCloth : {}) }
+  const currentImage = String(next.image || '').trim()
+
+  if (isProbablyBase64Image(currentImage)) return next
+  if (imageDataUrl) {
+    next.image = imageDataUrl
+    return next
+  }
+
+  delete next.image
+  return next
+}
+
+const resolveSelectedCloth = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  if (focus?.type === 'cloth') return focus.entity
+  if (latestTask?.selectedCloth) return latestTask.selectedCloth
+  if (latestTask?.result?.selectedCloth) return latestTask.result.selectedCloth
+  if (latestTask?.result && Number.parseInt(latestTask.result?.cloth_id, 10) > 0) return latestTask.result
+  return null
+}
+
+const resolveSelectedSuit = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  return focus?.type === 'suit' ? focus.entity : latestTask?.selectedSuit || latestTask?.result?.selectedSuit || null
+}
+
+const resolveSelectedOutfitLog = (latestTask = null) => {
+  const focus = resolveFocusFromLatestTask(latestTask)
+  return focus?.type === 'outfitLog' ? focus.entity : latestTask?.selectedOutfitLog || latestTask?.result?.selectedOutfitLog || null
+}
 
 const resolveWriteActionOptions = (input, latestTask) => {
   const text = String(input || '')
@@ -51,7 +91,9 @@ const resolveWriteActionOptions = (input, latestTask) => {
     return {
       action: 'update_user_sex',
       latestResult: {
-        latestProfile: latestTask?.latestProfile || latestTask?.result?.latestProfile || null,
+        latestProfile: resolveInsightFromLatestTask(latestTask)?.type === 'profile'
+          ? resolveInsightFromLatestTask(latestTask).entity
+          : latestTask?.latestProfile || latestTask?.result?.latestProfile || null,
         sex: normalizedSex,
       },
     }
@@ -70,9 +112,9 @@ const resolveWriteActionOptions = (input, latestTask) => {
     }
   }
 
-  const selectedCloth = latestTask?.selectedCloth || latestTask?.result?.selectedCloth
-  const selectedSuit = latestTask?.selectedSuit || latestTask?.result?.selectedSuit
-  const selectedOutfitLog = latestTask?.selectedOutfitLog || latestTask?.result?.selectedOutfitLog
+  const selectedCloth = resolveSelectedCloth(latestTask)
+  const selectedSuit = resolveSelectedSuit(latestTask)
+  const selectedOutfitLog = resolveSelectedOutfitLog(latestTask)
 
   if (selectedCloth) {
     const clothDetailIntent =
@@ -274,12 +316,25 @@ const resolveWriteActionOptions = (input, latestTask) => {
 const mapToolIntentToTaskOptions = (toolName = '', toolArgs = {}, runtimeContext = {}) => {
   const args = toolArgs && typeof toolArgs === 'object' ? toolArgs : {}
   const latestTask = runtimeContext?.latestTask || null
+  const attachmentImages = pickRuntimeImageAttachments(runtimeContext)
 
   if (toolName === 'create_cloth') {
-    return { action: 'create_cloth', latestResult: { draftCloth: args } }
+    return {
+      action: 'create_cloth',
+      latestResult: {
+        draftCloth: normalizeDraftClothWithRuntimeImage(args, attachmentImages[0] || ''),
+      },
+    }
   }
   if (toolName === 'create_clothes_batch') {
-    return { action: 'create_clothes_batch', latestResult: { draftClothes: Array.isArray(args.items) ? args.items : [] } }
+    return {
+      action: 'create_clothes_batch',
+      latestResult: {
+        draftClothes: (Array.isArray(args.items) ? args.items : []).map((item, index) =>
+          normalizeDraftClothWithRuntimeImage(item, attachmentImages[index] || '')
+        ),
+      },
+    }
   }
   if (toolName === 'update_cloth_fields') {
     const { cloth_id, ...patch } = args
@@ -371,7 +426,7 @@ const executeLegacyAgentTask = async (userId, input, sourceEntry = 'agent-page',
   const historyRepo = deps.historyRepo || {}
 
   if (options?.action === 'view_cloth_details') {
-    const selectedCloth = options?.latestResult?.selectedCloth || options?.latestResult?.result?.selectedCloth
+    const selectedCloth = resolveSelectedCloth(options?.latestResult)
     const clothId = Number.parseInt(selectedCloth?.cloth_id, 10)
     if (!clothId) {
       const error = new Error('当前没有可查看的衣物对象')
@@ -409,7 +464,7 @@ const executeLegacyAgentTask = async (userId, input, sourceEntry = 'agent-page',
   }
 
   if (options?.action === 'view_suit_details') {
-    const selectedSuit = options?.latestResult?.selectedSuit || options?.latestResult?.result?.selectedSuit
+    const selectedSuit = resolveSelectedSuit(options?.latestResult)
     const suitId = Number.parseInt(selectedSuit?.suit_id, 10)
     if (!suitId) {
       const error = new Error('当前没有可查看的套装对象')
@@ -447,7 +502,7 @@ const executeLegacyAgentTask = async (userId, input, sourceEntry = 'agent-page',
   }
 
   if (options?.action === 'view_outfit_log_details') {
-    const selectedOutfitLog = options?.latestResult?.selectedOutfitLog || options?.latestResult?.result?.selectedOutfitLog
+    const selectedOutfitLog = resolveSelectedOutfitLog(options?.latestResult)
     const outfitLogId = Number.parseInt(selectedOutfitLog?.id, 10)
     if (!outfitLogId) {
       const error = new Error('当前没有可查看的穿搭记录对象')

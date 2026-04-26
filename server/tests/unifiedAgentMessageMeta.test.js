@@ -41,6 +41,14 @@ test('normalizeMessageMeta keeps only supported message meta fields', () => {
       { name: 'analyze_image', label: '图片分析', status: 'success', at: 123, ignored: 'x' },
     ],
     toolResultsSummary: ['  图片分析完成  '],
+    latestTask: {
+      taskType: 'create_cloth',
+      status: 'success',
+      selectedCloth: {
+        cloth_id: 12,
+        name: '白色鞋子',
+      },
+    },
     unknownBlock: { foo: 'bar' },
   })
 
@@ -75,6 +83,14 @@ test('normalizeMessageMeta keeps only supported message meta fields', () => {
       { name: 'analyze_image', label: '图片分析', status: 'success', at: 123 },
     ],
     toolResultsSummary: ['图片分析完成'],
+    latestTask: {
+      taskType: 'create_cloth',
+      status: 'success',
+      selectedCloth: {
+        cloth_id: 12,
+        name: '白色鞋子',
+      },
+    },
   })
 })
 
@@ -90,6 +106,8 @@ test('normalizeMessageMeta keeps assistant image attachment metadata and drops i
         variant: 'composite',
         objectType: 'recommendation',
         objectId: '18',
+        suitIndex: '1',
+        suitLabel: '第 2 套',
       },
       {
         type: 'image',
@@ -115,6 +133,8 @@ test('normalizeMessageMeta keeps assistant image attachment metadata and drops i
         variant: 'composite',
         objectType: 'recommendation',
         objectId: 18,
+        suitIndex: 1,
+        suitLabel: '第 2 套',
       },
       {
         type: 'image',

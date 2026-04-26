@@ -1,86 +1,52 @@
 import { normalizeRestoredMessages } from './viewModels.js'
+import {
+  resolveLatestTaskFromAgentState,
+  resolvePendingImagesFromAgentState,
+} from '../../utils/agentContext.js'
+
+export const shouldRestorePrefillInput = ({
+  prefillText = '',
+  status = '',
+  input = '',
+  displayedMessageCount = 0,
+} = {}) => {
+  if (!String(prefillText || '').trim()) return false
+  if (status !== 'success') return false
+  if (String(input || '').trim()) return false
+  if (Number(displayedMessageCount || 0) > 0) return false
+  return true
+}
+
+export const resolveSessionBootstrapState = ({
+  sessionId = Number.NaN,
+  hasSessionIdQuery = false,
+  initialLatestTask = null,
+} = {}) => {
+  if (Number.isFinite(sessionId)) {
+    return { mode: 'existing-session' }
+  }
+
+  if (hasSessionIdQuery) {
+    return {
+      mode: 'invalid-session',
+      error: '会话不存在',
+    }
+  }
+
+  return {
+    mode: 'blank-session',
+    session: null,
+    messages: [],
+    pendingConfirmation: null,
+    latestTask: initialLatestTask,
+  }
+}
 
 export const resolveInitialLatestTask = (locationState = null) => {
-  if (!locationState || typeof locationState !== 'object') return null
-
-  if (locationState.latestResult && typeof locationState.latestResult === 'object') {
-    return locationState.latestResult
-  }
-
-  if (locationState.selectedCloth) {
-    return {
-      selectedCloth: locationState.selectedCloth,
-    }
-  }
-
-  if (locationState.selectedSuit) {
-    return {
-      selectedSuit: locationState.selectedSuit,
-    }
-  }
-
-  if (locationState.selectedOutfitLog) {
-    return {
-      selectedOutfitLog: locationState.selectedOutfitLog,
-    }
-  }
-
-  if (locationState.latestProfile) {
-    return {
-      latestProfile: locationState.latestProfile,
-    }
-  }
-
-  if (locationState.latestAnalytics) {
-    return {
-      latestAnalytics: locationState.latestAnalytics,
-    }
-  }
-
-  if (locationState.latestWeather) {
-    return {
-      latestWeather: locationState.latestWeather,
-    }
-  }
-
-  if (locationState.styleProfile) {
-    return {
-      styleProfile: locationState.styleProfile,
-    }
-  }
-
-  if (locationState.recommendationHistory) {
-    return {
-      recommendationHistory: locationState.recommendationHistory,
-    }
-  }
-
-  if (locationState.manualSuitDraft) {
-    return {
-      manualSuitDraft: locationState.manualSuitDraft,
-    }
-  }
-
-  if (locationState.manualOutfitLogDraft) {
-    return {
-      manualOutfitLogDraft: locationState.manualOutfitLogDraft,
-    }
-  }
-
-  return null
+  return resolveLatestTaskFromAgentState(locationState)
 }
 
-export const resolveInitialPendingImages = (locationState = null) => {
-  if (!locationState || typeof locationState !== 'object') return []
-  const images = Array.isArray(locationState.prefillImages) ? locationState.prefillImages : []
-  return images.filter(
-    (item) =>
-      item &&
-      item.type === 'image' &&
-      typeof item.dataUrl === 'string' &&
-      item.dataUrl.startsWith('data:image/')
-  )
-}
+export const resolveInitialPendingImages = (locationState = null) => resolvePendingImagesFromAgentState(locationState)
 
 export const resolveLoadedSessionState = ({
   payload = {},
@@ -89,12 +55,13 @@ export const resolveLoadedSessionState = ({
 } = {}) => {
   const restoredMessages = normalizeRestoredMessages(payload?.recent_messages)
   const restoredPending = [...restoredMessages].reverse().find((message) => message.pendingConfirmation)?.pendingConfirmation || null
+  const restoredLatestTask = [...restoredMessages].reverse().find((message) => message.latestTask)?.latestTask || null
 
   return {
     session: payload?.session || fallbackSession,
     messages: restoredMessages,
     pendingConfirmation: restoredPending,
-    latestTask: restoredPending ? null : initialLatestTask,
+    latestTask: restoredPending ? null : (restoredLatestTask || initialLatestTask),
   }
 }
 

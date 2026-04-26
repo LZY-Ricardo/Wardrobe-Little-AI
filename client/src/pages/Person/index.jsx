@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { Dialog, Popup, Picker, Selector } from 'react-vant'
 import { Toast } from 'antd-mobile'
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
 import { useAuthStore, useClosetStore } from '@/store'
 import { Loading, ErrorBanner } from '@/components/Feedback'
 
@@ -145,6 +147,30 @@ export default function Person() {
   const [, setConfirmDialogVisible] = useState(false)
 
   const hasCharacterModel = Boolean(userInfo?.characterModel || uploadedImage)
+  useAgentPageEntry({
+    enabled: !userLoading,
+    presetTask: '根据我当前的穿搭档案和个人信息，给我一些更适合我的穿搭建议',
+    state: buildAgentContextState({
+      insight: {
+        type: 'styleProfile',
+        entity: {
+          city: profile.city || '',
+          heightCm: profile.heightCm || '',
+          weightKg: profile.weightKg || '',
+          topSize: profile.topSize || '',
+          bottomSize: profile.bottomSize || '',
+          shoeSize: profile.shoeSize || '',
+          style: profile.style || '',
+          colors: profile.colors || '',
+          scenes: profile.scenes || '',
+          sex: sex || '',
+          hasCharacterModel,
+          clothesCount: assetStats.clothesCount || 0,
+          favoriteCount: assetStats.favoriteCount || 0,
+        },
+      },
+    }),
+  })
 
   // 获取用户所有信息
   const getUserInfo = useCallback(async (forceRefresh = false) => {
@@ -903,35 +929,6 @@ export default function Person() {
         <div className={styles.cardHeader}>
           <div className={styles.cardTitle}>穿搭档案</div>
           <div className={styles.cardActions}>
-            <button
-              type="button"
-              className={styles.cardAction}
-              onClick={() =>
-                navigate('/unified-agent', {
-                  state: {
-                    presetTask: '根据我当前的穿搭档案和个人信息，给我一些更适合我的穿搭建议',
-                    styleProfile: {
-                      city: profile.city || '',
-                      heightCm: profile.heightCm || '',
-                      weightKg: profile.weightKg || '',
-                      topSize: profile.topSize || '',
-                      bottomSize: profile.bottomSize || '',
-                      shoeSize: profile.shoeSize || '',
-                      style: profile.style || '',
-                      colors: profile.colors || '',
-                      scenes: profile.scenes || '',
-                      sex: sex || '',
-                      hasCharacterModel,
-                      clothesCount: assetStats.clothesCount || 0,
-                      favoriteCount: assetStats.favoriteCount || 0,
-                    },
-                  },
-                })
-              }
-              disabled={userLoading}
-            >
-              交给 Agent
-            </button>
             <button type="button" className={styles.cardAction} onClick={openProfilePopup} disabled={userLoading}>
               编辑
             </button>

@@ -32,6 +32,9 @@ export const mapMessage = (message) => {
   const attachments = resolvedAttachments
     .slice()
     .sort((left, right) => {
+      const leftSuitIndex = Number.isFinite(Number(left?.suitIndex)) ? Number(left.suitIndex) : -1
+      const rightSuitIndex = Number.isFinite(Number(right?.suitIndex)) ? Number(right.suitIndex) : -1
+      if (leftSuitIndex !== rightSuitIndex) return leftSuitIndex - rightSuitIndex
       const leftScore = left?.variant === 'composite' ? 0 : 1
       const rightScore = right?.variant === 'composite' ? 0 : 1
       if (leftScore !== rightScore) return leftScore - rightScore
@@ -52,10 +55,44 @@ export const mapMessage = (message) => {
     pendingConfirmation: meta?.pendingConfirmation || null,
     toolCalls: Array.isArray(meta?.toolCalls) ? meta.toolCalls : [],
     toolResultsSummary: Array.isArray(meta?.toolResultsSummary) ? meta.toolResultsSummary : [],
+    latestTask: meta?.latestTask || null,
     toolPhase: '',
     reasoningStartTime: null,
     reasoningDurationMs: null,
   }
+}
+
+export const buildRecommendationAttachmentGroups = (attachments = []) => {
+  const source = Array.isArray(attachments) ? attachments.filter((item) => item?.dataUrl) : []
+  const hasSuitIndex = source.some((item) => Number.isFinite(Number(item?.suitIndex)))
+  if (!hasSuitIndex) return []
+
+  const groups = new Map()
+  source.forEach((item) => {
+    const suitIndex = Number(item?.suitIndex)
+    if (!Number.isFinite(suitIndex) || suitIndex < 0) return
+    const current = groups.get(suitIndex) || {
+      suitIndex,
+      label: String(item?.suitLabel || `第 ${suitIndex + 1} 套`).trim() || `第 ${suitIndex + 1} 套`,
+      attachments: [],
+    }
+    current.attachments.push(item)
+    groups.set(suitIndex, current)
+  })
+
+  return [...groups.values()]
+    .sort((left, right) => left.suitIndex - right.suitIndex)
+    .map((group) => ({
+      ...group,
+      attachments: group.attachments
+        .slice()
+        .sort((left, right) => {
+          const leftScore = left?.variant === 'composite' ? 0 : 1
+          const rightScore = right?.variant === 'composite' ? 0 : 1
+          if (leftScore !== rightScore) return leftScore - rightScore
+          return 0
+        }),
+    }))
 }
 
 export const computeReasoningSeconds = (message) => {
@@ -135,6 +172,8 @@ const stripToolResultBlocks = (text = '') =>
 
 export const getDisplayMessageText = (message) => {
   if (!message) return ''
+  const hasRecommendationAttachments = Array.isArray(message.attachments)
+    && message.attachments.some((item) => item?.objectType === 'recommendation')
   const text = stripToolResultBlocks(message.content || '')
   const cleaned = ['image', 'multimodal'].includes(message.messageType)
     ? text
@@ -157,6 +196,14 @@ export const getDisplayMessageText = (message) => {
     Array.isArray(message.toolCalls) &&
     message.toolCalls.length &&
     /^(?:\{[\s\S]*\}|\[[\s\S]*\])$/.test(toolAwareCleaned)
+  ) {
+    return ''
+  }
+
+  if (
+    message.role === 'assistant' &&
+    hasRecommendationAttachments &&
+    /^(?:当前展示(?:第\s*\d+\s*套)?(?:，|\s*)共\s*\d+\s*套推荐|当前展示\s*1\s*套推荐|暂未生成推荐)$/.test(toolAwareCleaned)
   ) {
     return ''
   }
@@ -272,3 +319,7 @@ export const buildConfirmationItems = (pendingConfirmation) => {
 
   return { fields, items }
 }
+
+export const buildConfirmationPreviewImages = (pendingConfirmation) =>
+  (Array.isArray(pendingConfirmation?.previewImages) ? pendingConfirmation.previewImages : [])
+    .filter((item) => item?.dataUrl)

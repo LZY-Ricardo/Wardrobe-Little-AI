@@ -22,8 +22,9 @@
     left: 0;
     right: 0;
     z-index: 6666;
-    background: var(--nav-bg);
-    box-shadow: var(--nav-shadow);
+    padding: 0 10px env(safe-area-inset-bottom);
+    background: transparent;
+    box-shadow: none;
     transition: background-color 0.3s ease,
                 box-shadow 0.3s ease,
                 transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
@@ -31,13 +32,27 @@
     :global(.adm-tab-bar) {
         position: relative;
         z-index: 2;
-        background: var(--nav-bg);
+        padding: 4px 6px;
+        border-radius: 24px 24px 0 0;
+        background: rgba(255, 255, 255, 0.92);
+        backdrop-filter: blur(16px);
+        box-shadow: 0 -4px 18px rgba(15, 23, 42, 0.08);
+        border-top: 1px solid rgba(226, 232, 240, 0.9);
     }
 
     :global(.adm-tab-bar-item-icon),
     :global(.adm-tab-bar-item-title) {
         color: var(--text-secondary);
         transition: color 0.3s ease;
+    }
+
+    :global(.adm-tab-bar-item) {
+        min-height: 58px;
+    }
+
+    :global(.adm-tab-bar-item-title) {
+        font-size: 11px;
+        line-height: 1.2;
     }
 
     :global(.adm-tab-bar-item-active .adm-tab-bar-item-icon),
@@ -79,28 +94,29 @@
 /* ---------- hide handle (top-center pill) ---------- */
 .hide-handle {
     position: absolute;
-    top: 0;
+    top: -2px;
     left: 50%;
     transform: translateX(-50%);
-    width: 44px;
-    height: 14px;
-    padding: 5px 0 0;
+    width: 56px;
+    height: 18px;
+    padding: 4px 0 0;
     background: none;
     border: none;
     cursor: pointer;
-    z-index: 3;
+    z-index: 5;
     display: flex;
     align-items: flex-start;
     justify-content: center;
+    pointer-events: auto;
 }
 
 .hide-pill {
     display: block;
-    width: 22px;
-    height: 3px;
+    width: 24px;
+    height: 4px;
     border-radius: 2px;
     background: var(--text-secondary);
-    opacity: 0.25;
+    opacity: 0.32;
     animation: handlePulse 2.4s ease-in-out infinite;
     transition: opacity 0.15s ease, background 0.15s ease, width 0.15s ease;
 }
@@ -149,6 +165,12 @@
 
 /* ---------- center agent tab ---------- */
 .center-tab {
+    position: relative;
+
+    :global(.adm-tab-bar-item-icon) {
+        overflow: visible;
+    }
+
     :global(.adm-tab-bar-item-title) {
         display: none !important;
     }
@@ -158,25 +180,25 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     overflow: hidden;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
-    transform: translateY(-6px);
+    transform: translateY(-10px);
 
     &:active {
-        transform: translateY(-6px) scale(0.93);
+        transform: translateY(-10px) scale(0.93);
     }
 }
 
 .agent-btn--inactive {
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.12);
-    opacity: 0.65;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.16);
+    opacity: 0.9;
 }
 
 .agent-btn--active {
-    box-shadow: 0 3px 16px rgba(168, 85, 247, 0.55);
+    box-shadow: 0 6px 20px rgba(168, 85, 247, 0.42);
 }
 
 .agent-avatar-svg {

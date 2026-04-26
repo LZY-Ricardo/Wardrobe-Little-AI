@@ -8,8 +8,17 @@ const {
   buildToolCompletedEventMeta,
   mergeToolMeta,
 } = require('./toolEventAdapter')
+const { createRecommendationHistory } = require('../../../controllers/recommendations')
+const {
+  resolveDraftFromLatestTask,
+  resolveFocusFromLatestTask,
+  resolveInsightFromLatestTask,
+} = require('../../context/agentContextProtocol')
+const { summarizeRecommendationResultText } = require('../../../controllers/agent.helpers')
 const { presentToolResult } = require('./resultPresenterResolver')
 const { IMAGE_TOOL_NAME, executeAnalyzeImageTool } = require('../handlers/vision/analyzeImageTool')
+const SHOW_CONTEXT_IMAGES_TOOL_NAME = 'show_context_images'
+const GENERATE_OUTFIT_PREVIEW_TOOL_NAME = 'generate_outfit_preview'
 const {
   buildContentEvent,
   buildReasoningEvent,
@@ -42,9 +51,13 @@ const AUTONOMOUS_TOOL_PROMPT = `你是 Clothora 的统一业务代理。
 3. 如果用户提供了图片且任务和图片内容有关，优先考虑调用 analyze_image。
 4. 如果 analyze_image 返回了多件可独立保存的衣物，且用户表达“全部保存/直接存入衣橱/都帮我录入”之类意图，优先调用 create_clothes_batch；若只有一件再调用 create_cloth。
 5. 当用户提到“这件 / 这双 / 当前 / 刚刚那套 / 这条记录”等上下文对象时，要优先利用会话上下文。
-6. 不要编造任何工具未返回的数据。
-7. 不要向用户展示 tool_calls、函数参数、原始 JSON、TOOL_RESULT 或其他内部结构。
-8. 如果不需要工具，直接给出最终答复。`
+6. 当用户明确要求“展示图片 / 发图 / 给我看看图 / 展示刚刚那件的图片”且当前上下文已有衣物、套装、穿搭记录或推荐结果时，优先调用 show_context_images，不要再回答自己无法展示图片。
+7. 当用户明确要求展示多件指定衣物图片，且上下文里已经有对应衣物编号列表时，优先调用 show_clothes_images，并传入准确的 cloth_ids。
+8. 当用户要求“根据当前已选上衣和下衣生成预览图 / 真人试穿图 / 搭配预览图”时，先调用 show_context_images 展示当前单品，再调用 generate_outfit_preview 生成预览图。
+9. 当用户在要“推荐穿搭 / 今日穿什么 / 某场景怎么穿 / 晨跑穿什么”这类具体搭配建议时，必须先调用 generate_scene_suits 基于真实衣橱生成结果；不要只根据天气、画像或统计直接脑补具体衣物。
+10. 不要编造任何工具未返回的数据。
+11. 不要向用户展示 tool_calls、函数参数、原始 JSON、TOOL_RESULT 或其他内部结构。
+12. 如果不需要工具，直接给出最终答复。`
 
 const extractAssistantText = (message = {}) => {
   if (typeof message?.content === 'string') return message.content
@@ -57,6 +70,24 @@ const extractAssistantText = (message = {}) => {
   return ''
 }
 
+const summarizeMessageForDebug = (message = {}) => ({
+  role: String(message?.role || '').trim(),
+  hasContent: Boolean(extractAssistantText(message)),
+  hasReasoning: Boolean(extractReasoningContent(message)),
+  toolCallCount: Array.isArray(message?.tool_calls) ? message.tool_calls.length : 0,
+  toolCallNames: Array.isArray(message?.tool_calls)
+    ? message.tool_calls.map((item) => item?.function?.name).filter(Boolean).slice(0, 5)
+    : [],
+  toolCallId: message?.tool_call_id || '',
+  contentPreview: extractAssistantText(message).slice(0, 120),
+})
+
+const buildAssistantTurnRequestSummary = ({ messages = [], tools = [] } = {}) => ({
+  messageCount: Array.isArray(messages) ? messages.length : 0,
+  toolCount: Array.isArray(tools) ? tools.length : 0,
+  lastMessages: (Array.isArray(messages) ? messages : []).slice(-4).map(summarizeMessageForDebug),
+})
+
 const extractReasoningContent = (message = {}) => {
   const rc = message?.reasoning_content
   return typeof rc === 'string' ? rc : ''
@@ -67,6 +98,35 @@ const createEmptyStreamedAssistantMessage = () => ({
   content: '',
   reasoning_content: '',
   tool_calls: [],
+})
+
+const mergeMediaAttachments = (...groups) => {
+  const seen = new Set()
+  const merged = []
+  groups
+    .flat()
+    .filter(Boolean)
+    .forEach((item) => {
+      const key = [
+        item?.variant || '',
+        item?.objectType || '',
+        item?.objectId || '',
+        item?.dataUrl || '',
+      ].join(':')
+      if (!item?.dataUrl || seen.has(key)) return
+      seen.add(key)
+      merged.push(item)
+    })
+  return merged
+}
+
+const createMediaToolConversationEntry = (toolCallId, mediaReply = {}) => ({
+  role: 'tool',
+  tool_call_id: toolCallId,
+  content: normalizeToolResultContent({
+    summary: mediaReply.reply || '',
+    attachmentCount: Array.isArray(mediaReply.attachments) ? mediaReply.attachments.length : 0,
+  }),
 })
 
 const parseDeepSeekStreamingPayload = (line) => {
@@ -136,7 +196,9 @@ const streamAssistantTurnFromCompletion = async ({
       { stream: true, timeout: Number(process.env.DEEPSEEK_TIMEOUT_MS) || 120000 }
     )
   } catch (error) {
-    throw normalizeLlmError(error, 'DeepSeek 工具决策服务', CHAT_ERROR_MESSAGES)
+    const normalized = normalizeLlmError(error, 'DeepSeek 工具决策服务', CHAT_ERROR_MESSAGES)
+    normalized.requestSummary = buildAssistantTurnRequestSummary({ messages, tools })
+    throw normalized
   }
 
   const stream = streamResponse.data
@@ -289,12 +351,164 @@ const completeAutonomousToolResult = ({ emit, tool, toolName, result, fallbackSu
   return {
     kind: 'tool_result',
     toolName,
+    result,
     content: normalizeToolResultContent(result),
     meta: buildToolCompletedEventMeta({
       toolName,
       ok,
       summary,
     }),
+  }
+}
+
+const buildContextTaskFromToolResult = ({ toolName = '', result = null, input = '' } = {}) => {
+  if (!result || typeof result !== 'object' || result.error) return null
+
+  const taskSummary = String(input || '').trim()
+
+  if (toolName === 'list_clothes') {
+    return {
+      taskType: 'closet_query',
+      taskSummary,
+      summary: presentToolResult({
+        tool: { name: toolName, resultPresenter: 'list_clothes' },
+        result,
+        fallbackSummary: '查询到衣物列表',
+      }),
+      status: 'success',
+      requiresConfirmation: false,
+      relatedObjectType: 'clothes',
+      result,
+    }
+  }
+
+  if (toolName === 'get_cloth_detail' && Number.parseInt(result?.cloth_id, 10) > 0) {
+    return {
+      taskType: 'cloth_detail',
+      taskSummary,
+      summary: presentToolResult({
+        tool: { name: toolName, resultPresenter: 'get_cloth_detail' },
+        result,
+        fallbackSummary: '已读取衣物详情',
+      }),
+      status: 'success',
+      requiresConfirmation: false,
+      relatedObjectType: 'cloth',
+      relatedObjectId: result.cloth_id,
+      result: { selectedCloth: result },
+    }
+  }
+
+  if (toolName === 'get_suit_detail' && Number.parseInt(result?.suit_id, 10) > 0) {
+    return {
+      taskType: 'suit_detail',
+      taskSummary,
+      summary: presentToolResult({
+        tool: { name: toolName, resultPresenter: 'get_suit_detail' },
+        result,
+        fallbackSummary: '已读取套装详情',
+      }),
+      status: 'success',
+      requiresConfirmation: false,
+      relatedObjectType: 'suit',
+      relatedObjectId: result.suit_id,
+      result: { selectedSuit: result },
+    }
+  }
+
+  if (toolName === 'get_outfit_log_detail' && Number.parseInt(result?.id, 10) > 0) {
+    return {
+      taskType: 'outfit_log_detail',
+      taskSummary,
+      summary: presentToolResult({
+        tool: { name: toolName, resultPresenter: 'get_outfit_log_detail' },
+        result,
+        fallbackSummary: '已读取穿搭记录详情',
+      }),
+      status: 'success',
+      requiresConfirmation: false,
+      relatedObjectType: 'outfit_log',
+      relatedObjectId: result.id,
+      result: { selectedOutfitLog: result },
+    }
+  }
+
+  return null
+}
+
+const completeAutonomousMediaResult = ({ emit, toolName, result } = {}) => {
+  const summary = String(result?.summary || '已准备当前图片').trim() || '已准备当前图片'
+  emit?.(buildToolCallCompletedEvent({
+    toolName,
+    ok: true,
+    summary,
+    message: summary,
+  }))
+  return {
+    kind: 'media_reply',
+    reply: summary,
+    attachments: Array.isArray(result?.attachments) ? result.attachments : [],
+    meta: buildToolCompletedEventMeta({
+      toolName,
+      ok: true,
+      summary,
+    }),
+  }
+}
+
+const completeAutonomousTaskResult = ({ emit, toolName, taskResult, summary } = {}) => {
+  const normalizedSummary = String(summary || taskResult?.summary || '已完成任务').trim() || '已完成任务'
+  emit?.(buildToolCallCompletedEvent({
+    toolName,
+    ok: true,
+    summary: normalizedSummary,
+    message: normalizedSummary,
+  }))
+  return {
+    kind: 'task',
+    taskResult,
+    meta: buildToolCompletedEventMeta({
+      toolName,
+      ok: true,
+      summary: normalizedSummary,
+    }),
+  }
+}
+
+const buildRecommendationTaskResult = async ({
+  userId,
+  input = '',
+  args = {},
+  result = {},
+  deps = {},
+} = {}) => {
+  const suits = Array.isArray(result?.suits) ? result.suits : []
+  const scene = String(args?.scene || result?.scene || '').trim() || '通勤'
+  let recommendationHistoryId = Number.parseInt(result?.recommendationHistoryId, 10) || null
+
+  if (!recommendationHistoryId && suits.length) {
+    const savedRecommendation = await (deps.createRecommendationHistory || createRecommendationHistory)(userId, {
+      recommendationType: 'scene',
+      scene,
+      triggerSource: 'agent',
+      suits,
+    })
+    recommendationHistoryId = savedRecommendation?.id || null
+  }
+
+  return {
+    taskType: 'recommendation',
+    taskSummary: String(input || '').trim(),
+    summary: summarizeRecommendationResultText({ suits }),
+    status: 'success',
+    requiresConfirmation: false,
+    relatedObjectType: 'recommendation',
+    relatedObjectId: recommendationHistoryId,
+    result: {
+      ...result,
+      scene,
+      recommendationHistoryId,
+    },
   }
 }
 
@@ -308,19 +522,20 @@ const buildReplyFallbackAfterToolUse = ({
   const normalizedInput = String(input || '').replace(/\s+/g, '')
   const deleteIntent = /(删除|删掉|移除)/.test(normalizedInput)
 
-  const selectedCloth = latestTask?.selectedCloth || latestTask?.result?.selectedCloth
+  const focus = resolveFocusFromLatestTask(latestTask)
+  const selectedCloth = focus?.type === 'cloth' ? focus.entity : latestTask?.result?.selectedCloth
   if (deleteIntent && selectedCloth?.cloth_id) {
     const clothName = String(selectedCloth?.name || '这件衣物').trim() || '这件衣物'
     return `${lastSummary || `已读取“${clothName}”详情`}。若要继续删除这件衣物，我会先发起待确认操作。`
   }
 
-  const selectedSuit = latestTask?.selectedSuit || latestTask?.result?.selectedSuit
+  const selectedSuit = focus?.type === 'suit' ? focus.entity : latestTask?.result?.selectedSuit
   if (deleteIntent && selectedSuit?.suit_id) {
     const suitName = String(selectedSuit?.name || '这套搭配').trim() || '这套搭配'
     return `${lastSummary || `已读取套装“${suitName}”详情`}。若要继续删除这套搭配，我会先发起待确认操作。`
   }
 
-  const selectedOutfitLog = latestTask?.selectedOutfitLog || latestTask?.result?.selectedOutfitLog
+  const selectedOutfitLog = focus?.type === 'outfitLog' ? focus.entity : latestTask?.result?.selectedOutfitLog
   if (deleteIntent && selectedOutfitLog?.id) {
     const logName = String(selectedOutfitLog?.log_date || '这条穿搭记录').trim() || '这条穿搭记录'
     return `${lastSummary || `已读取 ${logName} 的穿搭记录`}。若要继续删除这条穿搭记录，我会先发起待确认操作。`
@@ -336,7 +551,11 @@ const buildReplyFallbackAfterToolUse = ({
 const buildLatestTaskContextMessage = (latestTask = null) => {
   if (!latestTask || typeof latestTask !== 'object') return ''
 
-  const selectedCloth = latestTask?.selectedCloth || latestTask?.result?.selectedCloth
+  const focus = resolveFocusFromLatestTask(latestTask)
+  const insight = resolveInsightFromLatestTask(latestTask)
+  const draft = resolveDraftFromLatestTask(latestTask)
+
+  const selectedCloth = focus?.type === 'cloth' ? focus.entity : latestTask?.result?.selectedCloth
   if (selectedCloth?.cloth_id) {
     return `【当前衣物上下文】${JSON.stringify({
       cloth_id: selectedCloth.cloth_id,
@@ -350,7 +569,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const selectedSuit = latestTask?.selectedSuit || latestTask?.result?.selectedSuit
+  const selectedSuit = focus?.type === 'suit' ? focus.entity : latestTask?.result?.selectedSuit
   if (selectedSuit?.suit_id) {
     return `【当前套装上下文】${JSON.stringify({
       suit_id: selectedSuit.suit_id,
@@ -360,7 +579,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const selectedOutfitLog = latestTask?.selectedOutfitLog || latestTask?.result?.selectedOutfitLog
+  const selectedOutfitLog = focus?.type === 'outfitLog' ? focus.entity : latestTask?.result?.selectedOutfitLog
   if (selectedOutfitLog?.id) {
     return `【当前穿搭记录上下文】${JSON.stringify({
       id: selectedOutfitLog.id,
@@ -369,7 +588,21 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const latestWeather = latestTask?.latestWeather || latestTask?.result?.latestWeather
+  if (String(latestTask?.taskType || '').trim() === 'closet_query' && Array.isArray(latestTask?.result?.items)) {
+    return `【当前衣橱筛选结果上下文】${JSON.stringify({
+      total: Number(latestTask?.result?.total || 0),
+      items: latestTask.result.items.slice(0, 10).map((item) => ({
+        cloth_id: item?.cloth_id || null,
+        name: item?.name || '',
+        type: item?.type || '',
+        color: item?.color || '',
+        style: item?.style || '',
+        hasImage: Boolean(item?.hasImage || item?.image),
+      })),
+    })}`
+  }
+
+  const latestWeather = insight?.type === 'weather' ? insight.entity : latestTask?.result?.latestWeather
   if (latestWeather?.city || latestWeather?.temp || latestWeather?.text) {
     return `【当前天气上下文】${JSON.stringify({
       city: latestWeather.city || '',
@@ -380,7 +613,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const styleProfile = latestTask?.styleProfile || latestTask?.result?.styleProfile
+  const styleProfile = insight?.type === 'styleProfile' ? insight.entity : latestTask?.result?.styleProfile
   if (styleProfile?.city || styleProfile?.style || styleProfile?.scenes || styleProfile?.topSize) {
     return `【当前穿搭档案上下文】${JSON.stringify({
       city: styleProfile.city || '',
@@ -399,7 +632,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const latestAnalytics = latestTask?.latestAnalytics || latestTask?.result?.latestAnalytics
+  const latestAnalytics = insight?.type === 'analytics' ? insight.entity : latestTask?.result?.latestAnalytics
   if (latestAnalytics?.totalClothes || latestAnalytics?.recommendationSummary) {
     return `【当前衣橱分析上下文】${JSON.stringify({
       totalClothes: latestAnalytics.totalClothes || 0,
@@ -419,7 +652,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const manualSuitDraft = latestTask?.manualSuitDraft || latestTask?.result?.manualSuitDraft
+  const manualSuitDraft = draft?.type === 'suit' ? draft.entity : latestTask?.result?.manualSuitDraft
   if (manualSuitDraft && Array.isArray(manualSuitDraft.items) && manualSuitDraft.items.length) {
     return `【当前搭配草稿上下文】${JSON.stringify({
       name: manualSuitDraft.name || '',
@@ -430,7 +663,7 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const manualOutfitLogDraft = latestTask?.manualOutfitLogDraft || latestTask?.result?.manualOutfitLogDraft
+  const manualOutfitLogDraft = draft?.type === 'outfitLog' ? draft.entity : latestTask?.result?.manualOutfitLogDraft
   if (manualOutfitLogDraft && Array.isArray(manualOutfitLogDraft.items) && manualOutfitLogDraft.items.length) {
     return `【当前穿搭记录草稿上下文】${JSON.stringify({
       logDate: manualOutfitLogDraft.logDate || '',
@@ -442,9 +675,9 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
     })}`
   }
 
-  const recommendationHistory =
-    latestTask?.recommendationHistory ||
-    latestTask?.result?.recommendationHistory
+  const recommendationHistory = focus?.type === 'recommendationHistory'
+    ? focus.entity
+    : latestTask?.recommendationHistory || latestTask?.result?.recommendationHistory
   if (recommendationHistory?.id) {
     return `【当前推荐历史上下文】${JSON.stringify({
       id: recommendationHistory.id,
@@ -486,6 +719,52 @@ const buildLatestTaskContextMessage = (latestTask = null) => {
   return ''
 }
 
+const buildClientContextMessage = (clientContext = null) => {
+  if (!clientContext || typeof clientContext !== 'object') return ''
+
+  const profile = clientContext.profile && typeof clientContext.profile === 'object'
+    ? clientContext.profile
+    : null
+  const geo = clientContext.geo && typeof clientContext.geo === 'object'
+    ? clientContext.geo
+    : null
+
+  const hasProfileContext = Boolean(
+    profile && (
+      String(profile.city || '').trim() ||
+      String(profile.heightCm || '').trim() ||
+      String(profile.weightKg || '').trim() ||
+      String(profile.topSize || '').trim() ||
+      String(profile.bottomSize || '').trim() ||
+      String(profile.shoeSize || '').trim() ||
+      String(profile.style || '').trim() ||
+      String(profile.colors || '').trim() ||
+      String(profile.scenes || '').trim()
+    )
+  )
+
+  const latitude = Number(geo?.latitude)
+  const longitude = Number(geo?.longitude)
+  const hasGeoContext = Number.isFinite(latitude) && Number.isFinite(longitude)
+
+  if (!hasProfileContext && !hasGeoContext) return ''
+
+  return `【当前客户端上下文】${JSON.stringify({
+    profile: hasProfileContext ? {
+      city: String(profile?.city || '').trim(),
+      heightCm: String(profile?.heightCm || '').trim(),
+      weightKg: String(profile?.weightKg || '').trim(),
+      topSize: String(profile?.topSize || '').trim(),
+      bottomSize: String(profile?.bottomSize || '').trim(),
+      shoeSize: String(profile?.shoeSize || '').trim(),
+      style: String(profile?.style || '').trim(),
+      colors: String(profile?.colors || '').trim(),
+      scenes: String(profile?.scenes || '').trim(),
+    } : null,
+    geo: hasGeoContext ? { latitude, longitude } : null,
+  })}`
+}
+
 const defaultRequestAssistantTurn = async (messages, tools = []) => {
   try {
     const response = await createChatCompletion(
@@ -501,7 +780,9 @@ const defaultRequestAssistantTurn = async (messages, tools = []) => {
     )
     return response?.data?.choices?.[0]?.message || {}
   } catch (error) {
-    throw normalizeLlmError(error, 'DeepSeek 工具决策服务', CHAT_ERROR_MESSAGES)
+    const normalized = normalizeLlmError(error, 'DeepSeek 工具决策服务', CHAT_ERROR_MESSAGES)
+    normalized.requestSummary = buildAssistantTurnRequestSummary({ messages, tools })
+    throw normalized
   }
 }
 
@@ -535,6 +816,8 @@ const executeAutonomousToolCall = async ({
     message: toolName === IMAGE_TOOL_NAME ? '正在分析图片' : `正在执行 ${toolName}`,
   }))
 
+  const tool = getToolByName(toolName)
+
   if (toolName === IMAGE_TOOL_NAME) {
     const result = await runToolWithTimeout(() => executeAnalyzeImageTool({
       args,
@@ -551,7 +834,61 @@ const executeAutonomousToolCall = async ({
     })
   }
 
-  const tool = getToolByName(toolName)
+  if (toolName === SHOW_CONTEXT_IMAGES_TOOL_NAME || toolName === GENERATE_OUTFIT_PREVIEW_TOOL_NAME) {
+    try {
+      const result = await runToolWithTimeout(
+        () => deps.executeTool(toolName, args, { userId, latestTask, multimodal, clientContext, input })
+      )
+      if (result?.kind === 'media_result') {
+        return completeAutonomousMediaResult({
+          emit,
+          toolName,
+          result,
+        })
+      }
+      return completeAutonomousToolResult({ emit, tool, toolName, result })
+    } catch (error) {
+      return completeAutonomousToolResult({
+        emit,
+        tool,
+        toolName,
+        result: { error: error.message || '展示图片失败', tool: toolName },
+      })
+    }
+  }
+
+  if (toolName === 'generate_scene_suits') {
+    try {
+      const result = await runToolWithTimeout(
+        () => deps.executeTool(toolName, args, { userId, latestTask, multimodal, clientContext })
+      )
+      if (result?.error) {
+        return completeAutonomousToolResult({ emit, tool, toolName, result })
+      }
+
+      const taskResult = await buildRecommendationTaskResult({
+        userId,
+        input,
+        args,
+        result,
+        deps,
+      })
+      return completeAutonomousTaskResult({
+        emit,
+        toolName,
+        taskResult,
+        summary: taskResult.summary,
+      })
+    } catch (error) {
+      return completeAutonomousToolResult({
+        emit,
+        tool,
+        toolName,
+        result: { error: error.message || '生成推荐失败', tool: toolName },
+      })
+    }
+  }
+
   if (!tool) {
     return completeAutonomousToolResult({
       emit,
@@ -578,6 +915,7 @@ const executeAutonomousToolCall = async ({
     try {
       const taskResult = await runToolWithTimeout(() => deps.executeAgentToolIntent(userId, input, sourceEntry, toolName, args, {
         latestTask,
+        multimodal,
       }))
       if (taskResult?.error) {
         return completeAutonomousToolResult({
@@ -610,6 +948,7 @@ const executeAutonomousToolCall = async ({
     try {
       const taskResult = await runToolWithTimeout(() => deps.executeAgentToolIntent(userId, input, sourceEntry, toolName, args, {
         latestTask,
+        multimodal,
       }))
       if (taskResult?.error) {
         return completeAutonomousToolResult({
@@ -642,6 +981,13 @@ const executeAutonomousToolCall = async ({
     const result = await runToolWithTimeout(
       () => deps.executeTool(toolName, args, { userId, latestTask, multimodal, clientContext })
     )
+    if (result?.kind === 'media_result') {
+      return completeAutonomousMediaResult({
+        emit,
+        toolName,
+        result,
+      })
+    }
     return completeAutonomousToolResult({ emit, tool, toolName, result })
   } catch (error) {
     return completeAutonomousToolResult({
@@ -678,12 +1024,17 @@ const runAutonomousToolLoop = async ({
   })
   const tools = buildAutonomousToolDefinitions(toolContext)
   const latestTaskContext = buildLatestTaskContextMessage(latestTask)
+  const clientContextMessage = buildClientContextMessage(deps.clientContext || null)
   const conversation = [
     ...messages,
     { role: 'system', content: AUTONOMOUS_TOOL_PROMPT },
     ...(latestTaskContext ? [{ role: 'system', content: latestTaskContext }] : []),
+    ...(clientContextMessage ? [{ role: 'system', content: clientContextMessage }] : []),
   ]
   const toolMetaList = []
+  let collectedMediaAttachments = []
+  let lastImageAnalysisResult = null
+  let latestContextTask = null
   let reasoningContent = ''
   const isClientGone = deps.isClientGone || (() => false)
   const now = typeof deps.now === 'function' ? deps.now : Date.now
@@ -703,23 +1054,50 @@ const runAutonomousToolLoop = async ({
       return null
     }
     let assistantDecision
-    if (typeof streamAssistantTurn === 'function') {
-      assistantDecision = await streamAssistantTurn({
-        messages: conversation,
-        tools,
-        isClientGone,
-        onReasoning: (text) => {
-          reasoningContent += text
-          emit?.(buildReasoningEvent(text))
-        },
-        onContent: (text) => {
-          emit?.(buildContentEvent(text))
-        },
-      })
-    } else {
-      assistantDecision = await requestAssistantTurn(conversation, tools)
-      const reasoning = extractReasoningContent(assistantDecision)
-      if (reasoning) reasoningContent += reasoning
+    try {
+      if (typeof streamAssistantTurn === 'function') {
+        assistantDecision = await streamAssistantTurn({
+          messages: conversation,
+          tools,
+          isClientGone,
+          onReasoning: (text) => {
+            reasoningContent += text
+            emit?.(buildReasoningEvent(text))
+          },
+          onContent: (text) => {
+            emit?.(buildContentEvent(text))
+          },
+        })
+      } else {
+        assistantDecision = await requestAssistantTurn(conversation, tools)
+        const reasoning = extractReasoningContent(assistantDecision)
+        if (reasoning) reasoningContent += reasoning
+      }
+    } catch (error) {
+      const mergedToolMeta = mergeToolMeta(toolMetaList)
+      if (mergedToolMeta || collectedMediaAttachments.length) {
+        const fallbackReply = buildReplyFallbackAfterToolUse({
+          input,
+          latestTask: latestContextTask || latestTask,
+          mergedToolMeta,
+        })
+        console.warn('[autonomousToolRuntime] assistant turn failed after tool use, fallback applied', {
+          input: String(input || '').slice(0, 120),
+          latestTaskType: String((latestContextTask || latestTask)?.taskType || ''),
+          lastToolSummary: mergedToolMeta?.toolResultsSummary?.slice(-1)?.[0] || '',
+          error: error?.message || 'assistant_turn_failed',
+        })
+        return {
+          kind: 'reply',
+          reply: fallbackReply,
+          attachments: collectedMediaAttachments,
+          reasoningContent,
+          lastImageAnalysisResult,
+          contextTask: latestContextTask,
+          toolMeta: mergedToolMeta,
+        }
+      }
+      throw error
     }
     const toolCalls = Array.isArray(assistantDecision?.tool_calls) ? assistantDecision.tool_calls : []
 
@@ -738,19 +1116,25 @@ const runAutonomousToolLoop = async ({
             latestTaskType: String(latestTask?.taskType || ''),
             lastToolSummary: mergedToolMeta?.toolResultsSummary?.slice(-1)?.[0] || '',
           })
-          return {
-            kind: 'reply',
-            reply: fallbackReply,
-            reasoningContent,
-            toolMeta: mergedToolMeta,
-          }
+        return {
+          kind: 'reply',
+          reply: fallbackReply,
+          attachments: collectedMediaAttachments,
+          reasoningContent,
+          lastImageAnalysisResult,
+          contextTask: latestContextTask,
+          toolMeta: mergedToolMeta,
+        }
         }
         return null
       }
       return {
         kind: 'reply',
         reply,
+        attachments: collectedMediaAttachments,
         reasoningContent,
+        lastImageAnalysisResult,
+        contextTask: latestContextTask,
         toolMeta: mergeToolMeta(toolMetaList),
       }
     }
@@ -782,6 +1166,16 @@ const runAutonomousToolLoop = async ({
       if (toolOutcome?.meta) {
         toolMetaList.push(toolOutcome.meta)
       }
+      if (toolOutcome?.kind === 'tool_result') {
+        latestContextTask = buildContextTaskFromToolResult({
+          toolName: toolOutcome.toolName,
+          result: toolOutcome.result,
+          input,
+        }) || latestContextTask
+      }
+      if (toolOutcome?.toolName === IMAGE_TOOL_NAME && toolOutcome?.result && !toolOutcome.result?.error) {
+        lastImageAnalysisResult = toolOutcome.result
+      }
       if (isDurationBudgetExceeded()) {
         return null
       }
@@ -796,8 +1190,15 @@ const runAutonomousToolLoop = async ({
         return {
           kind: 'task',
           taskResult: toolOutcome.taskResult,
+          reasoningContent,
+          lastImageAnalysisResult,
           toolMeta: mergeToolMeta(toolMetaList),
         }
+      }
+      if (toolOutcome?.kind === 'media_reply') {
+        collectedMediaAttachments = mergeMediaAttachments(collectedMediaAttachments, toolOutcome.attachments || [])
+        conversation.push(createMediaToolConversationEntry(toolCall.id, toolOutcome))
+        continue
       }
       conversation.push({
         role: 'tool',
@@ -814,6 +1215,7 @@ module.exports = {
   AUTONOMOUS_TOOL_PROMPT,
   __testables: {
     buildReplyFallbackAfterToolUse,
+    buildClientContextMessage,
     createEmptyStreamedAssistantMessage,
     ensureToolCallAtIndex,
     buildLatestTaskContextMessage,

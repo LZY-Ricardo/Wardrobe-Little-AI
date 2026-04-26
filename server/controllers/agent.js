@@ -4,6 +4,7 @@ const {
   listAgentTaskHistoryForUser,
   updateAgentTaskHistory,
 } = require('./agentTaskHistoryRepository')
+const { getPendingConfirmationMessageMetaByConfirmId } = require('./unifiedAgentSessions')
 const {
   confirmAgentTask: confirmAgentTaskViaService,
   cancelAgentTask: cancelAgentTaskViaService,
@@ -43,12 +44,14 @@ module.exports = {
   cancelAgentTask: async (userId, confirmId) => cancelAgentTaskViaService(userId, confirmId, {
     getPendingAgentTaskByConfirmId: (uid, cid) => getPendingAgentTaskByConfirmId(uid, cid, {
       getPendingAgentTaskRecordByConfirmId,
+      getPendingConfirmationMessageMetaByConfirmId,
     }),
     updateAgentTaskHistory,
   }),
   confirmAgentTask: async (userId, confirmId) => confirmAgentTaskViaService(userId, confirmId, {
     getPendingAgentTaskByConfirmId: (uid, cid) => getPendingAgentTaskByConfirmId(uid, cid, {
       getPendingAgentTaskRecordByConfirmId,
+      getPendingConfirmationMessageMetaByConfirmId,
     }),
     updateAgentTaskHistory,
   }),

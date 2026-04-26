@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
-import { useNavigate } from 'react-router-dom'
+import { buildAgentContextState, createFocusReader } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
+import { buildReturnTargetAttr, resolveReturnEntityId, useReturnScroll } from '@/utils/returnNavigation'
+import { useLocation, useNavigate } from 'react-router-dom'
 import styles from './index.module.less'
 import { Loading, ErrorBanner, Empty } from '@/components/Feedback'
 
@@ -28,6 +31,7 @@ const toSummaryText = (summary = {}) => {
 
 export default function RecommendationHistory() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -36,6 +40,13 @@ export default function RecommendationHistory() {
   const [reasonTags, setReasonTags] = useState([])
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
+  useAgentPageEntry({
+    presetTask: '帮我看看最近的推荐历史',
+  })
+  const highlightedRecommendationId = resolveReturnEntityId(location.state, [
+    createFocusReader('recommendationHistory'),
+    (state) => state.recommendationHistory,
+  ])
 
   const loadHistory = async () => {
     setStatus('loading')
@@ -55,6 +66,8 @@ export default function RecommendationHistory() {
   useEffect(() => {
     void loadHistory()
   }, [])
+
+  useReturnScroll({ prefix: 'recommendation', id: highlightedRecommendationId, watch: items.length })
 
   const currentFeedback = useMemo(
     () => items.find((item) => item.id === expandedId) || null,
@@ -123,17 +136,14 @@ export default function RecommendationHistory() {
           <div className={styles.title}>推荐历史</div>
           <div className={styles.subtitle}>查看推荐结果、采纳状态与反馈记录</div>
         </div>
-        <Button
-          size="small"
-          fill="outline"
-          onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看最近的推荐历史' } })}
-        >
-          交给 Agent
-        </Button>
       </div>
       <div className={styles.list}>
         {items.map((item) => (
-          <div className={styles.card} key={item.id}>
+          <div
+            className={`${styles.card} ${highlightedRecommendationId === item.id ? styles.cardHighlighted : ''}`}
+            key={item.id}
+            data-return-target={buildReturnTargetAttr('recommendation', item.id)}
+          >
             <div className={styles.cardHeader}>
               <div>
                 <div className={styles.scene}>{item.scene || '通用场景'}</div>
@@ -155,22 +165,25 @@ export default function RecommendationHistory() {
                 fill="outline"
                 onClick={() =>
                   navigate('/unified-agent', {
-                    state: {
+                    state: buildAgentContextState({
                       presetTask: `帮我处理这条推荐历史：${item.scene || `推荐 ${item.id}`}`,
-                      recommendationHistory: {
-                        id: item.id,
-                        scene: item.scene,
-                        adopted: item.adopted,
-                        saved_as_suit: item.saved_as_suit,
-                        saved_as_outfit_log: item.saved_as_outfit_log,
-                        trigger_source: item.trigger_source,
-                        create_time: item.create_time,
-                        result_summary: item.result_summary,
-                        feedback_result: item.feedback_result,
-                        feedback_reason_tags: item.feedback_reason_tags,
-                        feedback_note: item.feedback_note,
+                      focus: {
+                        type: 'recommendationHistory',
+                        entity: {
+                          id: item.id,
+                          scene: item.scene,
+                          adopted: item.adopted,
+                          saved_as_suit: item.saved_as_suit,
+                          saved_as_outfit_log: item.saved_as_outfit_log,
+                          trigger_source: item.trigger_source,
+                          create_time: item.create_time,
+                          result_summary: item.result_summary,
+                          feedback_result: item.feedback_result,
+                          feedback_reason_tags: item.feedback_reason_tags,
+                          feedback_note: item.feedback_note,
+                        },
                       },
-                      latestResult: {
+                      latestTask: {
                         recommendationHistory: {
                           id: item.id,
                           scene: item.scene,
@@ -185,7 +198,7 @@ export default function RecommendationHistory() {
                           feedback_note: item.feedback_note,
                         },
                       },
-                    },
+                    }),
                   })
                 }
               >

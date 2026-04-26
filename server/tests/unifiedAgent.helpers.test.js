@@ -61,9 +61,16 @@ test('buildAssistantActionButton returns update action for clothing modification
     label: '打开编辑衣物',
     to: '/update',
     state: {
-      cloth_id: 12,
-      name: '白色运动鞋',
-      type: '鞋类',
+      agentContext: {
+        focus: {
+          type: 'cloth',
+          entity: {
+            cloth_id: 12,
+            name: '白色运动鞋',
+            type: '鞋类',
+          },
+        },
+      },
     },
     pageKey: 'editCloth',
     pageLabel: '编辑衣物',
@@ -109,8 +116,15 @@ test('buildAssistantActionButton returns update action for favorite task result'
     label: '打开编辑衣物',
     to: '/update',
     state: {
-      cloth_id: 9,
-      name: '灰色卫衣',
+      agentContext: {
+        focus: {
+          type: 'cloth',
+          entity: {
+            cloth_id: 9,
+            name: '灰色卫衣',
+          },
+        },
+      },
     },
     pageKey: 'editCloth',
     pageLabel: '编辑衣物',
@@ -138,9 +152,14 @@ test('buildAssistantActionButton returns collection action for delete suit task 
     label: '打开套装列表',
     to: '/match?tab=collection',
     state: {
-      selectedSuit: {
-        suit_id: 7,
-        name: '通勤套装',
+      agentContext: {
+        focus: {
+          type: 'suit',
+          entity: {
+            suit_id: 7,
+            name: '通勤套装',
+          },
+        },
       },
     },
     pageKey: 'suitCollection',
@@ -169,9 +188,14 @@ test('buildAssistantActionButton returns outfit log action for delete outfit log
     label: '打开穿搭记录',
     to: '/outfit-logs',
     state: {
-      selectedOutfitLog: {
-        id: 3,
-        log_date: '2026-04-25',
+      agentContext: {
+        focus: {
+          type: 'outfitLog',
+          entity: {
+            id: 3,
+            log_date: '2026-04-25',
+          },
+        },
       },
     },
     pageKey: 'outfitLogs',
@@ -270,5 +294,54 @@ test('buildAssistantActionButton returns profile insights action for confirmatio
     pageLabel: '偏好洞察',
     reason: '查看或继续调整低风险操作免确认设置',
     variant: 'secondary',
+  })
+})
+
+test('buildAssistantActionButton returns home action for weather guidance reply', () => {
+  const button = buildAssistantActionButton({
+    intent: 'clothing',
+    reply: '结合今天天气，我建议你选择轻薄外套。你的衣物小助手也可以继续帮你安排今天怎么穿。',
+    latestTask: null,
+  })
+
+  assert.deepEqual(button, {
+    label: '打开首页',
+    to: '/home',
+    state: null,
+    pageKey: 'home',
+    pageLabel: '首页',
+    reason: '',
+    variant: 'secondary',
+  })
+})
+
+test('buildAssistantActionButton reads standardized latestTask focus when available', () => {
+  const button = buildAssistantActionButton({
+    intent: 'clothing',
+    reply: '已删除套装',
+    latestTask: {
+      taskType: 'delete_suit',
+      agentContext: {
+        focus: {
+          type: 'suit',
+          entity: {
+            suit_id: 17,
+            name: '科技园通勤套装',
+          },
+        },
+      },
+    },
+  })
+
+  assert.deepEqual(button?.state, {
+    agentContext: {
+      focus: {
+        type: 'suit',
+        entity: {
+          suit_id: 17,
+          name: '科技园通勤套装',
+        },
+      },
+    },
   })
 })

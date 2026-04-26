@@ -4,7 +4,6 @@ import axios from '@/api'
 import styles from './index.module.less'
 import logo from '@/assets/tlogin.png'
 import { Button, Toast } from 'antd-mobile'
-import DarkModeToggle from '@/components/DarkModeToggle'
 
 export default function Register() {
   const navigate = useNavigate()
@@ -88,10 +87,6 @@ export default function Register() {
 
   return (
     <div className={styles.register}>
-      <div className={styles['dark-mode-container']}>
-        <DarkModeToggle />
-      </div>
-
       <div className={styles.card}>
         <div className={styles.header}>
           <div className={styles.logoWrap}>

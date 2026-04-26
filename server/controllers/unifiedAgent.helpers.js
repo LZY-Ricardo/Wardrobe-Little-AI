@@ -3,41 +3,31 @@ const {
   buildNavigationAction,
   replaceKnownRoutesWithPageNames,
 } = require('../agent/tools/runtime/uiMetadataResolver')
+const {
+  buildAgentContextState,
+  resolveFocusFromLatestTask,
+} = require('../agent/context/agentContextProtocol')
 
 const resolveSelectedCloth = (latestTask = null) => {
-  if (!latestTask || typeof latestTask !== 'object') return null
-
-  const candidates = [
-    latestTask.selectedCloth,
-    latestTask.result?.selectedCloth,
-    latestTask.result,
-  ]
-
-  return candidates.find((item) => item && typeof item === 'object' && Number.parseInt(item.cloth_id, 10) > 0) || null
+  const focus = resolveFocusFromLatestTask(latestTask)
+  if (focus?.type === 'cloth' && Number.parseInt(focus.entity?.cloth_id, 10) > 0) return focus.entity
+  if (latestTask?.result && Number.parseInt(latestTask.result?.cloth_id, 10) > 0) return latestTask.result
+  return null
 }
 
 const resolveSelectedSuit = (latestTask = null) => {
-  if (!latestTask || typeof latestTask !== 'object') return null
-
-  const candidates = [
-    latestTask.selectedSuit,
-    latestTask.result?.selectedSuit,
-    latestTask.result?.suit,
-  ]
-
-  return candidates.find((item) => item && typeof item === 'object' && Number.parseInt(item.suit_id, 10) > 0) || null
+  const focus = resolveFocusFromLatestTask(latestTask)
+  if (focus?.type === 'suit' && Number.parseInt(focus.entity?.suit_id, 10) > 0) return focus.entity
+  return latestTask?.result?.suit && Number.parseInt(latestTask.result.suit?.suit_id, 10) > 0
+    ? latestTask.result.suit
+    : null
 }
 
 const resolveOutfitLog = (latestTask = null) => {
-  if (!latestTask || typeof latestTask !== 'object') return null
-
-  const candidates = [
-    latestTask.selectedOutfitLog,
-    latestTask.result?.selectedOutfitLog,
-    latestTask.result,
-  ]
-
-  return candidates.find((item) => item && typeof item === 'object' && Number.parseInt(item.id, 10) > 0) || null
+  const focus = resolveFocusFromLatestTask(latestTask)
+  if (focus?.type === 'outfitLog' && Number.parseInt(focus.entity?.id, 10) > 0) return focus.entity
+  if (latestTask?.result && Number.parseInt(latestTask.result?.id, 10) > 0) return latestTask.result
+  return null
 }
 
 const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null } = {}) => {
@@ -54,7 +44,12 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'editCloth',
       label: '打开编辑衣物',
-      state: selectedCloth,
+      state: buildAgentContextState({
+        focus: {
+          type: 'cloth',
+          entity: selectedCloth,
+        },
+      }),
       reason: '查看或调整这件衣物的详细信息',
     })
   }
@@ -63,7 +58,11 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: taskType === 'save_suit' ? 'suitCollection' : taskType === 'create_outfit_log' ? 'outfitLogs' : 'recommend',
       label: taskType === 'save_suit' ? '打开套装列表' : taskType === 'create_outfit_log' ? '打开穿搭记录' : '打开场景推荐',
-      state: taskType === 'save_suit' && selectedSuit ? { selectedSuit } : taskType === 'create_outfit_log' && outfitLog ? { selectedOutfitLog: outfitLog } : null,
+      state: taskType === 'save_suit' && selectedSuit
+        ? buildAgentContextState({ focus: { type: 'suit', entity: selectedSuit } })
+        : taskType === 'create_outfit_log' && outfitLog
+          ? buildAgentContextState({ focus: { type: 'outfitLog', entity: outfitLog } })
+          : null,
     })
   }
 
@@ -71,7 +70,7 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'suitCollection',
       label: '打开套装列表',
-      state: selectedSuit ? { selectedSuit } : null,
+      state: selectedSuit ? buildAgentContextState({ focus: { type: 'suit', entity: selectedSuit } }) : null,
     })
   }
 
@@ -79,7 +78,7 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'outfitLogs',
       label: '打开穿搭记录',
-      state: outfitLog ? { selectedOutfitLog: outfitLog } : null,
+      state: outfitLog ? buildAgentContextState({ focus: { type: 'outfitLog', entity: outfitLog } }) : null,
     })
   }
 
@@ -91,7 +90,7 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'suitCollection',
       label: '打开套装列表',
-      state: selectedSuit ? { selectedSuit } : null,
+      state: selectedSuit ? buildAgentContextState({ focus: { type: 'suit', entity: selectedSuit } }) : null,
     })
   }
 
@@ -99,7 +98,7 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'outfitLogs',
       label: '打开穿搭记录',
-      state: outfitLog ? { selectedOutfitLog: outfitLog } : null,
+      state: outfitLog ? buildAgentContextState({ focus: { type: 'outfitLog', entity: outfitLog } }) : null,
     })
   }
 
@@ -140,7 +139,12 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     return buildNavigationAction({
       pageKey: 'editCloth',
       label: '打开编辑衣物',
-      state: selectedCloth,
+      state: buildAgentContextState({
+        focus: {
+          type: 'cloth',
+          entity: selectedCloth,
+        },
+      }),
       reason: '继续补充品牌、季节、材质等信息',
     })
   }
@@ -159,6 +163,10 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
 
   if (/(统计|分析|采纳率|趋势)/.test(normalized)) {
     return buildNavigationAction({ pageKey: 'wardrobeAnalytics', label: '打开衣橱统计' })
+  }
+
+  if (/(天气|今日建议|今天怎么穿|穿什么)/.test(normalized)) {
+    return buildNavigationAction({ pageKey: 'home', label: '打开首页' })
   }
 
   return null

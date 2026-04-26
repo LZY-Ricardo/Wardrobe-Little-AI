@@ -4,6 +4,7 @@ import SvgIcon from '@/components/SvgIcon'
 import { Button, Dialog, Toast } from 'antd-mobile'
 import { useLocation, useNavigate } from 'react-router-dom'
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
 import { blobToBase64, compressImage, formatFileSize } from '@/utils/imageUtils'
 import { normalizeClothesTypeInput, REQUIRED_CLOTHES_TYPES } from '@/utils/clothesType'
 import { getErrorMessage } from '@/utils/errorMessage'
@@ -355,9 +356,9 @@ export default function Add() {
               fill="outline"
               onClick={() =>
                 navigate('/unified-agent', {
-                  state: {
+                  state: buildAgentContextState({
                     presetTask: '帮我分析这张衣物图片，并在确认后帮我录入衣橱',
-                    prefillImages: [
+                    attachments: [
                       {
                         type: 'image',
                         mimeType: 'image/jpeg',
@@ -365,7 +366,7 @@ export default function Add() {
                         dataUrl: imageUrl,
                       },
                     ],
-                  },
+                  }),
                 })
               }
             >

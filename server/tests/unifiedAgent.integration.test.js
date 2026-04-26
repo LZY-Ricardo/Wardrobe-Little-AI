@@ -11,6 +11,7 @@ const {
   restoreAgentSession,
   sendUnifiedAgentMessage,
   updateAgentSessionMemory,
+  __testables,
 } = require('../controllers/unifiedAgentRuntime')
 
 test('unified agent session can be created, appended, and restored with memory', async () => {
@@ -308,6 +309,233 @@ test('unified agent can let llm autonomously choose read tools before replying',
       await query('DELETE FROM user WHERE id = ?', [userId])
     }
   }
+})
+
+test('unified agent preserves autonomous closet query context for follow-up image actions', async () => {
+  const now = Date.now()
+  const username = `unified_llm_closet_context_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let clothIds = []
+  let turn = 0
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    for (const row of [
+      ['黑色高帮帆布鞋', '鞋子 / 帆布鞋', '黑色', '休闲'],
+      ['黑色低帮帆布鞋', '鞋子 / 帆布鞋', '黑色', '休闲'],
+      ['白色低帮帆布鞋', '鞋子 / 帆布鞋', '白色', '休闲'],
+    ]) {
+      const res = await query(
+        `INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, row[0], row[1], row[2], row[3], '春季', '', `data:image/png;base64,${Buffer.from(row[0]).toString('base64')}`, now, now]
+      )
+      clothIds.push(res.insertId)
+    }
+
+    const created = await createAgentSession(userId, { firstMessage: '衣橱图片上下文会话' })
+    sessionId = created.session.id
+
+    const first = await sendUnifiedAgentMessage(userId, sessionId, '有没有黑色帆布鞋', {
+      requestAssistantTurn: async (messages) => {
+        turn += 1
+        if (turn === 1) {
+          return {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-read-black-canvas',
+                type: 'function',
+                function: {
+                  name: 'list_clothes',
+                  arguments: JSON.stringify({ type: '帆布鞋', limit: 20 }),
+                },
+              },
+            ],
+          }
+        }
+        const toolMessage = messages[messages.length - 1]
+        assert.equal(toolMessage.role, 'tool')
+        return {
+          role: 'assistant',
+          content: '有 2 双黑色帆布鞋。',
+        }
+      },
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_WHEN_AUTONOMOUS_READ_CONTEXT_IS_AVAILABLE')
+      },
+    })
+
+    assert.equal(first.latest_task.taskType, 'closet_query')
+    assert.equal(first.latest_task.result.items.length, 3)
+
+    assert.equal(first.latest_task.taskType, 'closet_query')
+    assert.equal(first.latest_task.result.items.length, 3)
+    assert.ok(first.message.meta?.latestTask)
+    assert.equal(first.message.meta.latestTask.taskType, 'closet_query')
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      if (clothIds.length) {
+        await query('DELETE FROM clothes WHERE cloth_id IN (?)', [clothIds])
+      }
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent follow-up turn can persist three selected clothes images to chat message', async () => {
+  const now = Date.now()
+  const username = `unified_llm_batch_clothes_images_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let clothIds = []
+  let turn = 0
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    for (const row of [
+      ['黑色高帮帆布鞋', '鞋子 / 帆布鞋', '黑色', '休闲'],
+      ['黑色运动鞋', '鞋子 / 运动鞋', '黑色', '运动'],
+      ['黑色低帮帆布鞋', '鞋子 / 帆布鞋', '黑色', '休闲'],
+    ]) {
+      const res = await query(
+        `INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, row[0], row[1], row[2], row[3], '春季', '', `data:image/png;base64,${Buffer.from(row[0]).toString('base64')}`, now, now]
+      )
+      clothIds.push(res.insertId)
+    }
+
+    const created = await createAgentSession(userId, { firstMessage: '批量图片会话' })
+    sessionId = created.session.id
+
+    const first = await sendUnifiedAgentMessage(userId, sessionId, '我衣橱里有没有黑色鞋子', {
+      enableAutonomousTools: true,
+      requestAssistantTurn: async (messages) => {
+        turn += 1
+        if (turn === 1) {
+          return {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-read-black-shoes',
+                type: 'function',
+                function: {
+                  name: 'list_clothes',
+                  arguments: JSON.stringify({ type: '鞋', limit: 20 }),
+                },
+              },
+            ],
+          }
+        }
+        const toolMessage = messages[messages.length - 1]
+        assert.equal(toolMessage.role, 'tool')
+        return {
+          role: 'assistant',
+          content: '有 3 双黑色鞋子。',
+        }
+      },
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_WHEN_BATCH_IMAGE_CONTEXT_IS_AVAILABLE')
+      },
+    })
+
+    assert.equal(first.latest_task.taskType, 'closet_query')
+    assert.equal(first.latest_task.result.items.length, 3)
+
+    const second = await sendUnifiedAgentMessage(userId, sessionId, '帮我将这三双鞋子的图片都展示出来', {
+      latestTask: first.latest_task,
+      enableAutonomousTools: true,
+      requestAssistantTurn: async (messages) => {
+        const lastToolMessage = messages[messages.length - 1]
+        if (lastToolMessage.role === 'tool') {
+          assert.match(lastToolMessage.content, /已准备 3 张衣物图片/)
+          return {
+            role: 'assistant',
+            content: '已把这三双鞋子的图片发给你。',
+          }
+        }
+        return {
+          role: 'assistant',
+          content: '',
+          tool_calls: [
+            {
+              id: 'tool-show-three-shoes',
+              type: 'function',
+              function: {
+                name: 'show_clothes_images',
+                arguments: JSON.stringify({ cloth_ids: clothIds }),
+              },
+            },
+          ],
+        }
+      },
+      generateReply: async () => '已把这三双鞋子的图片发给你。',
+    })
+
+    assert.equal(second.message.attachments?.length, 3)
+    assert.deepEqual(
+      second.message.attachments.map((item) => item.objectId),
+      clothIds,
+    )
+    assert.match(second.message.content, /三双鞋子/)
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      if (clothIds.length) {
+        await query('DELETE FROM clothes WHERE cloth_id IN (?)', [clothIds])
+      }
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('buildAttachmentAwareReply rewrites contradictory image reply when attachments already exist', () => {
+  const reply = __testables.buildAttachmentAwareReply(
+    '三双鞋其实都有图片记录，但目前在对话上下文中还没有关联到具体的展示对象。',
+    [
+      {
+        type: 'image',
+        objectType: 'cloth',
+        objectId: 21,
+        dataUrl: 'data:image/png;base64,aaa',
+      },
+      {
+        type: 'image',
+        objectType: 'cloth',
+        objectId: 23,
+        dataUrl: 'data:image/png;base64,bbb',
+      },
+    ],
+  )
+
+  assert.equal(reply, '已为你展示当前匹配衣物图片，共 2 张。')
 })
 
 test('unified agent can let llm autonomously read weather forecast before replying', async () => {
@@ -805,6 +1033,215 @@ test('unified agent autonomous mode does not run legacy image workflow first', a
     assert.match(sent.message.content, /先看看这张图片/)
   } finally {
     if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent auto-stages image save confirmation when analysis reply stops at natural language confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_autostage_image_save_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '自动挂起图片保存会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '帮我分析这张衣物图片，并在确认后帮我录入衣橱', {
+      attachments: [
+        {
+          type: 'image',
+          mimeType: 'image/jpeg',
+          name: 'shorts.jpg',
+          dataUrl: 'data:image/jpeg;base64,ZmFrZQ==',
+        },
+      ],
+      enableAutonomousTools: true,
+      analyzeImage: async () => ({
+        summary: '识别到一条黑色运动短裤',
+        category: '下衣',
+        attributes: {
+          color: ['黑色'],
+          style: ['运动'],
+          season: ['四季'],
+          material: ['聚酯纤维'],
+        },
+        items: [
+          {
+            name: '黑色运动短裤',
+            type: '下衣',
+            color: '黑色',
+            style: '运动',
+            season: '四季',
+            material: '聚酯纤维',
+          },
+        ],
+      }),
+      requestAssistantTurn: async (messages) => {
+        const latest = messages[messages.length - 1]
+        if (latest?.role !== 'tool') {
+          return {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-image-1',
+                type: 'function',
+                function: {
+                  name: 'analyze_image',
+                  arguments: JSON.stringify({
+                    attachmentIndex: 0,
+                    question: '帮我分析这张衣物图片，并在确认后帮我录入衣橱',
+                  }),
+                },
+              },
+            ],
+          }
+        }
+
+        return {
+          role: 'assistant',
+          content: '我已经识别出这是一条黑色运动短裤，确认无误的话我就帮你存入衣橱。',
+        }
+      },
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_CHAT_REPLY_WHEN_IMAGE_SAVE_CONFIRMATION_IS_AUTO_STAGED')
+      },
+    })
+
+    assert.equal(sent.message.message_type, 'confirm_request')
+    assert.equal(sent.latest_task.taskType, 'create_cloth')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+    assert.equal(sent.latest_task.confirmation?.details?.name, '黑色运动短裤')
+    assert.equal(sent.latest_task.confirmation?.details?.type, '下衣')
+    assert.equal(sent.latest_task.confirmation?.previewImages?.length, 1)
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent auto-shows current cloth image after confirmed save even when llm misses the media tool', async () => {
+  const now = Date.now()
+  const username = `unified_autoshow_saved_image_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let createdClothId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '展示刚保存图片会话' })
+    sessionId = created.session.id
+
+    const staged = await sendUnifiedAgentMessage(userId, sessionId, '帮我分析这张衣物图片，并在确认后帮我录入衣橱', {
+      attachments: [
+        {
+          type: 'image',
+          mimeType: 'image/jpeg',
+          name: 'shorts.jpg',
+          dataUrl: 'data:image/jpeg;base64,ZmFrZQ==',
+        },
+      ],
+      enableAutonomousTools: true,
+      analyzeImage: async () => ({
+        summary: '识别到一条黑色运动短裤',
+        items: [
+          {
+            name: '黑色运动短裤',
+            type: '下衣',
+            color: '黑色',
+            style: '运动',
+            season: '四季',
+            material: '聚酯纤维',
+          },
+        ],
+      }),
+      requestAssistantTurn: async (messages) => {
+        const latest = messages[messages.length - 1]
+        if (latest?.role !== 'tool') {
+          return {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-image-1',
+                type: 'function',
+                function: {
+                  name: 'analyze_image',
+                  arguments: JSON.stringify({
+                    attachmentIndex: 0,
+                    question: '帮我分析这张衣物图片，并在确认后帮我录入衣橱',
+                  }),
+                },
+              },
+            ],
+          }
+        }
+
+        return {
+          role: 'assistant',
+          content: '我已经识别出这是一条黑色运动短裤，确认无误的话我就帮你存入衣橱。',
+        }
+      },
+    })
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      staged.latest_task.confirmation.confirmId
+    )
+    createdClothId = confirmed.latest_task.relatedObjectId
+
+    const shown = await sendUnifiedAgentMessage(userId, sessionId, '将刚刚我让你存入衣橱的那个黑色裤子的图片展示给我看看', {
+      latestTask: confirmed.latest_task,
+      enableAutonomousTools: true,
+      requestAssistantTurn: async () => ({
+        role: 'assistant',
+        content: '抱歉，我查看了一下你的衣橱，目前并没有找到刚才那条黑色运动短裤的记录。',
+      }),
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_PLAIN_CHAT_REPLY_WHEN_CONTEXT_IMAGE_CAN_BE_AUTO_SHOWN')
+      },
+    })
+
+    assert.equal(shown.message.message_type, 'chat')
+    assert.match(shown.message.content, /已准备当前衣物图片/)
+    assert.equal(shown.message.attachments?.length, 1)
+    assert.equal(shown.message.attachments?.[0]?.objectType, 'cloth')
+    assert.equal(shown.message.attachments?.[0]?.objectId, createdClothId)
+  } finally {
+    if (userId) {
+      if (createdClothId) {
+        await query('DELETE FROM clothes WHERE cloth_id = ?', [createdClothId])
+      }
       if (sessionId) {
         await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
         await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])

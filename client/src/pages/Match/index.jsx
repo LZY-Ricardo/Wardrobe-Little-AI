@@ -4,6 +4,7 @@ import { Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
 
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
 import test from '@/assets/test.jpg'
 import { useAuthStore, useMatchStore } from '@/store'
 
@@ -108,23 +109,35 @@ export default function Match({ embedded = false }) {
       .filter(Boolean)
 
     navigate('/unified-agent', {
-      state: {
+      state: buildAgentContextState({
         presetTask: `继续处理我当前选中的这套搭配：${itemNames.join(' + ')}`,
-        manualSuitDraft: {
-          name: itemNames.join(' + '),
-          scene: '搭配中心',
-          description: itemNames.join(' + '),
-          source: 'match-page',
-          items: itemIds,
+        draft: {
+          type: 'suit',
+          entity: {
+            name: itemNames.join(' + '),
+            scene: '搭配中心',
+            description: itemNames.join(' + '),
+            source: 'match-page',
+            items: itemIds,
+          },
         },
-        manualOutfitLogDraft: {
-          logDate: new Date().toISOString().slice(0, 10),
-          scene: '搭配中心',
-          source: 'match-page',
-          note: itemNames.join(' + '),
-          items: itemIds,
+        latestTask: {
+          manualSuitDraft: {
+            name: itemNames.join(' + '),
+            scene: '搭配中心',
+            description: itemNames.join(' + '),
+            source: 'match-page',
+            items: itemIds,
+          },
+          manualOutfitLogDraft: {
+            logDate: new Date().toISOString().slice(0, 10),
+            scene: '搭配中心',
+            source: 'match-page',
+            note: itemNames.join(' + '),
+            items: itemIds,
+          },
         },
-      },
+      }),
     })
   }, [canHandOffLook, currentLookClothes, navigate])
 

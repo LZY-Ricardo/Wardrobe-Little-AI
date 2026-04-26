@@ -14,8 +14,13 @@ import useAgentStreamSession from './useAgentStreamSession'
 import useAgentSessionManager from './useAgentSessionManager'
 import { formatReasoningSummary } from './reasoningState'
 import { isScrollNearBottom } from './scrollState'
-import { resolveInitialLatestTask, resolveInitialPendingImages } from './sessionState'
 import {
+  resolveInitialLatestTask,
+  resolveInitialPendingImages,
+  shouldRestorePrefillInput,
+} from './sessionState'
+import {
+  buildRecommendationAttachmentGroups,
   getDisplayMessageText,
   normalizeAgentMessages,
 } from './viewModels'
@@ -70,6 +75,11 @@ export default function AiChat() {
     return Number.parseInt(search.get('sessionId') || '', 10)
   }, [location.search])
 
+  const hasSessionIdQuery = useMemo(() => {
+    const search = new URLSearchParams(location.search)
+    return search.has('sessionId')
+  }, [location.search])
+
   const prefillText = useMemo(() => {
     const search = new URLSearchParams(location.search)
     return search.get('prefill') || ''
@@ -100,6 +110,7 @@ export default function AiChat() {
   const [expandedToolMessages, setExpandedToolMessages] = useState(new Set())
   const [expandedReasoning, setExpandedReasoning] = useState(new Set())
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
+  const [selectedRecommendationSuitByMessage, setSelectedRecommendationSuitByMessage] = useState({})
 
   const displayedMessages = useMemo(
     () => normalizeAgentMessages([...messages, ...localMessages]),
@@ -107,10 +118,15 @@ export default function AiChat() {
   )
 
   useEffect(() => {
-    if (!prefillText || status !== 'success') return
+    if (!shouldRestorePrefillInput({
+      prefillText,
+      status,
+      input,
+      displayedMessageCount: displayedMessages.length,
+    })) return
     setInput(prefillText)
     inputRef.current?.focus()
-  }, [prefillText, status])
+  }, [displayedMessages.length, input, prefillText, status])
 
   useEffect(() => {
     autoScrollEnabledRef.current = true
@@ -161,10 +177,11 @@ export default function AiChat() {
     createNewSession,
     selectHistorySession,
     renameSession,
+    clearMessages,
     deleteSession,
   } = useAgentSessionManager({
     sessionId,
-    prefillText,
+    hasSessionIdQuery,
     shouldOpenHistoryFromQuery,
     fallbackSession,
     initialLatestTask,
@@ -371,6 +388,20 @@ export default function AiChat() {
 
                   return (
                     <div className={message.role === 'user' ? styles.userBubble : styles.assistantBubble}>
+                  {(() => {
+                    const messageAttachments = Array.isArray(message.attachments) ? message.attachments : []
+                    const recommendationGroups = buildRecommendationAttachmentGroups(messageAttachments)
+                    const defaultSuitIndex = recommendationGroups[0]?.suitIndex ?? 0
+                    const selectedSuitIndex = recommendationGroups.length
+                      ? (selectedRecommendationSuitByMessage[message.id] ?? defaultSuitIndex)
+                      : defaultSuitIndex
+                    const selectedRecommendationGroup = recommendationGroups.find((group) => group.suitIndex === selectedSuitIndex) || recommendationGroups[0] || null
+                    const visibleAttachments = recommendationGroups.length
+                      ? (selectedRecommendationGroup?.attachments || [])
+                      : messageAttachments.filter((a) => a?.dataUrl)
+
+                    return (
+                      <>
                   {message.role === 'assistant' ? (
                     <div className={styles.messageLabel}>
                       <svg viewBox="0 0 60 60" fill="none" className={styles.labelAvatar}>
@@ -383,13 +414,33 @@ export default function AiChat() {
                       Agent
                     </div>
                   ) : null}
-                  {Array.isArray(message.attachments) && message.attachments.some((a) => a?.dataUrl) ? (
-                    <div className={styles.messageImagesGrid} data-count={message.attachments.filter((a) => a?.dataUrl).length}>
-                      {message.attachments.filter((a) => a?.dataUrl).map((attachment, index) => (
+                  {recommendationGroups.length > 1 ? (
+                    <div className={styles.recommendationTabs} role="tablist" aria-label="推荐套数切换">
+                      {recommendationGroups.map((group) => (
+                        <button
+                          key={`${message.id}-suit-${group.suitIndex}`}
+                          type="button"
+                          className={`${styles.recommendationTab} ${group.suitIndex === selectedSuitIndex ? styles.recommendationTabActive : ''}`}
+                          onClick={() => setSelectedRecommendationSuitByMessage((prev) => ({
+                            ...prev,
+                            [message.id]: group.suitIndex,
+                          }))}
+                        >
+                          {group.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                  {visibleAttachments.length ? (
+                    <div className={styles.messageImagesGrid} data-count={visibleAttachments.length}>
+                      {visibleAttachments.map((attachment, index) => (
                         <img key={`${message.id}-img-${index}`} src={attachment.dataUrl} alt={attachment.name || '图片消息'} className={styles.messageImage} />
                       ))}
                     </div>
                   ) : null}
+                      </>
+                    )
+                  })()}
                   {hasReasoning ? (
                     <div className={styles.reasoningBlock}>
                       <button
@@ -571,6 +622,16 @@ export default function AiChat() {
               return false
             }
           }}
+          onClearAll={async () => {
+            try {
+              await axios.delete('/unified-agent/sessions')
+              Toast.show({ icon: 'success', content: '已清空全部会话', duration: 1000 })
+              navigate('/unified-agent', { replace: true })
+            } catch (error) {
+              console.error('清空全部会话失败:', error)
+              Toast.show({ icon: 'fail', content: '清空失败，请重试', duration: 1200 })
+            }
+          }}
           onSelectSession={selectHistorySession}
           onClose={() => setHistoryVisible(false)}
           onExpandFull={expandHistoryPage}
@@ -604,6 +665,9 @@ export default function AiChat() {
           </button>
           <button type="button" className={styles.actionItem} onClick={handleRenameSession} disabled={renaming}>
             {renaming ? '保存中...' : '重命名会话'}
+          </button>
+          <button type="button" className={`${styles.actionItem} ${styles.actionDanger}`} onClick={clearMessages}>
+            清空会话
           </button>
           <button type="button" className={`${styles.actionItem} ${styles.actionDanger}`} onClick={deleteSession}>
             删除会话

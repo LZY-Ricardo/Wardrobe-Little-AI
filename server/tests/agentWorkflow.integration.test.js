@@ -59,6 +59,7 @@ test('unified agent can ingest cloth from image with confirmation flow', async (
       season: '春秋',
       material: '棉',
     })
+    assert.equal(sent.latest_task.confirmation?.previewImages?.length, 1)
 
     const confirmed = await confirmUnifiedAgentAction(userId, sessionId, sent.latest_task.confirmation.confirmId)
     createdClothId = confirmed.latest_task.relatedObjectId
@@ -66,6 +67,8 @@ test('unified agent can ingest cloth from image with confirmation flow', async (
     assert.equal(confirmed.latest_task.status, 'success')
     assert.equal(confirmed.latest_task.relatedObjectType, 'cloth')
     assert.equal(confirmed.latest_task.summary, '已将“黑色上衣”保存到衣橱')
+    assert.equal(confirmed.latest_task.selectedCloth?.cloth_id, createdClothId)
+    assert.equal(confirmed.latest_task.result?.selectedCloth?.cloth_id, createdClothId)
 
     const rows = await query('SELECT * FROM clothes WHERE user_id = ? AND cloth_id = ?', [userId, createdClothId])
     assert.equal(rows.length, 1)
@@ -248,6 +251,9 @@ test('unified agent can ingest cloth from image through autonomous tool loop', a
     assert.equal(sent.latest_task.requiresConfirmation, true)
     assert.ok(sent.latest_task.confirmation?.confirmId)
     assert.equal(sent.latest_task.confirmation?.details?.name, '黑色上衣')
+    assert.equal(sent.latest_task.confirmation?.previewImages?.length, 1)
+    assert.ok(sent.message.meta?.toolCalls?.length >= 2)
+    assert.equal(typeof sent.message.meta?.reasoningContent, 'string')
 
     const confirmed = await confirmUnifiedAgentAction(userId, sessionId, sent.latest_task.confirmation.confirmId)
     createdClothId = confirmed.latest_task.relatedObjectId

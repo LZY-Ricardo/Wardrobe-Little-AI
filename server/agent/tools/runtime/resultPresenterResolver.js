@@ -1,9 +1,13 @@
 const { replaceKnownRoutesWithPageNames } = require('./uiMetadataResolver')
+const { summarizeRecommendationResultText } = require('../../../controllers/agent.helpers')
 
 const safeString = (value) => (typeof value === 'string' ? value.trim() : value == null ? '' : String(value).trim())
 
 const FALLBACK_PRESENTERS = {
   analyze_image: (result = {}) => safeString(result.summary || result.message || result.error || '图片分析完成'),
+  show_context_images: (result = {}) => safeString(result.summary || '已准备当前图片'),
+  show_clothes_images: (result = {}) => safeString(result.summary || '已准备指定衣物图片'),
+  generate_outfit_preview: (result = {}) => safeString(result.summary || '已生成当前搭配预览图'),
   get_user_profile: () => '已读取用户画像',
   get_profile_insight: (result = {}) => safeString(result.summary || '已读取偏好洞察'),
   get_wardrobe_analytics: (result = {}) => {
@@ -29,7 +33,7 @@ const FALLBACK_PRESENTERS = {
     if (result?.error === 'EMPTY_CLOSET') {
       return replaceKnownRoutesWithPageNames(safeString(result.message || '衣橱为空，请先添加衣物'))
     }
-    return `生成了 ${Array.isArray(result.suits) ? result.suits.length : 0} 套推荐`
+    return summarizeRecommendationResultText(result)
   },
   list_suits: (result = {}) => `查询到 ${Number(result.total || 0)} 套已保存套装`,
   get_suit_detail: (result = {}) => {

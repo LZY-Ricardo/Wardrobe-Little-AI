@@ -19,6 +19,7 @@ const {
     insertClothesData,
     getAllClothes,
     deleteClothForUser,
+    getClothByIdForUser,
     updateClothFieldsForUser,
     getTopClothesByConfig,
     getBotClothesByConfig,
@@ -256,6 +257,74 @@ router.post('/import', verify(), async (ctx) => {
     ctx.body = { code: 1, msg: '导入完成', data: { inserted, total: items.length } }
 })
 
+// 获取上衣数据
+router.get('/TopClothes', verify(), async (ctx) => {
+    const user_id = ctx.userId
+    try {
+        const res = await getTopClothesByConfig(user_id)
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data: Array.isArray(res) ? res : [],
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '获取失败',
+            error: error.message,
+        }
+    }
+})
+
+// 获取下衣数据
+router.get('/BotClothes', verify(), async (ctx) => {
+    const user_id = ctx.userId
+    try {
+        const res = await getBotClothesByConfig(user_id)
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data: Array.isArray(res) ? res : [],
+        }
+    } catch (error) {
+        ctx.body = {
+            code: -1,
+            msg: '获取失败',
+            error: error.message,
+        }
+    }
+})
+
+// 获取单件衣物
+router.get('/:id', verify(), async (ctx) => {
+    const clothId = ctx.params.id
+
+    try {
+        const data = await getClothByIdForUser(ctx.userId, clothId)
+        if (!data) {
+            ctx.status = 404
+            ctx.body = {
+                code: 0,
+                msg: '衣物不存在',
+            }
+            return
+        }
+
+        ctx.body = {
+            code: 1,
+            msg: '获取成功',
+            data,
+        }
+    } catch (error) {
+        ctx.status = 500
+        ctx.body = {
+            code: -1,
+            msg: '获取失败',
+            error: error.message,
+        }
+    }
+})
+
 // 删除衣物
 router.delete('/:id', verify(), async (ctx) => {
     const id = ctx.params.id
@@ -358,44 +427,6 @@ router.put('/:id', verify(), async (ctx) => {
         ctx.body = {
             code: -1,
             msg: '更新失败',
-            error: error.message,
-        }
-    }
-})
-
-// 获取上衣数据
-router.get('/TopClothes', verify(), async (ctx) => {
-    const user_id = ctx.userId
-    try {
-        const res = await getTopClothesByConfig(user_id)
-        ctx.body = {
-            code: 1,
-            msg: '获取成功',
-            data: Array.isArray(res) ? res : [],
-        }
-    } catch (error) {
-        ctx.body = {
-            code: -1,
-            msg: '获取失败',
-            error: error.message,
-        }
-    }
-})
-
-// 获取下衣数据
-router.get('/BotClothes', verify(), async (ctx) => {
-    const user_id = ctx.userId
-    try {
-        const res = await getBotClothesByConfig(user_id)
-        ctx.body = {
-            code: 1,
-            msg: '获取成功',
-            data: Array.isArray(res) ? res : [],
-        }
-    } catch (error) {
-        ctx.body = {
-            code: -1,
-            msg: '获取失败',
             error: error.message,
         }
     }

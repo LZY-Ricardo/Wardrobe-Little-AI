@@ -28,19 +28,28 @@ test('confirmation descriptor resolver can resolve catalog descriptor strings co
   assert.equal(typeof resolveConfirmationDescriptor(favoriteTool), 'function')
 
   const viewModel = buildConfirmationViewModel({
-    action: 'toggle_favorite',
+    action: 'create_cloth',
     confirmation: {
-      action: 'toggle_favorite',
-      summary: '收藏衣物 黑色上衣',
-      scope: 'cloth_id=12',
-      risk: '会修改收藏状态',
-      details: null,
+      action: 'create_cloth',
+      summary: '将“乐福鞋”保存到衣橱',
+      scope: '鞋子 / 棕色',
+      risk: '会新增一条衣物记录',
+      details: { name: '乐福鞋' },
+      previewImages: [
+        {
+          type: 'image',
+          mimeType: 'image/jpeg',
+          name: '乐福鞋',
+          dataUrl: 'data:image/jpeg;base64,bG9hZmVy',
+        },
+      ],
     },
   })
 
-  assert.equal(viewModel.action, 'toggle_favorite')
-  assert.equal(viewModel.actionLabel, '更新收藏')
-  assert.equal(viewModel.summary, '收藏衣物 黑色上衣')
-  assert.equal(viewModel.scope, 'cloth_id=12')
-  assert.equal(viewModel.targetPage?.label, '编辑衣物')
+  assert.equal(viewModel.action, 'create_cloth')
+  assert.equal(viewModel.actionLabel, '保存到衣橱')
+  assert.equal(viewModel.summary, '将“乐福鞋”保存到衣橱')
+  assert.equal(viewModel.scope, '鞋子 / 棕色')
+  assert.equal(viewModel.targetPage?.label, '添加衣物')
+  assert.equal(viewModel.previewImages?.length, 1)
 })

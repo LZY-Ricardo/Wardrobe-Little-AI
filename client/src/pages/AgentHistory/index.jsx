@@ -73,6 +73,18 @@ export default function AgentHistory() {
     navigate('/unified-agent', { replace: true })
   }, [navigate])
 
+  const handleClearAll = useCallback(async () => {
+    try {
+      await axios.delete('/unified-agent/sessions')
+      Toast.show({ icon: 'success', content: '已清空全部会话', duration: 1000 })
+      setSessionList([])
+      navigate('/unified-agent', { replace: true })
+    } catch (error) {
+      console.error('清空全部会话失败:', error)
+      Toast.show({ icon: 'fail', content: '清空失败，请重试', duration: 1200 })
+    }
+  }, [navigate])
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -89,6 +101,7 @@ export default function AgentHistory() {
         sessionList={sessionList}
         loadSessionList={loadSessionList}
         requestDeleteSession={requestDeleteSession}
+        onClearAll={handleClearAll}
         onSelectSession={handleSelectSession}
         embedded={false}
       />

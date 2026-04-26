@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react'
+import React, { useState, useCallback, useEffect, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { TabBar } from 'antd-mobile'
 import Icon from '@/components/Icon'
@@ -9,11 +9,11 @@ const TAB_KEYS = new Set(['/home', '/outfit', '/match', '/person', '/unified-age
 const AgentAvatar = ({ active }) => (
     <span className={`${styles['agent-btn']} ${active ? styles['agent-btn--active'] : styles['agent-btn--inactive']}`}>
         <svg viewBox="0 0 60 60" fill="none" className={styles['agent-avatar-svg']}>
-            <rect width="60" height="60" rx="30" fill={active ? '#1a1a2e' : '#8a8a9a'} />
-            <polygon points="30,12 44,36 16,36" fill="none" stroke={active ? '#a855f7' : '#b0b0b8'} strokeWidth="2.5" opacity="0.9" />
-            <polygon points="30,48 16,24 44,24" fill="none" stroke={active ? '#7c3aed' : '#a0a0a8'} strokeWidth="2.5" opacity="0.9" />
-            <circle cx="30" cy="30" r="8" fill="none" stroke={active ? '#c084fc' : '#b8b8c0'} strokeWidth="2" opacity="0.8" />
-            <circle cx="30" cy="30" r="3" fill={active ? '#a855f7' : '#9a9aa2'} />
+            <rect width="60" height="60" rx="30" fill={active ? '#18142A' : '#6B6B7A'} />
+            <polygon points="30,12 44,36 16,36" fill="none" stroke={active ? '#A855F7' : '#C4C4CE'} strokeWidth="2.5" opacity="0.95" />
+            <polygon points="30,48 16,24 44,24" fill="none" stroke={active ? '#7C3AED' : '#B5B5BF'} strokeWidth="2.5" opacity="0.95" />
+            <circle cx="30" cy="30" r="8" fill="none" stroke={active ? '#C084FC' : '#D0D0D8'} strokeWidth="2" opacity="0.85" />
+            <circle cx="30" cy="30" r="3" fill={active ? '#A855F7' : '#B8B8C0'} />
         </svg>
     </span>
 )
@@ -51,6 +51,7 @@ export default function BottomNavigation({ onHiddenChange }) {
     const location = useLocation()
     const { pathname } = location
     const [isHidden, setIsHidden] = useState(false)
+    const previousActiveKeyRef = useRef('')
 
     const activeKey = React.useMemo(() => {
         if (pathname.startsWith('/match')) return '/match'
@@ -67,11 +68,12 @@ export default function BottomNavigation({ onHiddenChange }) {
     const isInactive = !TAB_KEYS.has(activeKey)
 
     useEffect(() => {
-        if (isHidden && TAB_KEYS.has(activeKey)) {
+        if (previousActiveKeyRef.current && previousActiveKeyRef.current !== activeKey && isHidden && TAB_KEYS.has(activeKey)) {
             setIsHidden(false)
             onHiddenChange?.(false)
         }
-    }, [activeKey])
+        previousActiveKeyRef.current = activeKey
+    }, [activeKey, isHidden, onHiddenChange])
 
     const handleHide = useCallback(() => {
         setIsHidden(true)

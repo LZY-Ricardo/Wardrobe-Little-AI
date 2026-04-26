@@ -51,6 +51,38 @@ const CHAT_ERROR_MESSAGES = {
   failed: '发送失败',
 }
 
+const buildStreamErrorPayload = (error, stage = '') => {
+  const fallbackMsg = '发送失败'
+  const normalizedError = error instanceof Error ? error : new Error(String(error || fallbackMsg))
+  const status = Number(normalizedError?.status)
+  const upstreamStatus = Number(
+    normalizedError?.upstreamStatus ||
+    normalizedError?.cause?.response?.status ||
+    normalizedError?.cause?.status
+  )
+  const code = normalizedError?.code == null ? '' : String(normalizedError.code)
+  const providerMessage = String(normalizedError?.providerMessage || normalizedError?.cause?.providerMessage || '').trim()
+  const rawMessage = String(normalizedError?.message || fallbackMsg).trim()
+  const causeMessage = String(normalizedError?.cause?.message || '').trim()
+  const detail = [providerMessage, causeMessage].filter(Boolean).find((item) => item && item !== rawMessage) || ''
+  const requestSummary = normalizedError?.requestSummary && typeof normalizedError.requestSummary === 'object'
+    ? normalizedError.requestSummary
+    : null
+
+  return {
+    msg: rawMessage || fallbackMsg,
+    ...(detail ? { detail } : {}),
+    ...(stage ? { stage } : {}),
+    ...(code ? { code } : {}),
+    ...(providerMessage ? { providerMessage } : {}),
+    ...(Number.isFinite(status) ? { status } : {}),
+    ...(Number.isFinite(upstreamStatus) ? { upstreamStatus } : {}),
+    ...(requestSummary ? { requestSummary } : {}),
+    retryable: Number.isFinite(status) ? status >= 500 : true,
+    debugMessage: rawMessage || fallbackMsg,
+  }
+}
+
 const createAgentSession = async (userId, payload = {}) => {
   const session = await createSession(userId, payload)
   return {
@@ -367,6 +399,39 @@ const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
       sanitizeAssistantReply,
     })
     if (autonomousResult) {
+      if (autonomousResult.kind === 'reply') {
+        const fallbackWriteIntent = buildWardrobeWriteFallbackFromImageAnalysis({
+          input: trimmed,
+          multimodal,
+          analysisResult: autonomousResult.lastImageAnalysisResult,
+        })
+
+        if (fallbackWriteIntent) {
+          const taskResult = await executeAgentToolIntent(
+            userId,
+            trimmed,
+            'unified-agent',
+            fallbackWriteIntent.toolName,
+            fallbackWriteIntent.toolArgs,
+            {
+              latestTask: deps.latestTask || null,
+              multimodal,
+            }
+          )
+
+          return {
+            restored,
+            currentSession,
+            taskResult,
+            autonomousResult,
+            canUseTask: true,
+            trimmed,
+            multimodal,
+            intent,
+          }
+        }
+      }
+
       return {
         restored,
         currentSession,
@@ -425,6 +490,8 @@ const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
 
 const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
   const { restored, currentSession, taskResult, autonomousResult, canUseTask, trimmed, multimodal, intent: preparedIntent } = await prepareAgentMessage(userId, sessionId, input, deps)
+  let autonomousReplyResult = autonomousResult
+  let autoShownAttachments = []
 
   if (canUseTask) {
     const nextTitle =
@@ -452,6 +519,11 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
     })
 
     const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
+    const reasoningContent = buildTaskReasoningFallback({
+      reasoningContent: autonomousResult?.reasoningContent || '',
+      toolMeta: autonomousResult?.toolMeta || null,
+      taskResult,
+    })
     const assistantMessage = await appendMessage(userId, sessionId, {
       role: 'assistant',
       content: taskResult.summary,
@@ -459,9 +531,12 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
       taskId: taskResult.historyId || null,
       confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
       meta: buildAssistantMessageMeta({
+        toolMeta: autonomousResult?.toolMeta || null,
         attachments,
+        latestTask: taskResult,
         pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
         actionButton,
+        reasoningContent,
       }),
     })
 
@@ -474,7 +549,26 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
     }
   }
 
-  if (autonomousResult?.kind === 'reply') {
+  if (
+    autonomousReplyResult?.kind === 'reply' &&
+    !(Array.isArray(autonomousReplyResult.attachments) && autonomousReplyResult.attachments.length)
+  ) {
+    const autoShown = await tryAutoShowContextImages({
+      userId,
+      input: trimmed,
+      latestTask: deps.latestTask || null,
+      multimodal,
+      clientContext: deps.clientContext || null,
+    })
+
+    if (autoShown) {
+      autoShownAttachments = autoShown.attachments
+      autonomousReplyResult = {
+        ...autonomousReplyResult,
+        reply: autoShown.reply,
+      }
+    }
+
     const nextTitle =
       currentSession?.title === '新会话'
         ? await generateSessionTitle([{ role: 'user', content: trimmed }], deriveSessionTitle(trimmed), deps)
@@ -485,27 +579,39 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
       title: nextTitle,
     })
 
-    const actionButton = buildAssistantActionButton({
-      intent: preparedIntent || 'clothing',
-      reply: autonomousResult.reply,
-      latestTask: deps.latestTask || null,
-    })
     const attachments = await resolveAssistantAttachments({
       userId,
       input: trimmed,
-      latestTask: deps.latestTask || null,
+      latestTask: autonomousReplyResult.contextTask || deps.latestTask || null,
       deps,
+    })
+    const mergedReplyAttachments = mergeReplyAttachments(
+      autoShownAttachments,
+      Array.isArray(autonomousReplyResult.attachments) ? autonomousReplyResult.attachments : [],
+      attachments,
+    )
+    const replyLatestTask = autonomousReplyResult.contextTask
+      || (mergedReplyAttachments.length ? deps.latestTask || null : null)
+    const finalReply = buildAttachmentAwareReply(
+      autonomousReplyResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      mergedReplyAttachments,
+    )
+    const actionButton = buildAssistantActionButton({
+      intent: preparedIntent || 'clothing',
+      reply: finalReply,
+      latestTask: replyLatestTask,
     })
 
     const assistantMessage = await appendMessage(userId, sessionId, {
       role: 'assistant',
-      content: autonomousResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      content: finalReply,
       messageType: 'chat',
       meta: buildAssistantMessageMeta({
-        toolMeta: autonomousResult.toolMeta,
-        attachments,
+        toolMeta: autonomousReplyResult.toolMeta,
+        attachments: mergedReplyAttachments,
         actionButton,
-        reasoningContent: autonomousResult.reasoningContent,
+        latestTask: replyLatestTask,
+        reasoningContent: autonomousReplyResult.reasoningContent,
       }),
     })
 
@@ -514,7 +620,7 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
     return {
       message: assistantMessage,
       restored: restoredNext,
-      latest_task: null,
+      latest_task: replyLatestTask,
     }
   }
 
@@ -601,6 +707,131 @@ const consumeDeepSeekStream = async (stream, onChunk, onReasoning, isClientGone)
   }
 }
 
+const hasWardrobeSaveIntent = (input = '') => {
+  const normalized = String(input || '').replace(/\s+/g, '')
+  if (!normalized) return false
+
+  return (
+    /(存入|录入|加入|添加|保存).{0,8}(衣橱|衣柜)/.test(normalized) ||
+    /(衣橱|衣柜).{0,8}(存入|录入|加入|添加|保存)/.test(normalized)
+  )
+}
+
+const toDraftClothFromImageItem = (item = {}) => {
+  const name = String(item?.name || '').trim()
+  const type = String(item?.type || '').trim()
+  const color = String(item?.color || '').trim()
+  const style = String(item?.style || '').trim()
+  const season = String(item?.season || '').trim()
+  const material = String(item?.material || '').trim()
+
+  if (!name || !type || !color || !style || !season) return null
+
+  return {
+    name,
+    type,
+    color,
+    style,
+    season,
+    ...(material ? { material } : {}),
+  }
+}
+
+const buildWardrobeWriteFallbackFromImageAnalysis = ({
+  input = '',
+  multimodal = null,
+  analysisResult = null,
+} = {}) => {
+  if (!hasWardrobeSaveIntent(input)) return null
+  if (!Array.isArray(multimodal?.attachments) || !multimodal.attachments.length) return null
+  if (!analysisResult || typeof analysisResult !== 'object') return null
+
+  const items = Array.isArray(analysisResult.items)
+    ? analysisResult.items.map(toDraftClothFromImageItem).filter(Boolean)
+    : []
+
+  if (!items.length) return null
+
+  if (items.length === 1) {
+    return {
+      toolName: 'create_cloth',
+      toolArgs: items[0],
+    }
+  }
+
+  return {
+    toolName: 'create_clothes_batch',
+    toolArgs: { items },
+  }
+}
+
+const hasExplicitShowImageIntent = (input = '') => {
+  const normalized = String(input || '').replace(/\s+/g, '')
+  if (!normalized) return false
+
+  if (!/(图片|发图|看图|晒图)/.test(normalized)) return false
+
+  return (
+    /(展示|显示|给我看|看看|发我|发给我)/.test(normalized) ||
+    /刚刚|刚才|那件|那个|这件|这条|这双|当前/.test(normalized)
+  )
+}
+
+const tryAutoShowContextImages = async ({
+  userId,
+  input = '',
+  latestTask = null,
+  multimodal = null,
+  clientContext = null,
+} = {}) => {
+  if (!hasExplicitShowImageIntent(input)) return null
+  if (!latestTask || typeof latestTask !== 'object') return null
+
+  const result = await executeTool('show_context_images', {}, {
+    userId,
+    latestTask,
+    multimodal,
+    clientContext,
+    input,
+  })
+
+  if (result?.kind !== 'media_result' || !Array.isArray(result.attachments) || !result.attachments.length) {
+    return null
+  }
+
+  return {
+    reply: String(result.summary || '已准备当前图片。').trim() || '已准备当前图片。',
+    attachments: result.attachments,
+  }
+}
+
+const IMAGE_REPLY_CONTRADICTION_PATTERN = /(没有关联到具体|暂时无法(?:直接)?调出|无法(?:直接)?展示|没有可展示的图片|当前上下文.*没有可展示)/i
+
+const buildAttachmentAwareReply = (reply = '', attachments = []) => {
+  const normalizedReply = String(reply || '').trim()
+  const list = Array.isArray(attachments) ? attachments.filter((item) => item?.dataUrl) : []
+  if (!list.length) return normalizedReply
+  if (!IMAGE_REPLY_CONTRADICTION_PATTERN.test(normalizedReply)) return normalizedReply
+
+  const objectTypes = [...new Set(list.map((item) => String(item?.objectType || '').trim()).filter(Boolean))]
+  const count = list.length
+
+  if (objectTypes.length === 1) {
+    const objectType = objectTypes[0]
+    if (objectType === 'cloth') {
+      return count === 1
+        ? '已为你展示当前衣物图片。'
+        : `已为你展示当前匹配衣物图片，共 ${count} 张。`
+    }
+    if (objectType === 'suit') return '已为你展示当前套装图片。'
+    if (objectType === 'outfit_log') return '已为你展示当前穿搭记录图片。'
+    if (objectType === 'recommendation') return '已为你展示当前推荐图片。'
+    if (objectType === 'outfit_preview') return '已为你展示当前预览图。'
+  }
+
+  return count === 1 ? '已为你展示当前图片。' : `已为你展示当前图片，共 ${count} 张。`
+}
+
 const resolveStreamingAutonomousMode = (deps = {}) => {
   const hasStreamAssistantTurnOverride = Object.prototype.hasOwnProperty.call(deps, 'streamAssistantTurn')
   const streamAssistantTurn = hasStreamAssistantTurnOverride
@@ -619,6 +850,7 @@ const resolveStreamingAutonomousMode = (deps = {}) => {
 const buildAssistantMessageMeta = ({
   actionButton = null,
   attachments = null,
+  latestTask = null,
   pendingConfirmation = null,
   reasoningContent = '',
   toolMeta = null,
@@ -627,11 +859,49 @@ const buildAssistantMessageMeta = ({
     ...(toolMeta && typeof toolMeta === 'object' ? toolMeta : {}),
     ...(Array.isArray(attachments) && attachments.length ? { attachments } : {}),
     ...(actionButton ? { actionButton } : {}),
+    ...(latestTask && typeof latestTask === 'object' ? { latestTask } : {}),
     ...(pendingConfirmation ? { pendingConfirmation } : {}),
     ...(reasoningContent ? { reasoningContent } : {}),
   }
 
   return Object.keys(meta).length ? meta : null
+}
+
+const buildTaskReasoningFallback = ({
+  reasoningContent = '',
+  toolMeta = null,
+  taskResult = null,
+} = {}) => {
+  const explicit = String(reasoningContent || '').trim()
+  if (explicit) return explicit
+
+  const toolCalls = Array.isArray(toolMeta?.toolCalls) ? toolMeta.toolCalls : []
+  const summaries = Array.isArray(toolMeta?.toolResultsSummary) ? toolMeta.toolResultsSummary : []
+  if (!toolCalls.length && !summaries.length) return ''
+
+  const steps = toolCalls
+    .map((item, index) => {
+      const label = String(item?.label || item?.name || '').trim()
+      if (!label) return ''
+      return `${index + 1}. ${label}`
+    })
+    .filter(Boolean)
+
+  const lines = []
+  if (steps.length) {
+    lines.push('已执行步骤：')
+    lines.push(...steps)
+  }
+  if (summaries.length) {
+    lines.push('')
+    lines.push(...summaries.map((item) => `结果：${String(item || '').trim()}`))
+  }
+  if (taskResult?.requiresConfirmation) {
+    lines.push('')
+    lines.push('当前已生成待确认操作，确认后才会真正写入系统。')
+  }
+
+  return lines.join('\n').trim()
 }
 
 const resolveAssistantAttachments = async ({
@@ -648,6 +918,26 @@ const resolveAssistantAttachments = async ({
   deps,
 })
 
+const mergeReplyAttachments = (...groups) => {
+  const seen = new Set()
+  const merged = []
+  groups
+    .flat()
+    .filter(Boolean)
+    .forEach((item) => {
+      const key = [
+        item?.variant || '',
+        item?.objectType || '',
+        item?.objectId || '',
+        item?.dataUrl || '',
+      ].join(':')
+      if (!item?.dataUrl || seen.has(key)) return
+      seen.add(key)
+      merged.push(item)
+    })
+  return merged
+}
+
 const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps = {}) => {
   const res = ctx.res
   const isClientGone = deps.isClientGone || (() => false)
@@ -661,7 +951,7 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
     try {
       initialized = await initializeAgentMessage(userId, sessionId, input, deps)
     } catch (err) {
-      emit(buildErrorEvent(err.message || '发送失败'))
+      emit(buildErrorEvent(buildStreamErrorPayload(err, 'initialize_message')))
       finish()
       return
     }
@@ -713,7 +1003,7 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
         sanitizeAssistantReply,
       })
     } catch (error) {
-      emit(buildErrorEvent(error.message || '生成回复时出错'))
+      emit(buildErrorEvent(buildStreamErrorPayload(error, 'autonomous_assistant_turn')))
       finish()
       return
     }
@@ -727,6 +1017,90 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
     if (autonomousResult.kind === 'aborted' || isClientGone()) {
       finish()
       return
+    }
+
+    let autoShownAttachments = []
+    if (
+      autonomousResult.kind === 'reply' &&
+      !(Array.isArray(autonomousResult.attachments) && autonomousResult.attachments.length)
+    ) {
+      const autoShown = await tryAutoShowContextImages({
+        userId,
+        input: trimmed,
+        latestTask: deps.latestTask || null,
+        multimodal,
+        clientContext: deps.clientContext || null,
+      })
+
+      if (autoShown) {
+        autoShownAttachments = autoShown.attachments
+        autonomousResult = {
+          ...autonomousResult,
+          reply: autoShown.reply,
+        }
+      }
+    }
+
+    if (autonomousResult.kind === 'reply') {
+      const fallbackWriteIntent = buildWardrobeWriteFallbackFromImageAnalysis({
+        input: trimmed,
+        multimodal,
+        analysisResult: autonomousResult.lastImageAnalysisResult,
+      })
+
+      if (fallbackWriteIntent) {
+        const taskResult = await executeAgentToolIntent(
+          userId,
+          trimmed,
+          'unified-agent',
+          fallbackWriteIntent.toolName,
+          fallbackWriteIntent.toolArgs,
+          {
+            latestTask: deps.latestTask || null,
+            multimodal,
+          }
+        )
+
+        if (isClientGone()) { finish(); return }
+        await updateSessionMeta(userId, sessionId, {
+          current_task_type: taskResult.taskType,
+          title: nextTitle,
+        })
+
+        const attachments = await resolveAssistantAttachments({
+          userId,
+          input: trimmed,
+          taskResult,
+          deps,
+        })
+
+        const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
+        const reasoningContent = buildTaskReasoningFallback({
+          reasoningContent: autonomousResult?.reasoningContent || '',
+          toolMeta: autonomousResult?.toolMeta || null,
+          taskResult,
+        })
+        const assistantMessage = await appendMessage(userId, sessionId, {
+          role: 'assistant',
+          content: taskResult.summary,
+          messageType,
+          taskId: taskResult.historyId || null,
+          confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
+          meta: buildAssistantMessageMeta({
+            toolMeta: autonomousResult?.toolMeta || null,
+            attachments,
+            latestTask: taskResult,
+            pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
+            reasoningContent,
+          }),
+        })
+
+        safeRefreshSessionMemory(userId, sessionId, deps).catch(() => {})
+        const restoredNext = await restoreAgentSession(userId, sessionId)
+        emit(buildTaskResultEvent({ message: assistantMessage, latest_task: taskResult, restored: restoredNext }))
+        finish()
+        return
+      }
     }
 
     if (autonomousResult.kind === 'task') {
@@ -752,6 +1126,11 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       })
 
       const messageType = taskResult?.requiresConfirmation ? 'confirm_request' : 'task_result'
+      const reasoningContent = buildTaskReasoningFallback({
+        reasoningContent: autonomousResult?.reasoningContent || '',
+        toolMeta: autonomousResult?.toolMeta || null,
+        taskResult,
+      })
       const assistantMessage = await appendMessage(userId, sessionId, {
         role: 'assistant',
         content: taskResult.summary,
@@ -759,9 +1138,12 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
         taskId: taskResult.historyId || null,
         confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
         meta: buildAssistantMessageMeta({
+          toolMeta: autonomousResult?.toolMeta || null,
           attachments,
+          latestTask: taskResult,
           pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
           actionButton,
+          reasoningContent,
         }),
       })
 
@@ -774,26 +1156,38 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
 
     if (isClientGone()) { finish(); return }
 
-    const actionButton = buildAssistantActionButton({
-      intent,
-      reply: autonomousResult.reply,
-      latestTask: deps.latestTask || null,
-    })
     const attachments = await resolveAssistantAttachments({
       userId,
       input: trimmed,
-      latestTask: deps.latestTask || null,
+      latestTask: autonomousResult.contextTask || deps.latestTask || null,
       deps,
+    })
+    const mergedReplyAttachments = mergeReplyAttachments(
+      autoShownAttachments,
+      Array.isArray(autonomousResult.attachments) ? autonomousResult.attachments : [],
+      attachments,
+    )
+    const replyLatestTask = autonomousResult.contextTask
+      || (mergedReplyAttachments.length ? deps.latestTask || null : null)
+    const finalReply = buildAttachmentAwareReply(
+      autonomousResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      mergedReplyAttachments,
+    )
+    const actionButton = buildAssistantActionButton({
+      intent,
+      reply: finalReply,
+      latestTask: replyLatestTask,
     })
 
     const assistantMessage = await appendMessage(userId, sessionId, {
       role: 'assistant',
-      content: autonomousResult.reply || '我暂时没有生成有效回复，请稍后再试。',
+      content: finalReply,
       messageType: 'chat',
       meta: buildAssistantMessageMeta({
         toolMeta: autonomousResult.toolMeta,
-        attachments,
+        attachments: mergedReplyAttachments,
         actionButton,
+        latestTask: replyLatestTask,
         reasoningContent: autonomousResult.reasoningContent,
       }),
     })
@@ -813,7 +1207,7 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       requestAssistantTurn: undefined,
     })
   } catch (err) {
-    emit(buildErrorEvent(err.message || '发送失败'))
+    emit(buildErrorEvent(buildStreamErrorPayload(err, 'prepare_message')))
     finish()
     return
   }
@@ -854,9 +1248,12 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       taskId: taskResult.historyId || null,
       confirmationStatus: taskResult?.requiresConfirmation ? 'pending' : '',
       meta: buildAssistantMessageMeta({
+        toolMeta: autonomousResult?.toolMeta || null,
         attachments,
+        latestTask: taskResult,
         pendingConfirmation: taskResult?.requiresConfirmation ? taskResult.confirmation : null,
         actionButton,
+        reasoningContent: autonomousResult?.reasoningContent || '',
       }),
     })
 
@@ -899,7 +1296,7 @@ const sendUnifiedAgentMessageStream = async (userId, sessionId, input, ctx, deps
       isClientGone,
     })
   } catch (error) {
-    emit(buildErrorEvent(error.message || '生成回复时出错'))
+    emit(buildErrorEvent(buildStreamErrorPayload(error, 'stream_reply')))
     finish()
     return
   }
@@ -950,7 +1347,7 @@ const confirmUnifiedAgentAction = async (userId, sessionId, confirmId) => {
     messageType: 'confirm_result',
     taskId: result.historyId || null,
     confirmationStatus: 'confirmed',
-    meta: buildAssistantMessageMeta({ actionButton }),
+    meta: buildAssistantMessageMeta({ actionButton, latestTask: result }),
   })
   await safeRefreshSessionMemory(userId, sessionId)
   const restored = await restoreAgentSession(userId, sessionId)
@@ -979,7 +1376,9 @@ const cancelUnifiedAgentAction = async (userId, sessionId, confirmId) => {
 
 module.exports = {
   __testables: {
+    buildAttachmentAwareReply,
     buildAssistantMessageMeta,
+    buildStreamErrorPayload,
     initializeAgentMessage,
     parseDeepSeekStreamChunk,
     resolveStreamingAutonomousMode,

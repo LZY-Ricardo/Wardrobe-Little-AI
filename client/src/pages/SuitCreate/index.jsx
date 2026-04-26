@@ -2,6 +2,7 @@
 import { Toast } from 'antd-mobile'
 import { useNavigate } from 'react-router-dom'
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { buildCompositeCover } from '@/utils/compositeCover'
@@ -142,9 +143,19 @@ const SuitCreate = () => {
             disabled={selectedCount < MIN_ITEMS}
             onClick={() =>
               navigate('/unified-agent', {
-                state: {
+                state: buildAgentContextState({
                   presetTask: `帮我把这些单品保存成${scene || '新'}套装`,
-                  latestResult: {
+                  draft: {
+                    type: 'suit',
+                    entity: {
+                      name: name.trim(),
+                      scene: scene.trim(),
+                      description: description.trim(),
+                      items: extractClothIds(selected),
+                      source: 'agent',
+                    },
+                  },
+                  latestTask: {
                     manualSuitDraft: {
                       name: name.trim(),
                       scene: scene.trim(),
@@ -153,7 +164,7 @@ const SuitCreate = () => {
                       source: 'agent',
                     },
                   },
-                },
+                }),
               })
             }
           >

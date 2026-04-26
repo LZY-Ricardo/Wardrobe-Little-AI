@@ -37,6 +37,29 @@ test('buildErrorEvent creates error payload', () => {
   })
 })
 
+test('buildErrorEvent keeps structured error fields when provided', () => {
+  assert.deepEqual(buildErrorEvent({
+    msg: '暂时无法对话',
+    detail: '上游服务超时',
+    stage: 'stream_reply',
+    status: 503,
+    upstreamStatus: 504,
+    code: 'ETIMEDOUT',
+    providerMessage: 'timeout',
+    retryable: true,
+  }), {
+    type: 'error',
+    msg: '暂时无法对话',
+    detail: '上游服务超时',
+    stage: 'stream_reply',
+    status: 503,
+    upstreamStatus: 504,
+    code: 'ETIMEDOUT',
+    providerMessage: 'timeout',
+    retryable: true,
+  })
+})
+
 test('buildToolCallStartedEvent and buildToolCallCompletedEvent include normalized tool meta', () => {
   const started = buildToolCallStartedEvent({ toolName: 'analyze_image', message: '正在分析图片' })
   assert.equal(started.type, 'tool_call_started')

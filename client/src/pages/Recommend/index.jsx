@@ -5,6 +5,7 @@ import SvgIcon from '@/components/SvgIcon'
 import { Button, Toast } from 'antd-mobile'
 import { HeartFill, HeartOutline } from 'antd-mobile-icons'
 import axios from '@/api'
+import { buildAgentContextState } from '@/utils/agentContext'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { getTodayInChina } from '@/utils/date'
@@ -498,9 +499,9 @@ export default function Recommend({ embedded = false }) {
                   className={styles['secondary-action']}
                   onClick={() =>
                     navigate('/unified-agent', {
-                      state: {
+                      state: buildAgentContextState({
                         presetTask: `继续处理当前${item.scene || scene || '推荐'}结果`,
-                        latestResult: {
+                        latestTask: {
                           taskType: 'recommendation',
                           summary: item.description,
                           result: {
@@ -508,7 +509,7 @@ export default function Recommend({ embedded = false }) {
                             recommendationHistoryId: latestRecommendationId,
                           },
                         },
-                      },
+                      }),
                     })
                   }
                 >

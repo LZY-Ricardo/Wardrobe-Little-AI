@@ -725,6 +725,7 @@ test('agent confirm can recover pending task from database after in-memory state
             style: '简约',
             season: '秋冬',
             material: '针织',
+            image: 'data:image/jpeg;base64,ZmFrZQ==',
           },
         },
       }
@@ -781,6 +782,7 @@ test('agent cancel can recover pending task from database after in-memory state 
             style: '运动',
             season: '四季',
             material: '皮革',
+            image: 'data:image/jpeg;base64,ZmFrZQ==',
           },
         },
       }
@@ -837,6 +839,7 @@ test('agent can confirm batch cloth creation and save multiple items', async () 
               style: '简约',
               season: '秋冬',
               material: '针织',
+              image: 'data:image/jpeg;base64,ZmFrZQ==',
             },
             {
               name: '白色运动鞋',
@@ -845,6 +848,7 @@ test('agent can confirm batch cloth creation and save multiple items', async () 
               style: '运动',
               season: '四季',
               material: '皮革',
+              image: 'data:image/jpeg;base64,eHl6',
             },
           ],
         },
@@ -856,12 +860,11 @@ test('agent can confirm batch cloth creation and save multiple items', async () 
     assert.equal(pending.confirmation?.details?.count, '2')
 
     const confirmed = await confirmAgentTask(userId, pending.confirmation.confirmId)
-    createdClothIds = Array.isArray(confirmed.result?.items)
-      ? confirmed.result.items.map((item) => item?.cloth_id).filter(Boolean)
+    createdClothIds = Array.isArray(confirmed.result?.createdClothes)
+      ? confirmed.result.createdClothes.map((item) => item?.cloth_id).filter(Boolean)
       : []
 
     assert.equal(confirmed.status, 'success')
-    assert.equal(confirmed.result?.totalCreated, 2)
     assert.equal(createdClothIds.length, 2)
 
     const rows = await query('SELECT name FROM clothes WHERE user_id = ? ORDER BY cloth_id ASC', [userId])

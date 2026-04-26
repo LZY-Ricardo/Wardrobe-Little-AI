@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 
 import { resolveLoadedSessionState } from './sessionState.js'
 import {
+  buildRecommendationAttachmentGroups,
+  buildConfirmationPreviewImages,
   buildToolCallTimeline,
   buildToolSummaryList,
   getConfirmationTitle,
@@ -38,6 +40,14 @@ test('restored assistant message can recover confirmation card, tool timeline an
                 label: '虚拟衣柜',
                 to: '/outfit',
               },
+              previewImages: [
+                {
+                  type: 'image',
+                  mimeType: 'image/jpeg',
+                  name: '白色运动鞋',
+                  dataUrl: 'data:image/jpeg;base64,shoe',
+                },
+              ],
               details: {
                 name: '白色运动鞋',
                 type: '鞋类',
@@ -75,6 +85,7 @@ test('restored assistant message can recover confirmation card, tool timeline an
   const message = result.messages[0]
   assert.equal(getDisplayMessageText(message), '已识别这双鞋，准备帮你存入衣橱。')
   assert.equal(getConfirmationTitle(message.pendingConfirmation), '保存到衣橱')
+  assert.equal(buildConfirmationPreviewImages(message.pendingConfirmation).length, 1)
   assert.deepEqual(buildToolCallTimeline(message), [
     {
       id: 'analyze_image-123',
@@ -116,6 +127,8 @@ test('restored assistant message keeps image attachments for gallery rendering',
                 variant: 'composite',
                 objectType: 'recommendation',
                 objectId: 18,
+                suitIndex: 0,
+                suitLabel: '第 1 套',
               },
               {
                 type: 'image',
@@ -126,6 +139,8 @@ test('restored assistant message keeps image attachments for gallery rendering',
                 variant: 'original',
                 objectType: 'cloth',
                 objectId: 23,
+                suitIndex: 0,
+                suitLabel: '第 1 套',
               },
             ],
           },
@@ -137,4 +152,35 @@ test('restored assistant message keeps image attachments for gallery rendering',
   assert.equal(result.messages[0].attachments.length, 2)
   assert.equal(result.messages[0].attachments[0].variant, 'composite')
   assert.equal(result.messages[0].attachments[1].objectId, 23)
+  assert.deepEqual(buildRecommendationAttachmentGroups(result.messages[0].attachments), [
+    {
+      suitIndex: 0,
+      label: '第 1 套',
+      attachments: result.messages[0].attachments,
+    },
+  ])
+})
+
+test('buildRecommendationAttachmentGroups tolerates missing attachments', () => {
+  assert.deepEqual(buildRecommendationAttachmentGroups(undefined), [])
+})
+
+test('getDisplayMessageText hides recommendation summary when recommendation images are present', () => {
+  const text = getDisplayMessageText({
+    role: 'assistant',
+    content: '当前展示第 1 套，共 3 套推荐',
+    attachments: [
+      {
+        type: 'image',
+        mimeType: 'image/svg+xml',
+        name: '第 1 套搭配',
+        dataUrl: 'data:image/svg+xml;base64,cover',
+        objectType: 'recommendation',
+        suitIndex: 0,
+      },
+    ],
+    toolCalls: [],
+  })
+
+  assert.equal(text, '')
 })

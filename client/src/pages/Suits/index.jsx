@@ -1,9 +1,12 @@
 ﻿import React, { useCallback, useEffect, useMemo } from 'react'
 import { Dialog } from 'react-vant'
 import { Toast } from 'antd-mobile'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import axios from '@/api'
+import { buildAgentContextState, createFocusReader } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
 import { Loading, Empty, ErrorBanner } from '@/components/Feedback'
+import { buildReturnTargetAttr, resolveReturnEntityId, useReturnScroll } from '@/utils/returnNavigation'
 import { buildAutoSuitName, isGenericSuitName } from '@/utils/suitName'
 import { useSuitStore } from '@/store'
 import styles from './index.module.less'
@@ -81,7 +84,12 @@ const SuitCard = ({ suit, onDelete, onAgent }) => {
 
 export default function Suits({ embedded = false }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const { suits, status, error, fetchAllSuits, setSuits } = useSuitStore()
+  const highlightedSuitId = resolveReturnEntityId(location.state, [
+    createFocusReader('suit'),
+    (state) => state.selectedSuit,
+  ])
 
   const loading = status === 'loading'
   const hasData = useMemo(() => Array.isArray(suits) && suits.length > 0, [suits])
@@ -97,6 +105,13 @@ export default function Suits({ embedded = false }) {
   useEffect(() => {
     void fetchSuits()
   }, [fetchSuits])
+
+  useAgentPageEntry({
+    enabled: !embedded,
+    presetTask: '帮我看看我的套装库，并告诉我下一步可以怎么整理',
+  })
+
+  useReturnScroll({ prefix: 'suit', id: highlightedSuitId, watch: suits.length })
 
   const handleDelete = (suit) => {
     Dialog.confirm({
@@ -116,10 +131,13 @@ export default function Suits({ embedded = false }) {
   const handleAgent = useCallback((suit) => {
     if (!suit?.suit_id) return
     navigate('/unified-agent', {
-      state: {
+      state: buildAgentContextState({
         presetTask: `帮我处理这套已保存套装：${suit.name || suit.scene || `套装 ${suit.suit_id}`}`,
-        selectedSuit: suit,
-      },
+        focus: {
+          type: 'suit',
+          entity: suit,
+        },
+      }),
     })
   }, [navigate])
 
@@ -137,9 +155,6 @@ export default function Suits({ embedded = false }) {
             <button type="button" onClick={() => navigate('/suits/create')}>
               新建套装
             </button>
-            <button type="button" onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看我的套装库' } })}>
-              交给 Agent
-            </button>
           </div>
         </div>
       )
@@ -147,7 +162,13 @@ export default function Suits({ embedded = false }) {
     return (
       <div className={styles.cardList}>
         {suits.map((suit) => (
-          <SuitCard key={suit.suit_id} suit={suit} onDelete={handleDelete} onAgent={handleAgent} />
+          <div
+            key={suit.suit_id}
+            className={highlightedSuitId === suit.suit_id ? styles.cardHighlighted : ''}
+            data-return-target={buildReturnTargetAttr('suit', suit.suit_id)}
+          >
+            <SuitCard suit={suit} onDelete={handleDelete} onAgent={handleAgent} />
+          </div>
         ))}
       </div>
     )
@@ -159,13 +180,6 @@ export default function Suits({ embedded = false }) {
         <div className={styles.header}>
           <div className={styles.headerTitle}>搭配合集</div>
           <div className={styles.headerActions}>
-            <button
-              type="button"
-              className={styles.headerSecondary}
-              onClick={() => navigate('/unified-agent', { state: { presetTask: '帮我看看我的套装库' } })}
-            >
-              交给 Agent
-            </button>
             <button
               type="button"
               className={styles.headerAction}

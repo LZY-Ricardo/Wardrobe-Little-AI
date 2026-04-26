@@ -1,14 +1,16 @@
 import { useCallback, useEffect } from 'react'
 import { Dialog, Toast } from 'antd-mobile'
 import axios from '@/api'
+import { getErrorMessage } from '@/utils/errorMessage'
 import {
+  resolveSessionBootstrapState,
   resolveConfirmedSessionState,
   resolveLoadedSessionState,
 } from './sessionState'
 
 export default function useAgentSessionManager({
   sessionId,
-  prefillText,
+  hasSessionIdQuery,
   shouldOpenHistoryFromQuery,
   fallbackSession,
   initialLatestTask,
@@ -30,12 +32,25 @@ export default function useAgentSessionManager({
   setSending,
 }) {
   const loadSession = useCallback(async () => {
-    if (!Number.isFinite(sessionId)) {
-      if (prefillText) {
-        setStatus('success')
-        return
-      }
-      setError('会话不存在')
+    const bootstrapState = resolveSessionBootstrapState({
+      sessionId,
+      hasSessionIdQuery,
+      initialLatestTask,
+    })
+
+    if (bootstrapState.mode === 'blank-session') {
+      setSession(bootstrapState.session)
+      setMessages(bootstrapState.messages)
+      setLocalMessages([])
+      setPendingConfirmation(bootstrapState.pendingConfirmation)
+      setLatestTask(bootstrapState.latestTask)
+      setError('')
+      setStatus('success')
+      return
+    }
+
+    if (bootstrapState.mode === 'invalid-session') {
+      setError(bootstrapState.error)
       setStatus('error')
       return
     }
@@ -62,8 +77,8 @@ export default function useAgentSessionManager({
     }
   }, [
     fallbackSession,
+    hasSessionIdQuery,
     initialLatestTask,
-    prefillText,
     sessionId,
     setError,
     setLatestTask,
@@ -110,8 +125,8 @@ export default function useAgentSessionManager({
       setPendingConfirmation(nextState.pendingConfirmation)
     } catch (actionError) {
       console.error('确认操作失败:', actionError)
+      setError(getErrorMessage(actionError, '确认失败，请稍后重试'))
       await loadSession()
-      setPendingConfirmation(null)
     } finally {
       setSending(false)
     }
@@ -120,6 +135,7 @@ export default function useAgentSessionManager({
     loadSession,
     sending,
     sessionId,
+    setError,
     setLatestTask,
     setMessages,
     setPendingConfirmation,
@@ -269,6 +285,44 @@ export default function useAgentSessionManager({
     }
   }, [navigate, sessionId, setActionsVisible])
 
+  const clearMessages = useCallback(async () => {
+    if (!Number.isFinite(sessionId)) return
+
+    const confirmed = await Dialog.confirm({
+      content: '清空后聊天记录将无法恢复，但会话本身会保留。',
+      confirmText: '确认清空',
+      cancelText: '取消',
+    }).catch(() => false)
+
+    if (!confirmed) return
+
+    try {
+      const res = await axios.delete(`/unified-agent/sessions/${sessionId}/messages`)
+      setSession(res?.data || session)
+      setMessages([])
+      setLocalMessages([])
+      setPendingConfirmation(null)
+      setLatestTask(null)
+      Toast.show({ icon: 'success', content: '清空成功', duration: 1000 })
+      await loadSessionList()
+    } catch (clearError) {
+      console.error('清空会话失败:', clearError)
+      Toast.show({ icon: 'fail', content: '清空失败，请重试', duration: 1200 })
+    } finally {
+      setActionsVisible(false)
+    }
+  }, [
+    loadSessionList,
+    session,
+    sessionId,
+    setActionsVisible,
+    setLatestTask,
+    setLocalMessages,
+    setMessages,
+    setPendingConfirmation,
+    setSession,
+  ])
+
   return {
     loadSession,
     loadSessionList,
@@ -280,6 +334,7 @@ export default function useAgentSessionManager({
     createNewSession,
     selectHistorySession,
     renameSession,
+    clearMessages,
     deleteSession,
   }
 }

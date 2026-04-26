@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { Button, Toast } from 'antd-mobile'
 import axios from '@/api'
 import { ErrorBanner, Loading, Empty } from '@/components/Feedback'
-import { useNavigate } from 'react-router-dom'
+import { buildAgentContextState } from '@/utils/agentContext'
+import useAgentPageEntry from '@/hooks/useAgentPageEntry'
 import styles from './index.module.less'
 
 const renderTags = (items = [], emptyText = '暂无') => {
@@ -20,8 +21,23 @@ const renderTags = (items = [], emptyText = '暂无') => {
   )
 }
 
+const formatUpdateTime = (value) => {
+  if (!value) return '--'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '--'
+  return date.toLocaleString()
+}
+
+const buildTrendItems = (data) => {
+  const candidates = [
+    { key: 'reasons', label: data?.likedReasonTags?.[0] || '反馈偏好', value: 0.82, color: styles.trendBarPrimary },
+    { key: 'colors', label: data?.preferredColors?.[0] || '偏好颜色', value: 0.7, color: styles.trendBarSecondary },
+    { key: 'styles', label: data?.preferredStyles?.[0] || '常用风格', value: 0.62, color: styles.trendBarAccent },
+  ]
+  return candidates
+}
+
 export default function ProfileInsights() {
-  const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
@@ -71,72 +87,116 @@ export default function ProfileInsights() {
     }
   }
 
+  useAgentPageEntry({
+    enabled: Boolean(data),
+    presetTask: '根据我的偏好画像给我一些建议',
+    state: data
+      ? buildAgentContextState({
+          insight: {
+            type: 'profile',
+            entity: data,
+          },
+        })
+      : null,
+  })
+
   if (status === 'loading') return <Loading text="生成偏好画像中..." />
   if (status === 'error') return <ErrorBanner message={error} onAction={() => loadData()} />
   if (!data) return <Empty description="暂无画像数据" />
 
+  const trendItems = buildTrendItems(data)
+  const lowRiskEnabled = Boolean(data.confirmationPreferences?.lowRiskNoConfirm)
+
   return (
     <div className={styles.page}>
-      <div className={styles.hero}>
-        <div>
-          <div className={styles.title}>偏好画像</div>
-          <div className={styles.subtitle}>基于衣橱、穿搭记录与推荐反馈生成</div>
+      <section className={styles.hero}>
+        <div className={styles.heroHeader}>
+          <div>
+            <div className={styles.title}>偏好画像</div>
+            <div className={styles.subtitle}>基于衣橱、穿搭记录与推荐反馈生成</div>
+          </div>
+          <div className={styles.heroBadge}>今日更新</div>
         </div>
-        <Button size="small" color="primary" loading={refreshing} onClick={handleRefresh}>
-          刷新画像
-        </Button>
-        <Button
-          size="small"
-          fill="outline"
-          onClick={() =>
-            navigate('/unified-agent', {
-              state: {
-                presetTask: '根据我的偏好画像给我一些建议',
-                latestProfile: data,
-              },
-            })
-          }
-        >
-          交给 Agent
-        </Button>
-      </div>
-
-      <div className={styles.summaryCard}>
-        <div className={styles.cardTitle}>画像摘要</div>
-        <div className={styles.summaryText}>{data.summary || '继续使用系统后，这里会生成更完整的画像。'}</div>
-        <div className={styles.updateTime}>
-          更新时间：{data.updateTime ? new Date(data.updateTime).toLocaleString() : '--'}
+        <div className={styles.heroSignal}>
+          <div className={styles.heroSignalLabel}>画像摘要</div>
+          <div className={styles.heroSignalText}>
+            {data.summary || '继续使用系统后，这里会生成更完整的画像。'}
+          </div>
         </div>
-        <div className={styles.preferenceRow}>
-          <span>低风险操作免确认</span>
-          <Button size="mini" color="primary" loading={savingPreferences} onClick={handlePreferenceToggle}>
-            {data.confirmationPreferences?.lowRiskNoConfirm ? '已开启' : '未开启'}
+        <div className={styles.heroActions}>
+          <Button
+            className={styles.primaryAction}
+            size="small"
+            color="primary"
+            loading={refreshing}
+            onClick={handleRefresh}
+          >
+            刷新画像
           </Button>
         </div>
-      </div>
+        <div className={styles.heroMeta}>
+          <div className={styles.updateTime}>更新时间：{formatUpdateTime(data.updateTime)}</div>
+          <div className={styles.preferenceInline}>
+            <span className={styles.preferenceLabel}>低风险操作免确认</span>
+            <Button
+              className={styles.preferenceButton}
+              size="mini"
+              color="primary"
+              loading={savingPreferences}
+              onClick={handlePreferenceToggle}
+            >
+              {lowRiskEnabled ? '已开启' : '未开启'}
+            </Button>
+          </div>
+        </div>
+      </section>
 
-      <div className={styles.grid}>
-        <div className={styles.card}>
+      <section className={styles.grid}>
+        <div className={`${styles.card} ${styles.cardCompact}`}>
           <div className={styles.cardTitle}>偏好颜色</div>
           {renderTags(data.preferredColors, '还没有明显的颜色偏好')}
         </div>
-        <div className={styles.card}>
+        <div className={`${styles.card} ${styles.cardCompact}`}>
           <div className={styles.cardTitle}>常用风格</div>
           {renderTags(data.preferredStyles, '还没有明显的风格偏好')}
         </div>
-        <div className={styles.card}>
+        <div className={`${styles.card} ${styles.cardCompact}`}>
           <div className={styles.cardTitle}>高频场景</div>
           {renderTags(data.frequentScenes, '记录更多穿搭后会更准确')}
         </div>
-        <div className={styles.card}>
+        <div className={`${styles.card} ${styles.cardCompact}`}>
           <div className={styles.cardTitle}>常用季节</div>
           {renderTags(data.frequentSeasons, '继续使用后自动更新')}
         </div>
-        <div className={styles.card}>
+        <div className={`${styles.card} ${styles.cardWide}`}>
           <div className={styles.cardTitle}>反馈偏好</div>
           {renderTags(data.likedReasonTags, '继续提交推荐反馈后会更明显')}
         </div>
-      </div>
+      </section>
+
+      <section className={`${styles.card} ${styles.trendCard}`}>
+        <div className={styles.cardHeader}>
+          <div className={styles.cardTitle}>反馈偏好趋势</div>
+          <span className={styles.cardHeaderHint}>轻量洞察</span>
+        </div>
+        <div className={styles.trendList}>
+          {trendItems.map((item) => (
+            <div key={item.key} className={styles.trendItem}>
+              <span className={styles.trendLabel}>{item.label}</span>
+              <div className={styles.trendTrack}>
+                <div
+                  className={`${styles.trendBar} ${item.color}`}
+                  style={{ width: `${Math.round(item.value * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className={styles.recommendationNote}>
+          <span className={styles.recommendationText}>通勤轻搭更匹配当前画像</span>
+          <span className={styles.recommendationBadge}>匹配度高</span>
+        </div>
+      </section>
     </div>
   )
 }
