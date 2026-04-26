@@ -3,3 +3,8 @@
 /.codex
 /.tmp/
 /.tmp_*/
+/.superpowers/
+.codex-client-dev.log
+.codex-client-dev.err.log
+.tmp-agent-upload.jpg
+.tmp-match-bottom.png
