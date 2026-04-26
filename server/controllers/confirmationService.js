@@ -18,11 +18,18 @@ const CONFIRMABLE_AGENT_ACTIONS = new Set([
   'create_clothes_batch',
   'save_suit',
   'create_outfit_log',
+  'update_outfit_log',
   'delete_cloth',
   'delete_suit',
   'delete_outfit_log',
   'update_cloth_fields',
+  'update_cloth_image',
+  'import_closet_data',
   'update_user_sex',
+  'update_user_name',
+  'upload_user_avatar',
+  'upload_character_model',
+  'delete_character_model',
   'update_confirmation_preferences',
   'toggle_favorite',
 ])
@@ -115,6 +122,30 @@ const sanitizePersistedExecutePayload = (action = '', executePayload = null) => 
       : []
   }
 
+  if (action === 'update_cloth_image') {
+    const next = { ...executePayload }
+    delete next.image
+    return next
+  }
+
+  if (action === 'import_closet_data') {
+    const items = Array.isArray(executePayload?.items)
+      ? executePayload.items.map((item) => {
+          if (!item || typeof item !== 'object') return item
+          const next = { ...item }
+          delete next.image
+          return next
+        })
+      : []
+    return { items }
+  }
+
+  if (action === 'upload_user_avatar' || action === 'upload_character_model') {
+    const next = { ...executePayload }
+    delete next.image
+    return next
+  }
+
   return executePayload
 }
 
@@ -149,16 +180,35 @@ const summarizeConfirmedAction = (pending = {}, executed = {}) => {
     const logDate = String(executed?.result?.log_date || pending?.executePayload?.logDate || '').trim()
     return logDate ? `已记录 ${logDate} 的穿搭` : '已记录穿搭'
   }
+  if (pending.action === 'update_outfit_log') {
+    const logDate = String(executed?.result?.log_date || pending?.executePayload?.logDate || '').trim()
+    return logDate ? `已更新 ${logDate} 的穿搭记录` : '已更新穿搭记录'
+  }
 
   if (pending.action === 'delete_cloth') return '已删除衣物'
   if (pending.action === 'delete_suit') return '已删除套装'
   if (pending.action === 'delete_outfit_log') return '已删除穿搭记录'
   if (pending.action === 'update_cloth_fields') return '已更新衣物信息'
+  if (pending.action === 'update_cloth_image') return '已更新衣物图片'
+  if (pending.action === 'import_closet_data') {
+    const inserted = Number(executed?.result?.inserted || 0)
+    const total = Number(executed?.result?.total || 0)
+    return total > 0 ? `已导入 ${inserted}/${total} 件衣物` : '已导入衣橱数据'
+  }
 
   if (pending.action === 'update_user_sex') {
     const sex = String(pending?.executePayload?.sex || '').trim()
     return sex === 'man' ? '已将性别修改为男' : sex === 'woman' ? '已将性别修改为女' : '已更新性别设置'
   }
+
+  if (pending.action === 'update_user_name') {
+    const name = String(pending?.executePayload?.name || '').trim()
+    return name ? `已将昵称修改为“${name}”` : '已更新昵称'
+  }
+
+  if (pending.action === 'upload_user_avatar') return '已更新头像'
+  if (pending.action === 'upload_character_model') return '已更新人物模特'
+  if (pending.action === 'delete_character_model') return '已删除人物模特'
 
   if (pending.action === 'update_confirmation_preferences') {
     return pending?.executePayload?.lowRiskNoConfirm ? '已开启低风险操作免确认' : '已关闭低风险操作免确认'
@@ -251,6 +301,76 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
     }
   }
 
+  if (action === 'update_user_name') {
+    const name = String(latestResult?.name || latestResult?.result?.name || '').trim()
+    if (!name) {
+      const error = new Error('当前没有可执行的昵称修改')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: `将昵称修改为“${name}”`,
+      scope: `name=${name}`,
+      risk: '会修改当前账号昵称，并影响个人中心显示。',
+      executePayload: { name },
+    }
+  }
+
+  if (action === 'upload_user_avatar') {
+    const image = String(latestResult?.image || latestResult?.result?.image || '').trim()
+    if (!isProbablyBase64Image(image)) {
+      const error = new Error('当前没有可更新的头像图片')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: '更新当前头像',
+      scope: 'avatar',
+      risk: '会替换当前账号头像。',
+      previewImages: [{
+        type: 'image',
+        name: 'avatar',
+        mimeType: image.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;[^,]+)?,/)?.[1] || 'image/jpeg',
+        dataUrl: image,
+      }],
+      executePayload: { image },
+    }
+  }
+
+  if (action === 'upload_character_model') {
+    const image = String(latestResult?.image || latestResult?.result?.image || '').trim()
+    if (!isProbablyBase64Image(image)) {
+      const error = new Error('当前没有可更新的人物模特图片')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: '更新当前人物模特',
+      scope: 'characterModel',
+      risk: '会替换当前人物模特，并影响搭配预览图生成。',
+      previewImages: [{
+        type: 'image',
+        name: 'character-model',
+        mimeType: image.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;[^,]+)?,/)?.[1] || 'image/jpeg',
+        dataUrl: image,
+      }],
+      executePayload: { image },
+    }
+  }
+
+  if (action === 'delete_character_model') {
+    return {
+      action,
+      summary: '删除当前人物模特',
+      scope: 'characterModel',
+      risk: '会删除当前人物模特，之后将无法生成搭配预览图，直到重新上传。',
+      executePayload: {},
+    }
+  }
+
   if (action === 'delete_outfit_log') {
     const selectedOutfitLog = resolveSelectedOutfitLog(latestResult)
     const outfitLogId = Number.parseInt(selectedOutfitLog?.id, 10)
@@ -267,6 +387,36 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
       scope: `outfit_log_id=${outfitLogId}${itemCount ? ` / ${itemCount} 件单品` : ''}`,
       risk: '会永久删除当前穿搭记录，并回写关联推荐的采纳状态。',
       executePayload: { outfit_log_id: outfitLogId },
+    }
+  }
+
+  if (action === 'update_outfit_log') {
+    const selectedOutfitLog = resolveSelectedOutfitLog(latestResult)
+    const outfitLogId = Number.parseInt(selectedOutfitLog?.id || latestResult?.id, 10)
+    const patch = latestResult?.patch || latestResult?.result?.patch || {}
+    if (!outfitLogId) {
+      const error = new Error('当前没有可执行的穿搭记录对象')
+      error.status = 400
+      throw error
+    }
+    if (!Object.keys(patch).length) {
+      const error = new Error('当前没有可更新的穿搭记录字段')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: `更新穿搭记录“${selectedOutfitLog?.log_date || outfitLogId}”`,
+      scope: `outfit_log_id=${outfitLogId}`,
+      risk: '会修改当前穿搭记录的内容。',
+      details: {
+        logDate: patch.logDate || '',
+        scene: patch.scene || '',
+      },
+      executePayload: {
+        outfit_log_id: outfitLogId,
+        ...patch,
+      },
     }
   }
 
@@ -343,6 +493,68 @@ const buildConfirmationPayload = ({ action, latestResult, suitIndex = 0 }) => {
         cloth_id: clothId,
         ...patch,
       },
+    }
+  }
+
+  if (action === 'update_cloth_image') {
+    const selectedCloth = resolveSelectedCloth(latestResult)
+    const clothId = Number.parseInt(selectedCloth?.cloth_id, 10)
+    const image = String(latestResult?.image || latestResult?.result?.image || '').trim()
+    if (!clothId) {
+      const error = new Error('当前没有可执行的衣物对象')
+      error.status = 400
+      throw error
+    }
+    if (!isProbablyBase64Image(image)) {
+      const error = new Error('当前没有可更新的衣物图片')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: `替换衣物“${selectedCloth?.name || clothId}”的图片`,
+      scope: `cloth_id=${clothId}`,
+      risk: '会替换当前衣物的展示图片，并影响衣橱展示与后续推荐。',
+      previewImages: [
+        {
+          type: 'image',
+          name: selectedCloth?.name || `cloth-${clothId}`,
+          mimeType: image.match(/^data:(image\/[a-zA-Z0-9.+-]+)(?:;[^,]+)?,/)?.[1] || 'image/jpeg',
+          dataUrl: image,
+        },
+      ],
+      executePayload: {
+        cloth_id: clothId,
+        image,
+      },
+    }
+  }
+
+  if (action === 'import_closet_data') {
+    const items = Array.isArray(latestResult?.items) ? latestResult.items : Array.isArray(latestResult?.result?.items) ? latestResult.result.items : []
+    if (!items.length) {
+      const error = new Error('当前没有可导入的衣橱数据')
+      error.status = 400
+      throw error
+    }
+    return {
+      action,
+      summary: `导入 ${items.length} 件衣物到衣橱`,
+      scope: `${items.length} 件衣物`,
+      risk: '会向当前账号的衣橱新增多条衣物记录。',
+      details: {
+        count: String(items.length),
+        items: items.slice(0, 5).map((item, index) => ({
+          index: String(index + 1),
+          name: item?.name || `衣物 ${index + 1}`,
+          type: item?.type || '',
+          color: item?.color || '',
+          style: item?.style || '',
+          season: item?.season || '',
+          material: item?.material || '',
+        })),
+      },
+      executePayload: { items },
     }
   }
 
@@ -619,11 +831,23 @@ const stageAgentConfirmation = async (userId, input, sourceEntry, options = {}, 
         ? 'suit'
         : confirmation.action === 'update_user_sex'
           ? 'profile'
+        : confirmation.action === 'update_user_name'
+          ? 'profile'
+        : confirmation.action === 'upload_user_avatar'
+          ? 'profile'
+        : confirmation.action === 'upload_character_model'
+          ? 'profile'
+        : confirmation.action === 'delete_character_model'
+          ? 'profile'
         : confirmation.action === 'delete_outfit_log'
+          ? 'outfit_log'
+        : confirmation.action === 'update_outfit_log'
           ? 'outfit_log'
         : confirmation.action === 'delete_suit'
           ? 'suit'
         : confirmation.action === 'update_cloth_fields'
+          ? 'cloth'
+        : confirmation.action === 'update_cloth_image'
           ? 'cloth'
         : confirmation.action === 'delete_cloth'
           ? 'cloth'
@@ -631,6 +855,8 @@ const stageAgentConfirmation = async (userId, input, sourceEntry, options = {}, 
           ? 'cloth'
           : confirmation.action === 'create_clothes_batch'
             ? 'cloth'
+          : confirmation.action === 'import_closet_data'
+            ? 'wardrobe'
           : 'outfit_log',
     result: {
       pending: true,
@@ -664,8 +890,28 @@ const executeConfirmedAgentTask = async (pending) => {
     const result = await executeTool('update_user_sex', pending.executePayload, { userId: pending.userId })
     return { relatedObjectType: 'profile', relatedObjectId: pending.userId, result }
   }
+  if (pending.action === 'update_user_name') {
+    const result = await executeTool('update_user_name', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'profile', relatedObjectId: pending.userId, result }
+  }
+  if (pending.action === 'upload_user_avatar') {
+    const result = await executeTool('upload_user_avatar', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'profile', relatedObjectId: pending.userId, result }
+  }
+  if (pending.action === 'upload_character_model') {
+    const result = await executeTool('upload_character_model', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'profile', relatedObjectId: pending.userId, result }
+  }
+  if (pending.action === 'delete_character_model') {
+    const result = await executeTool('delete_character_model', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'profile', relatedObjectId: pending.userId, result }
+  }
   if (pending.action === 'delete_outfit_log') {
     const result = await executeTool('delete_outfit_log', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'outfit_log', relatedObjectId: pending.executePayload.outfit_log_id, result }
+  }
+  if (pending.action === 'update_outfit_log') {
+    const result = await executeTool('update_outfit_log', pending.executePayload, { userId: pending.userId })
     return { relatedObjectType: 'outfit_log', relatedObjectId: pending.executePayload.outfit_log_id, result }
   }
   if (pending.action === 'delete_suit') {
@@ -678,6 +924,10 @@ const executeConfirmedAgentTask = async (pending) => {
   }
   if (pending.action === 'update_cloth_fields') {
     const result = await executeTool('update_cloth_fields', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'cloth', relatedObjectId: pending.executePayload.cloth_id, result }
+  }
+  if (pending.action === 'update_cloth_image') {
+    const result = await executeTool('update_cloth_image', pending.executePayload, { userId: pending.userId })
     return { relatedObjectType: 'cloth', relatedObjectId: pending.executePayload.cloth_id, result }
   }
   if (pending.action === 'toggle_favorite') {
@@ -701,6 +951,10 @@ const executeConfirmedAgentTask = async (pending) => {
       userId: pending.userId,
     })
     return { relatedObjectType: 'profile_preference', relatedObjectId: null, result }
+  }
+  if (pending.action === 'import_closet_data') {
+    const result = await executeTool('import_closet_data', pending.executePayload, { userId: pending.userId })
+    return { relatedObjectType: 'wardrobe', relatedObjectId: null, result }
   }
   if (pending.action === 'save_suit') {
     const result = await executeTool('save_suit', pending.executePayload, { userId: pending.userId })
@@ -761,8 +1015,12 @@ const confirmAgentTask = async (userId, confirmId, deps = {}) => {
           ? {
               createdClothes: Array.isArray(executed.result?.items) ? executed.result.items : [],
             }
+          : pending.action === 'update_cloth_image' && executed.result
+            ? { selectedCloth: executed.result }
           : executed.result,
-    ...(pending.action === 'create_cloth' && executed.result ? { selectedCloth: executed.result } : {}),
+    ...((pending.action === 'create_cloth' || pending.action === 'update_cloth_image') && executed.result
+      ? { selectedCloth: executed.result }
+      : {}),
     historyId: pending.historyId,
   }
 }

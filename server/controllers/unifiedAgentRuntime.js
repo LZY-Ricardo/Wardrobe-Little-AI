@@ -458,7 +458,9 @@ const prepareAgentMessage = async (userId, sessionId, input, deps = {}) => {
     }
   }
 
-  const writeActionOptions = resolveWriteActionOptions(trimmed, deps.latestTask)
+  const writeActionOptions = resolveWriteActionOptions(trimmed, deps.latestTask, {
+    multimodal,
+  })
   const shouldUseTaskPipeline =
     Boolean(writeActionOptions) ||
     (!multimodal.attachments.length && !writeActionOptions)
@@ -549,23 +551,25 @@ const sendUnifiedAgentMessage = async (userId, sessionId, input, deps = {}) => {
     }
   }
 
-  if (
-    autonomousReplyResult?.kind === 'reply' &&
-    !(Array.isArray(autonomousReplyResult.attachments) && autonomousReplyResult.attachments.length)
-  ) {
-    const autoShown = await tryAutoShowContextImages({
-      userId,
-      input: trimmed,
-      latestTask: deps.latestTask || null,
-      multimodal,
-      clientContext: deps.clientContext || null,
-    })
+  if (['reply', 'media_reply'].includes(autonomousReplyResult?.kind)) {
+    if (
+      autonomousReplyResult?.kind === 'reply' &&
+      !(Array.isArray(autonomousReplyResult.attachments) && autonomousReplyResult.attachments.length)
+    ) {
+      const autoShown = await tryAutoShowContextImages({
+        userId,
+        input: trimmed,
+        latestTask: deps.latestTask || null,
+        multimodal,
+        clientContext: deps.clientContext || null,
+      })
 
-    if (autoShown) {
-      autoShownAttachments = autoShown.attachments
-      autonomousReplyResult = {
-        ...autonomousReplyResult,
-        reply: autoShown.reply,
+      if (autoShown) {
+        autoShownAttachments = autoShown.attachments
+        autonomousReplyResult = {
+          ...autonomousReplyResult,
+          reply: autoShown.reply,
+        }
       }
     }
 
@@ -926,12 +930,16 @@ const mergeReplyAttachments = (...groups) => {
     .filter(Boolean)
     .forEach((item) => {
       const key = [
+        item?.type || '',
         item?.variant || '',
         item?.objectType || '',
         item?.objectId || '',
         item?.dataUrl || '',
+        item?.name || '',
+        item?.content ? JSON.stringify(item.content) : '',
       ].join(':')
-      if (!item?.dataUrl || seen.has(key)) return
+      const hasContent = Boolean(item?.dataUrl || item?.content)
+      if (!hasContent || seen.has(key)) return
       seen.add(key)
       merged.push(item)
     })

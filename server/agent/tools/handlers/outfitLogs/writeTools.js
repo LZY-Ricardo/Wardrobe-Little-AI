@@ -1,4 +1,4 @@
-const { createOutfitLog, deleteOutfitLog } = require('../../../../controllers/outfitLogs')
+const { createOutfitLog, deleteOutfitLog, updateOutfitLog } = require('../../../../controllers/outfitLogs')
 const { getTodayInChina } = require('../../../../utils/date')
 
 const coerceInteger = (value) => {
@@ -44,6 +44,19 @@ const createOutfitLogTool = async (userId, args = {}, ctx = {}) => {
   return createOutfitLog(userId, payload)
 }
 
+const updateOutfitLogTool = async (userId, args = {}, ctx = {}) => {
+  const outfitLogId = coerceInteger(args.outfit_log_id)
+  if (!outfitLogId || outfitLogId <= 0) return { error: 'INVALID_OUTFIT_LOG_ID' }
+  const updater = ctx.updateOutfitLog || updateOutfitLog
+  const payload = {}
+  ;['recommendationId', 'suitId', 'logDate', 'scene', 'weatherSummary', 'satisfaction', 'source', 'note', 'items'].forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(args, key)) payload[key] = args[key]
+  })
+  const result = await updater(userId, outfitLogId, payload)
+  if (!result) return { error: 'NOT_FOUND' }
+  return result
+}
+
 const deleteOutfitLogTool = async (userId, args = {}) => {
   const outfitLogId = coerceInteger(args.outfit_log_id)
   if (!outfitLogId || outfitLogId <= 0) return { error: 'INVALID_OUTFIT_LOG_ID' }
@@ -56,4 +69,5 @@ module.exports = {
   buildOutfitLogPayloadFromLatestTask,
   createOutfitLogTool,
   deleteOutfitLogTool,
+  updateOutfitLogTool,
 }

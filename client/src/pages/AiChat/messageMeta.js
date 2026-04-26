@@ -41,18 +41,23 @@ const normalizeAttachments = (attachments = []) => {
       const name = clampString(item.name, 120)
       const mimeType = clampString(item.mimeType, 120)
       const dataUrl = clampString(item.dataUrl, 4_000_000)
+      const content = normalizeJsonValue(item.content)
       const source = clampString(item.source, 32)
       const variant = clampString(item.variant, 32)
       const objectType = clampString(item.objectType, 32)
       const objectId = Number.parseInt(item.objectId, 10)
       const suitIndex = Number.parseInt(item.suitIndex, 10)
       const suitLabel = clampString(item.suitLabel, 60)
-      if (!type || !dataUrl) return null
+      if (!type) return null
+      if (!['image', 'file'].includes(type)) return null
+      if (type === 'image' && !dataUrl) return null
+      if (type === 'file' && !dataUrl && !content) return null
       return {
         type,
         ...(mimeType ? { mimeType } : {}),
         ...(name ? { name } : {}),
-        dataUrl,
+        ...(dataUrl ? { dataUrl } : {}),
+        ...(content ? { content } : {}),
         ...(source ? { source } : {}),
         ...(variant ? { variant } : {}),
         ...(objectType ? { objectType } : {}),

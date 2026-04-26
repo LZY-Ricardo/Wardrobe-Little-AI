@@ -133,6 +133,30 @@ export default function AiChat() {
     setShowJumpToLatest(false)
   }, [sessionId])
 
+  const downloadAttachmentFile = (attachment) => {
+    if (attachment?.dataUrl) {
+      const link = document.createElement('a')
+      link.href = attachment.dataUrl
+      link.download = attachment.name || 'export.json'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      return
+    }
+    if (!attachment?.content) return
+    const blob = new Blob([JSON.stringify(attachment.content, null, 2)], {
+      type: attachment.mimeType || 'application/json;charset=utf-8',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = attachment.name || 'export.json'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   useEffect(() => {
     if (!autoScrollEnabledRef.current) {
       if (displayedMessages.length) {
@@ -390,6 +414,7 @@ export default function AiChat() {
                     <div className={message.role === 'user' ? styles.userBubble : styles.assistantBubble}>
                   {(() => {
                     const messageAttachments = Array.isArray(message.attachments) ? message.attachments : []
+                    const fileAttachments = messageAttachments.filter((a) => a?.type === 'file' && (a?.dataUrl || a?.content))
                     const recommendationGroups = buildRecommendationAttachmentGroups(messageAttachments)
                     const defaultSuitIndex = recommendationGroups[0]?.suitIndex ?? 0
                     const selectedSuitIndex = recommendationGroups.length
@@ -435,6 +460,20 @@ export default function AiChat() {
                     <div className={styles.messageImagesGrid} data-count={visibleAttachments.length}>
                       {visibleAttachments.map((attachment, index) => (
                         <img key={`${message.id}-img-${index}`} src={attachment.dataUrl} alt={attachment.name || '图片消息'} className={styles.messageImage} />
+                      ))}
+                    </div>
+                  ) : null}
+                  {fileAttachments.length ? (
+                    <div className={styles.messageFiles}>
+                      {fileAttachments.map((attachment, index) => (
+                        <button
+                          key={`${message.id}-file-${index}`}
+                          type="button"
+                          className={styles.messageFileButton}
+                          onClick={() => downloadAttachmentFile(attachment)}
+                        >
+                          下载 {attachment.name || '导出文件'}
+                        </button>
                       ))}
                     </div>
                   ) : null}

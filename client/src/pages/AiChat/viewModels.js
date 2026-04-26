@@ -63,7 +63,7 @@ export const mapMessage = (message) => {
 }
 
 export const buildRecommendationAttachmentGroups = (attachments = []) => {
-  const source = Array.isArray(attachments) ? attachments.filter((item) => item?.dataUrl) : []
+  const source = Array.isArray(attachments) ? attachments.filter((item) => item?.type === 'image' && item?.dataUrl) : []
   const hasSuitIndex = source.some((item) => Number.isFinite(Number(item?.suitIndex)))
   if (!hasSuitIndex) return []
 

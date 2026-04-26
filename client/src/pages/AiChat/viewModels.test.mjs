@@ -129,3 +129,37 @@ test('mapMessage keeps assistant attachment metadata and orders composite image 
     },
   ])
 })
+
+test('mapMessage keeps file attachments for download rendering', () => {
+  const message = mapMessage({
+    id: 4,
+    role: 'assistant',
+    content: '已准备导出文件',
+    message_type: 'chat',
+    meta: {
+      attachments: [
+        {
+          type: 'file',
+          mimeType: 'application/json',
+          name: 'closet-export.json',
+          content: { items: [{ cloth_id: 1 }] },
+          source: 'export',
+          variant: 'download',
+          objectType: 'closet_export',
+        },
+      ],
+    },
+  })
+
+  assert.deepEqual(message.attachments, [
+    {
+      type: 'file',
+      mimeType: 'application/json',
+      name: 'closet-export.json',
+      content: { items: [{ cloth_id: 1 }] },
+      source: 'export',
+      variant: 'download',
+      objectType: 'closet_export',
+    },
+  ])
+})

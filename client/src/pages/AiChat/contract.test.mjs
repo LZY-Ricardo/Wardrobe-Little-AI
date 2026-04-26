@@ -161,6 +161,40 @@ test('restored assistant message keeps image attachments for gallery rendering',
   ])
 })
 
+test('restored assistant message keeps file attachments for download rendering', () => {
+  const result = resolveLoadedSessionState({
+    payload: {
+      session: { id: 9, title: '衣橱导出' },
+      recent_messages: [
+        {
+          id: 3,
+          role: 'assistant',
+          content: '已准备衣橱导出数据',
+          message_type: 'chat',
+          meta: {
+            attachments: [
+              {
+                type: 'file',
+                mimeType: 'application/json',
+                name: 'closet-export-no-images-2026-04-26.json',
+                content: { exportedAt: '2026-04-26T10:00:00.000Z', items: [] },
+                source: 'export',
+                variant: 'download',
+                objectType: 'closet_export',
+              },
+            ],
+          },
+        },
+      ],
+    },
+  })
+
+  assert.equal(result.messages[0].attachments.length, 1)
+  assert.equal(result.messages[0].attachments[0].type, 'file')
+  assert.equal(result.messages[0].attachments[0].objectType, 'closet_export')
+  assert.deepEqual(result.messages[0].attachments[0].content, { exportedAt: '2026-04-26T10:00:00.000Z', items: [] })
+})
+
 test('buildRecommendationAttachmentGroups tolerates missing attachments', () => {
   assert.deepEqual(buildRecommendationAttachmentGroups(undefined), [])
 })

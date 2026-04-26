@@ -12,6 +12,23 @@ const {
 const allServices = { query }
 const MAX_IMAGE_BYTES = 1 * 1024 * 1024
 
+const validateClothImageOrThrow = (image = '') => {
+    const normalized = String(image || '').trim()
+    if (!normalized) return ''
+    if (!isProbablyBase64Image(normalized)) {
+        const error = new Error('请上传图片数据')
+        error.status = 400
+        throw error
+    }
+    const imageSize = calcBase64Size(normalized)
+    if (imageSize > MAX_IMAGE_BYTES) {
+        const error = new Error('图片大小需不超过 1MB，请压缩后再上传')
+        error.status = 400
+        throw error
+    }
+    return normalized
+}
+
 const parseTypeKeywords = (raw, fallback) =>
     String(raw || fallback || '')
         .split(',')
@@ -147,21 +164,7 @@ const createClothForUser = async (user_id, payload = {}) => {
     const style = ensureLen(payload.style, '衣物风格')
     const season = ensureLen(payload.season, '适宜季节')
     const material = clampLen(payload.material, 64)
-    const image = String(payload.image || '').trim()
-
-    if (image) {
-        if (!isProbablyBase64Image(image)) {
-            const error = new Error('请上传图片数据')
-            error.status = 400
-            throw error
-        }
-        const imageSize = calcBase64Size(image)
-        if (imageSize > MAX_IMAGE_BYTES) {
-            const error = new Error('图片大小需不超过 1MB，请压缩后再上传')
-            error.status = 400
-            throw error
-        }
-    }
+    const image = validateClothImageOrThrow(payload.image)
 
     const now = Date.now()
     const sql = 'INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -173,6 +176,118 @@ const createClothForUser = async (user_id, payload = {}) => {
         throw error
     }
     return getClothByIdForUser(user_id, result.insertId)
+}
+
+const exportClothesForUser = async (user_id, options = {}) => {
+    const includeImages = Boolean(options.includeImages)
+    const maxTotalBytes = Number(options.maxTotalBytes) || 4 * 1024 * 1024
+    const list = await getAllClothes(user_id)
+    const items = Array.isArray(list) ? list : []
+
+    let totalImageBytes = 0
+    const exportedItems = items.map((item) => {
+        const copy = { ...item }
+        if (!includeImages) {
+            delete copy.image
+            return copy
+        }
+        totalImageBytes += calcBase64Size(copy.image || '')
+        return copy
+    })
+
+    if (includeImages && totalImageBytes > maxTotalBytes) {
+        const error = new Error(`导出数据过大（图片约 ${(totalImageBytes / 1024 / 1024).toFixed(2)}MB），请减少衣物数量或使用不含图片导出`)
+        error.status = 413
+        throw error
+    }
+
+    return {
+        exportedAt: new Date().toISOString(),
+        includeImages,
+        items: exportedItems,
+    }
+}
+
+const normalizeImportItems = (payload = {}) => {
+    const rawItems = payload.items || payload.data?.items || payload
+    return Array.isArray(rawItems) ? rawItems : []
+}
+
+const importClothesForUser = async (user_id, payload = {}, options = {}) => {
+    const items = normalizeImportItems(payload)
+    if (!items.length) {
+        const error = new Error('导入数据为空')
+        error.status = 400
+        throw error
+    }
+
+    const hasImages = items.some((item) => Boolean(item?.image))
+    const maxItems = hasImages
+        ? (Number(options.maxItemsWithImages) || Number(process.env.CLOTHES_IMPORT_MAX_ITEMS_WITH_IMAGES) || 5)
+        : (Number(options.maxItems) || Number(process.env.CLOTHES_IMPORT_MAX_ITEMS) || 100)
+    if (items.length > maxItems) {
+        const error = new Error(`导入条目过多，最多支持 ${maxItems} 条`)
+        error.status = 400
+        throw error
+    }
+
+    const now = Date.now()
+    let inserted = 0
+
+    for (const item of items) {
+        if (!item || typeof item !== 'object') continue
+
+        const safeImage = validateClothImageOrThrow(item.image || '')
+
+        let safeName
+        let safeType
+        let safeColor
+        let safeStyle
+        let safeSeason
+        let safeMaterial
+        try {
+            safeName = ensureLen(item.name, '衣物名称')
+            safeType = normalizeClothesType(ensureLen(item.type, '衣物类型')).value
+            if (!hasRequiredClothesType(safeType)) {
+                const error = new Error('衣物类型需包含：上衣/下衣/鞋子/配饰')
+                error.status = 400
+                throw error
+            }
+            safeColor = ensureLen(item.color, '衣物颜色')
+            safeStyle = ensureLen(item.style, '衣物风格')
+            safeSeason = ensureLen(item.season, '适宜季节')
+            safeMaterial = clampLen(item.material, 64)
+        } catch (error) {
+            error.status = error.status || 400
+            throw error
+        }
+
+        const data = {
+            user_id,
+            name: safeName,
+            type: safeType,
+            color: safeColor,
+            style: safeStyle,
+            season: safeSeason,
+            material: safeMaterial,
+            image: safeImage,
+            create_time: now,
+            update_time: now,
+        }
+
+        // eslint-disable-next-line no-await-in-loop
+        const ok = await insertClothesData(data)
+        if (ok) inserted += 1
+    }
+
+    return { inserted, total: items.length }
+}
+
+const updateClothImageForUser = async (user_id, cloth_id, image) => {
+    const safeImage = validateClothImageOrThrow(image)
+    const ok = await updateClothFieldsForUser(user_id, cloth_id, { image: safeImage })
+    if (!ok) return null
+    return getClothByIdForUser(user_id, cloth_id)
 }
 
 const buildTypeLikeQuery = (user_id, keywords = []) => {
@@ -214,5 +329,9 @@ module.exports = {
     deleteClothForUser,
     updateClothFieldsForUser,
     createClothForUser,
+    exportClothesForUser,
+    importClothesForUser,
+    updateClothImageForUser,
+    validateClothImageOrThrow,
 
 }

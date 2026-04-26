@@ -171,6 +171,129 @@ test('buildPersistedConfirmationPayload strips raw images from create_clothes_ba
   ])
 })
 
+test('buildPersistedConfirmationPayload strips raw image from update_cloth_image execute payload', () => {
+  const persisted = buildPersistedConfirmationPayload(
+    'confirm-image',
+    {
+      action: 'update_cloth_image',
+      summary: '更新衣物图片',
+      scope: '衣物 #18',
+      risk: '会替换当前衣物的展示图片。',
+      executePayload: {
+        cloth_id: 18,
+        image: 'data:image/jpeg;base64,ZmFrZQ==',
+      },
+    },
+    999
+  )
+
+  assert.deepEqual(persisted.executePayload, {
+    cloth_id: 18,
+  })
+})
+
+test('buildPersistedConfirmationPayload strips raw images from import_closet_data execute payload', () => {
+  const persisted = buildPersistedConfirmationPayload(
+    'confirm-import',
+    {
+      action: 'import_closet_data',
+      summary: '导入衣橱数据',
+      scope: '2 件衣物',
+      risk: '会新增多条衣物记录到当前账号的衣橱中。',
+      executePayload: {
+        items: [
+          {
+            name: '黑色上衣',
+            type: '上衣',
+            image: 'data:image/jpeg;base64,ZmFrZQ==',
+          },
+          {
+            name: '白色鞋子',
+            type: '鞋子',
+            image: 'data:image/jpeg;base64,eHl6',
+          },
+        ],
+      },
+    },
+    1001
+  )
+
+  assert.deepEqual(persisted.executePayload, {
+    items: [
+      {
+        name: '黑色上衣',
+        type: '上衣',
+      },
+      {
+        name: '白色鞋子',
+        type: '鞋子',
+      },
+    ],
+  })
+})
+
+test('buildPersistedConfirmationPayload strips raw image from upload_user_avatar execute payload', () => {
+  const persisted = buildPersistedConfirmationPayload(
+    'confirm-avatar',
+    {
+      action: 'upload_user_avatar',
+      summary: '更新头像',
+      scope: 'profile avatar',
+      risk: '会替换当前账号头像。',
+      executePayload: {
+        image: 'data:image/jpeg;base64,ZmFrZQ==',
+      },
+    },
+    1002
+  )
+
+  assert.deepEqual(persisted.executePayload, {})
+})
+
+test('buildPersistedConfirmationPayload strips raw image from upload_character_model execute payload', () => {
+  const persisted = buildPersistedConfirmationPayload(
+    'confirm-model',
+    {
+      action: 'upload_character_model',
+      summary: '更新人物模特',
+      scope: 'character model',
+      risk: '会替换当前人物模特。',
+      executePayload: {
+        image: 'data:image/jpeg;base64,ZmFrZQ==',
+      },
+    },
+    1003
+  )
+
+  assert.deepEqual(persisted.executePayload, {})
+})
+
+test('buildPersistedConfirmationPayload keeps structured payload for update_outfit_log', () => {
+  const persisted = buildPersistedConfirmationPayload(
+    'confirm-outfit-update',
+    {
+      action: 'update_outfit_log',
+      summary: '更新穿搭记录',
+      scope: 'outfit_log_id=8',
+      risk: '会修改现有穿搭记录。',
+      executePayload: {
+        outfit_log_id: 8,
+        scene: '通勤',
+        note: '补一条备注',
+        items: [11, 12],
+      },
+    },
+    1004
+  )
+
+  assert.deepEqual(persisted.executePayload, {
+    outfit_log_id: 8,
+    scene: '通勤',
+    note: '补一条备注',
+    items: [11, 12],
+  })
+})
+
 test('getPendingAgentTaskByConfirmId can rehydrate create_cloth image from confirmation message meta', async () => {
   const { getPendingAgentTaskByConfirmId } = require('../controllers/confirmationService')
 

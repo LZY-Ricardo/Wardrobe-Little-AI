@@ -785,6 +785,173 @@ test('unified agent can let llm autonomously choose write tools and still requir
   }
 })
 
+test('unified agent can let llm autonomously export closet data', async () => {
+  const now = Date.now()
+  const username = `unified_export_closet_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let clothIds = []
+  let turn = 0
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    for (const [name, type] of [['导出上衣', '上衣 / 通勤'], ['导出鞋子', '鞋子 / 休闲']]) {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await query(
+        `INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, name, type, '黑色', '通勤', '春季', '', '', now, now]
+      )
+      clothIds.push(res.insertId)
+    }
+
+    const created = await createAgentSession(userId, { firstMessage: '导出衣橱会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '帮我导出衣橱数据', {
+      enableAutonomousTools: true,
+      requestAssistantTurn: async (messages) => {
+        turn += 1
+        if (turn === 1) {
+          return {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'tool-export-1',
+                type: 'function',
+                function: {
+                  name: 'export_closet_data',
+                  arguments: JSON.stringify({ includeImages: false }),
+                },
+              },
+            ],
+          }
+        }
+        assert.equal(messages[messages.length - 1].role, 'tool')
+        return {
+          role: 'assistant',
+          content: '已经帮你准备好衣橱导出数据了。',
+        }
+      },
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_FOR_AUTONOMOUS_EXPORT')
+      },
+    })
+
+    assert.equal(sent.message.message_type, 'chat')
+    assert.match(sent.message.content, /衣橱导出数据/)
+    assert.equal(turn, 2)
+  } finally {
+    if (userId) {
+      if (clothIds.length) {
+        await query('DELETE FROM clothes WHERE cloth_id IN (?)', [clothIds])
+      }
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent can let llm autonomously stage closet import with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_import_closet_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let importedIds = []
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '导入衣橱会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '帮我把这份衣橱数据导入进去', {
+      requestAssistantTurn: async () => ({
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'tool-import-1',
+            type: 'function',
+            function: {
+              name: 'import_closet_data',
+              arguments: JSON.stringify({
+                items: [
+                  {
+                    name: '导入黑色上衣',
+                    type: '上衣',
+                    color: '黑色',
+                    style: '通勤',
+                    season: '春季',
+                  },
+                  {
+                    name: '导入白色鞋子',
+                    type: '鞋子',
+                    color: '白色',
+                    style: '休闲',
+                    season: '四季',
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_FOR_AUTONOMOUS_IMPORT')
+      },
+    })
+
+    assert.equal(sent.latest_task.taskType, 'import_closet_data')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      sent.latest_task.confirmation.confirmId
+    )
+
+    assert.equal(confirmed.latest_task.status, 'success')
+    const rows = await query(
+      'SELECT cloth_id, name FROM clothes WHERE user_id = ? AND name IN (?, ?) ORDER BY cloth_id ASC',
+      [userId, '导入黑色上衣', '导入白色鞋子']
+    )
+    importedIds = rows.map((item) => item.cloth_id)
+    assert.equal(rows.length, 2)
+  } finally {
+    if (userId) {
+      if (importedIds.length) {
+        await query('DELETE FROM clothes WHERE cloth_id IN (?)', [importedIds])
+      }
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
 test('unified agent can let llm analyze one image and stage batch cloth creation', async () => {
   const now = Date.now()
   const username = `unified_llm_batch_ingest_${now}_${Math.random().toString(16).slice(2, 8)}`
@@ -1636,7 +1803,7 @@ test('unified agent can execute recommendation task inside same session', async 
     assert.ok(sent.message.attachments.length >= 2)
     assert.equal(sent.message.attachments[0].variant, 'composite')
     assert.equal(sent.restored.recent_messages.length, 2)
-    assert.match(sent.restored.recent_messages[1].content, /生成了/)
+    assert.equal(sent.restored.recent_messages[1].content, '当前展示 1 套推荐')
     assert.ok(Array.isArray(sent.restored.recent_messages[1].attachments))
     assert.equal(sent.restored.recent_messages[1].attachments[0].variant, 'composite')
   } finally {
@@ -2158,7 +2325,7 @@ test('unified session list exposes updated title, task type and last message pre
 
     assert.equal(sessions[0].title, '通勤搭配会话')
     assert.equal(sessions[0].current_task_type, 'recommendation')
-    assert.match(sessions[0].last_message_preview, /生成了/)
+    assert.equal(sessions[0].last_message_preview, '暂未生成推荐')
   } finally {
     if (userId) {
       if (sessionId) {
@@ -2470,6 +2637,85 @@ test('unified agent can update current cloth material from natural language with
     assert.equal(confirmed.latest_task.status, 'success')
     const rows = await query('SELECT material FROM clothes WHERE user_id = ? AND cloth_id = ?', [userId, clothId])
     assert.equal(rows[0].material, '羊毛')
+  } finally {
+    if (userId) {
+      if (clothId) {
+        await query('DELETE FROM clothes WHERE cloth_id = ?', [clothId])
+      }
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent can update current cloth image from natural language with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_cloth_image_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let clothId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const clothRes = await query(
+      `INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, '可改图片衣物', '上衣 / 通勤', '黑色', '通勤', '春季', '', 'data:image/jpeg;base64,b2xk', now, now]
+    )
+    clothId = clothRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '衣物图片编辑会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '把这张图替换成这件衣服的图片', {
+      latestTask: {
+        selectedCloth: {
+          cloth_id: clothId,
+          name: '可改图片衣物',
+          type: '上衣 / 通勤',
+          color: '黑色',
+          style: '通勤',
+          season: '春季',
+        },
+      },
+      attachments: [
+        {
+          type: 'image',
+          mimeType: 'image/jpeg',
+          name: 'new-cloth.jpg',
+          dataUrl: 'data:image/jpeg;base64,bmV3',
+        },
+      ],
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_LLM_FOR_CONTEXTUAL_CLOTH_IMAGE_UPDATE')
+      },
+    })
+
+    assert.equal(sent.latest_task.taskType, 'update_cloth_image')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      sent.latest_task.confirmation.confirmId
+    )
+
+    assert.equal(confirmed.latest_task.status, 'success')
+    assert.equal(confirmed.latest_task.relatedObjectType, 'cloth')
+    const rows = await query('SELECT image FROM clothes WHERE user_id = ? AND cloth_id = ?', [userId, clothId])
+    assert.equal(rows[0].image, 'data:image/jpeg;base64,bmV3')
   } finally {
     if (userId) {
       if (clothId) {
@@ -2981,6 +3227,96 @@ test('unified agent can read current outfit log details from contextual state', 
   }
 })
 
+test('unified agent can update current outfit log from natural language with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_update_outfit_log_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+  let clothIds = []
+  let outfitLogId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    for (const [name, type] of [['记录上衣', '上衣 / 通勤'], ['记录下衣', '下衣 / 通勤']]) {
+      // eslint-disable-next-line no-await-in-loop
+      const res = await query(
+        `INSERT INTO clothes (user_id, name, type, color, style, season, material, image, create_time, update_time)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, name, type, '黑色', '通勤', '春季', '', '', now, now]
+      )
+      clothIds.push(res.insertId)
+    }
+
+    const logRes = await query(
+      `INSERT INTO outfit_logs (user_id, recommendation_id, suit_id, log_date, scene, weather_summary, satisfaction, source, note, create_time, update_time)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, null, null, '2026-04-26', '日常', '', 3, 'manual', '', now, now]
+    )
+    outfitLogId = logRes.insertId
+    await query('INSERT INTO outfit_log_items (outfit_log_id, cloth_id, sort_order) VALUES ?', [
+      clothIds.map((clothId, index) => [outfitLogId, clothId, index]),
+    ])
+
+    const created = await createAgentSession(userId, { firstMessage: '穿搭记录更新会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '把这条穿搭记录改成通勤并补一句备注今天太热了', {
+      latestTask: {
+        selectedOutfitLog: {
+          id: outfitLogId,
+          log_date: '2026-04-26',
+          scene: '日常',
+          weather_summary: '',
+          satisfaction: 3,
+          note: '',
+          items: clothIds.map((cloth_id) => ({ cloth_id })),
+        },
+      },
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_LLM_FOR_OUTFIT_LOG_UPDATE')
+      },
+    })
+
+    assert.equal(sent.latest_task.taskType, 'update_outfit_log')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      sent.latest_task.confirmation.confirmId
+    )
+
+    assert.equal(confirmed.latest_task.status, 'success')
+    const rows = await query('SELECT scene, note FROM outfit_logs WHERE user_id = ? AND id = ?', [userId, outfitLogId])
+    assert.equal(rows[0].scene, '通勤')
+    assert.equal(rows[0].note, '今天太热了')
+  } finally {
+    if (userId) {
+      if (outfitLogId) {
+        await query('DELETE FROM outfit_log_items WHERE outfit_log_id = ?', [outfitLogId])
+        await query('DELETE FROM outfit_logs WHERE id = ?', [outfitLogId])
+      }
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      if (clothIds.length) {
+        await query('DELETE FROM clothes WHERE cloth_id IN (?)', [clothIds])
+      }
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
 test('unified agent can update user sex from natural language with confirmation', async () => {
   const now = Date.now()
   const username = `unified_update_sex_${now}_${Math.random().toString(16).slice(2, 8)}`
@@ -3019,6 +3355,197 @@ test('unified agent can update user sex from natural language with confirmation'
 
     const rows = await query('SELECT sex FROM user WHERE id = ?', [userId])
     assert.equal(rows[0].sex, 'woman')
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent can update user name from natural language with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_update_name_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, name, create_time, update_time) VALUES (?, ?, ?, ?, ?)',
+      [username, 'test-password', '旧昵称', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '昵称修改会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '把我的昵称改成新的名字', {
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_LLM_FOR_USER_NAME_UPDATE')
+      },
+    })
+
+    assert.equal(sent.latest_task.taskType, 'update_user_name')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      sent.latest_task.confirmation.confirmId
+    )
+
+    assert.equal(confirmed.latest_task.status, 'success')
+    const rows = await query('SELECT name FROM user WHERE id = ?', [userId])
+    assert.equal(rows[0].name, '新的名字')
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent can update avatar from autonomous tool call with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_avatar_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '头像更新会话' })
+    sessionId = created.session.id
+
+    const sent = await sendUnifiedAgentMessage(userId, sessionId, '把这张图片设为我的头像', {
+      enableAutonomousTools: true,
+      requestAssistantTurn: async () => ({
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'tool-avatar-1',
+            type: 'function',
+            function: {
+              name: 'upload_user_avatar',
+              arguments: JSON.stringify({ image: 'data:image/jpeg;base64,YXZhdGFy' }),
+            },
+          },
+        ],
+      }),
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_FOR_AVATAR_UPLOAD')
+      },
+    })
+
+    assert.equal(sent.latest_task.taskType, 'upload_user_avatar')
+    assert.equal(sent.latest_task.requiresConfirmation, true)
+    assert.ok(sent.latest_task.confirmation?.confirmId)
+
+    const confirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      sent.latest_task.confirmation.confirmId
+    )
+
+    assert.equal(confirmed.latest_task.status, 'success')
+    const rows = await query('SELECT avatar FROM user WHERE id = ?', [userId])
+    assert.equal(rows[0].avatar, 'data:image/jpeg;base64,YXZhdGFy')
+  } finally {
+    if (userId) {
+      if (sessionId) {
+        await query('DELETE FROM agent_session_memory WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_messages WHERE session_id = ?', [sessionId])
+        await query('DELETE FROM agent_sessions WHERE id = ?', [sessionId])
+      }
+      await query('DELETE FROM agent_task_history WHERE user_id = ?', [userId])
+      await query('DELETE FROM user_style_profile WHERE user_id = ?', [userId])
+      await query('DELETE FROM user WHERE id = ?', [userId])
+    }
+  }
+})
+
+test('unified agent can upload and delete character model with confirmation', async () => {
+  const now = Date.now()
+  const username = `unified_model_${now}_${Math.random().toString(16).slice(2, 8)}`
+  let userId = null
+  let sessionId = null
+
+  try {
+    const userRes = await query(
+      'INSERT INTO user (username, password, create_time, update_time) VALUES (?, ?, ?, ?)',
+      [username, 'test-password', now, now]
+    )
+    userId = userRes.insertId
+
+    const created = await createAgentSession(userId, { firstMessage: '模特更新会话' })
+    sessionId = created.session.id
+
+    const uploaded = await sendUnifiedAgentMessage(userId, sessionId, '把这张图片设为我的人物模特', {
+      enableAutonomousTools: true,
+      requestAssistantTurn: async () => ({
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: 'tool-model-upload-1',
+            type: 'function',
+            function: {
+              name: 'upload_character_model',
+              arguments: JSON.stringify({ image: 'data:image/jpeg;base64,bW9kZWw=' }),
+            },
+          },
+        ],
+      }),
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_GENERATE_REPLY_FOR_CHARACTER_MODEL_UPLOAD')
+      },
+    })
+
+    assert.equal(uploaded.latest_task.taskType, 'upload_character_model')
+    const uploadConfirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      uploaded.latest_task.confirmation.confirmId
+    )
+    assert.equal(uploadConfirmed.latest_task.status, 'success')
+
+    let rows = await query('SELECT characterModel FROM user WHERE id = ?', [userId])
+    assert.equal(rows[0].characterModel, 'data:image/jpeg;base64,bW9kZWw=')
+
+    const deleted = await sendUnifiedAgentMessage(userId, sessionId, '删除我的人物模特', {
+      generateReply: async () => {
+        throw new Error('SHOULD_NOT_USE_LLM_FOR_CHARACTER_MODEL_DELETE')
+      },
+    })
+
+    assert.equal(deleted.latest_task.taskType, 'delete_character_model')
+    const deleteConfirmed = await require('../controllers/unifiedAgentRuntime').confirmUnifiedAgentAction(
+      userId,
+      sessionId,
+      deleted.latest_task.confirmation.confirmId
+    )
+    assert.equal(deleteConfirmed.latest_task.status, 'success')
+
+    rows = await query('SELECT characterModel FROM user WHERE id = ?', [userId])
+    assert.equal(rows[0].characterModel, null)
   } finally {
     if (userId) {
       if (sessionId) {

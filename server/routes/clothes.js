@@ -19,7 +19,9 @@ const {
     insertClothesData,
     getAllClothes,
     deleteClothForUser,
+    exportClothesForUser,
     getClothByIdForUser,
+    importClothesForUser,
     updateClothFieldsForUser,
     getTopClothesByConfig,
     getBotClothesByConfig,
@@ -139,122 +141,25 @@ router.get('/all', verify(), async (ctx) => {
 router.get('/export', verify(), async (ctx) => {
     const user_id = ctx.userId
     const includeImages = String(ctx.query?.includeImages || '0') === '1'
-    const maxTotalBytes = Number(process.env.CLOTHES_EXPORT_MAX_BYTES) || 4 * 1024 * 1024
-
-    const list = await getAllClothes(user_id)
-    const items = Array.isArray(list) ? list : []
-
-    let totalImageBytes = 0
-    const exportedItems = items.map((item) => {
-        const copy = { ...item }
-        if (!includeImages) {
-            delete copy.image
-            return copy
-        }
-        totalImageBytes += calcBase64Size(copy.image || '')
-        return copy
+    const data = await exportClothesForUser(user_id, {
+        includeImages,
+        maxTotalBytes: Number(process.env.CLOTHES_EXPORT_MAX_BYTES) || 4 * 1024 * 1024,
     })
-
-    if (includeImages && totalImageBytes > maxTotalBytes) {
-        ctx.status = 413
-        ctx.body = {
-            code: 0,
-            msg: `导出数据过大（图片约 ${(totalImageBytes / 1024 / 1024).toFixed(2)}MB），请减少衣物数量或使用不含图片导出`,
-        }
-        return
-    }
-
     ctx.body = {
         code: 1,
         msg: '导出成功',
-        data: {
-            exportedAt: new Date().toISOString(),
-            includeImages,
-            items: exportedItems,
-        },
+        data,
     }
 })
 
 // 导入衣橱（merge 模式，仅新增，不覆盖）
 router.post('/import', verify(), async (ctx) => {
     const user_id = ctx.userId
-    const payload = ctx.request.body || {}
-    const rawItems = payload.items || payload.data?.items || payload
-    const items = Array.isArray(rawItems) ? rawItems : []
-
-    if (!items.length) {
-        ctx.status = 400
-        ctx.body = { code: 0, msg: '导入数据为空' }
-        return
-    }
-
-    const hasImages = items.some((item) => Boolean(item?.image))
-    const maxItems = hasImages ? (Number(process.env.CLOTHES_IMPORT_MAX_ITEMS_WITH_IMAGES) || 5) : (Number(process.env.CLOTHES_IMPORT_MAX_ITEMS) || 100)
-    if (items.length > maxItems) {
-        ctx.status = 400
-        ctx.body = { code: 0, msg: `导入条目过多，最多支持 ${maxItems} 条` }
-        return
-    }
-
-    const now = Date.now()
-    let inserted = 0
-
-    for (const item of items) {
-        if (!item || typeof item !== 'object') continue
-
-        const safeImage = item.image || ''
-        if (safeImage) {
-            if (!isProbablyBase64Image(safeImage)) {
-                ctx.status = 400
-                ctx.body = { code: 0, msg: '导入图片格式无效（需 data:image/...;base64,）' }
-                return
-            }
-            const bytes = calcBase64Size(safeImage)
-            if (bytes > MAX_IMAGE_BYTES) {
-                ctx.status = 400
-                ctx.body = { code: 0, msg: '导入图片大小需不超过 1MB' }
-                return
-            }
-        }
-
-        let safeName
-        let safeType
-        let safeColor
-        let safeStyle
-        let safeSeason
-        let safeMaterial
-        try {
-            safeName = ensureLen(item.name, '衣物名称')
-            safeType = ensureLen(item.type, '衣物类型')
-            safeColor = ensureLen(item.color, '衣物颜色')
-            safeStyle = ensureLen(item.style, '衣物风格')
-            safeSeason = ensureLen(item.season, '适宜季节')
-            safeMaterial = clampLen(item.material, 64)
-        } catch (error) {
-            ctx.status = error.status || 400
-            ctx.body = { code: 0, msg: error.message }
-            return
-        }
-
-        const data = {
-            user_id,
-            name: safeName,
-            type: safeType,
-            color: safeColor,
-            style: safeStyle,
-            season: safeSeason,
-            material: safeMaterial,
-            image: safeImage,
-            create_time: now,
-            update_time: now,
-        }
-
-        // eslint-disable-next-line no-await-in-loop
-        const ok = await insertClothesData(data)
-        if (ok) inserted += 1
-    }
-
-    ctx.body = { code: 1, msg: '导入完成', data: { inserted, total: items.length } }
+    const data = await importClothesForUser(user_id, ctx.request.body || {}, {
+        maxItems: Number(process.env.CLOTHES_IMPORT_MAX_ITEMS) || 100,
+        maxItemsWithImages: Number(process.env.CLOTHES_IMPORT_MAX_ITEMS_WITH_IMAGES) || 5,
+    })
+    ctx.body = { code: 1, msg: '导入完成', data }
 })
 
 // 获取上衣数据

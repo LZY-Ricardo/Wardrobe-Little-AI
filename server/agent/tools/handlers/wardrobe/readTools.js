@@ -1,4 +1,4 @@
-const { getAllClothes, getClothByIdForUser } = require('../../../../controllers/clothes')
+const { getAllClothes, getClothByIdForUser, exportClothesForUser } = require('../../../../controllers/clothes')
 
 const safeString = (value) => (typeof value === 'string' ? value : value == null ? '' : String(value))
 const coerceBoolean = (value) => Boolean(value === true || value === 1 || value === '1' || value === 'true')
@@ -63,7 +63,38 @@ const getClothDetail = async (userId, args = {}) => {
   return pickCloth(cloth)
 }
 
+const exportClosetData = async (userId, args = {}, ctx = {}) => {
+  const exporter = ctx.exportClothesForUser || exportClothesForUser
+  const includeImages = coerceBoolean(args.includeImages)
+  const payload = await exporter(userId, { includeImages })
+  const total = Array.isArray(payload?.items) ? payload.items.length : 0
+  const exportedAt = safeString(payload?.exportedAt) || new Date().toISOString()
+  const datePart = exportedAt.slice(0, 10) || 'closet-export'
+  const fileName = `closet-export-${includeImages ? 'with-images' : 'no-images'}-${datePart}.json`
+  return {
+    kind: 'media_result',
+    summary: `已准备 ${total} 件衣物的衣橱导出数据。`,
+    total,
+    includeImages,
+    exportedAt,
+    fileName,
+    payload,
+    attachments: [
+      {
+        type: 'file',
+        mimeType: 'application/json',
+        name: fileName,
+        content: payload,
+        source: 'export',
+        variant: 'download',
+        objectType: 'closet_export',
+      },
+    ],
+  }
+}
+
 module.exports = {
+  exportClosetData,
   getClothDetail,
   listClothes,
 }

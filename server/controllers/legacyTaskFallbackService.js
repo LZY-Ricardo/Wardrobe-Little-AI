@@ -64,7 +64,7 @@ const resolveSelectedOutfitLog = (latestTask = null) => {
   return focus?.type === 'outfitLog' ? focus.entity : latestTask?.selectedOutfitLog || latestTask?.result?.selectedOutfitLog || null
 }
 
-const resolveWriteActionOptions = (input, latestTask) => {
+const resolveWriteActionOptions = (input, latestTask, runtimeContext = {}) => {
   const text = String(input || '')
   const normalized = text.replace(/\s+/g, '')
 
@@ -96,6 +96,61 @@ const resolveWriteActionOptions = (input, latestTask) => {
           : latestTask?.latestProfile || latestTask?.result?.latestProfile || null,
         sex: normalizedSex,
       },
+    }
+  }
+
+  const runtimeImages = pickRuntimeImageAttachments(runtimeContext)
+
+  const hasAvatarUploadIntent =
+    runtimeImages.length &&
+    (normalized.includes('头像')) &&
+    (normalized.includes('设为') || normalized.includes('换成') || normalized.includes('改成') || normalized.includes('更新'))
+
+  if (hasAvatarUploadIntent) {
+    return {
+      action: 'upload_user_avatar',
+      latestResult: {
+        image: runtimeImages[0],
+      },
+    }
+  }
+
+  const hasCharacterModelUploadIntent =
+    runtimeImages.length &&
+    ((normalized.includes('人物模特')) || (normalized.includes('模特'))) &&
+    (normalized.includes('设为') || normalized.includes('换成') || normalized.includes('改成') || normalized.includes('更新'))
+
+  if (hasCharacterModelUploadIntent) {
+    return {
+      action: 'upload_character_model',
+      latestResult: {
+        image: runtimeImages[0],
+      },
+    }
+  }
+
+  if (
+    (normalized.includes('删除') || normalized.includes('移除')) &&
+    (normalized.includes('人物模特') || normalized.includes('模特'))
+  ) {
+    return {
+      action: 'delete_character_model',
+      latestResult: {},
+    }
+  }
+
+  if (
+    normalized.includes('昵称') &&
+    (normalized.includes('改成') || normalized.includes('改为') || normalized.includes('设为') || normalized.includes('设置为'))
+  ) {
+    const matched = normalized.match(/昵称(?:改成|改为|设为|设置为)([^，。！？,.!？；;]+)/)
+      || normalized.match(/把我的昵称(?:改成|改为|设为|设置为)([^，。！？,.!？；;]+)/)
+    const name = String(matched?.[1] || '').trim()
+    if (name) {
+      return {
+        action: 'update_user_name',
+        latestResult: { name },
+      }
     }
   }
 
@@ -192,6 +247,35 @@ const resolveWriteActionOptions = (input, latestTask) => {
         },
       }
     }
+
+    const hasImageUpdateIntent =
+      runtimeImages.length &&
+      (
+        normalized.includes('换图') ||
+        normalized.includes('换成这张图') ||
+        normalized.includes('替换成这张图') ||
+        normalized.includes('替换图片') ||
+        normalized.includes('更新图片') ||
+        normalized.includes('改成这张图') ||
+        (normalized.includes('替换') && (normalized.includes('图片') || normalized.includes('这张图')))
+      ) &&
+      (
+        normalized.includes('这件') ||
+        normalized.includes('当前') ||
+        normalized.includes('这个') ||
+        normalized.includes('衣服') ||
+        normalized.includes('衣物')
+      )
+
+    if (hasImageUpdateIntent) {
+      return {
+        action: 'update_cloth_image',
+        latestResult: {
+          selectedCloth,
+          image: runtimeImages[0],
+        },
+      }
+    }
   }
 
   if (selectedSuit) {
@@ -239,6 +323,28 @@ const resolveWriteActionOptions = (input, latestTask) => {
         action: 'view_outfit_log_details',
         latestResult: {
           selectedOutfitLog,
+        },
+      }
+    }
+
+    const outfitLogPatch = {}
+    const sceneMatch = normalized.match(/改成(通勤|面试|约会|日常|运动|旅行|上班|上学)/)
+      || normalized.match(/改为(通勤|面试|约会|日常|运动|旅行|上班|上学)/)
+      || normalized.match(/场景改成(通勤|面试|约会|日常|运动|旅行|上班|上学)/)
+      || normalized.match(/场景改为(通勤|面试|约会|日常|运动|旅行|上班|上学)/)
+    if (sceneMatch?.[1]) outfitLogPatch.scene = sceneMatch[1]
+
+    const noteMatch = normalized.match(/补一句备注[:：]?([^，。！？,.!？；;]+)/)
+      || normalized.match(/备注改成[:：]?([^，。！？,.!？；;]+)/)
+      || normalized.match(/备注改为[:：]?([^，。！？,.!？；;]+)/)
+    if (noteMatch?.[1]) outfitLogPatch.note = String(noteMatch[1]).trim()
+
+    if (Object.keys(outfitLogPatch).length) {
+      return {
+        action: 'update_outfit_log',
+        latestResult: {
+          selectedOutfitLog,
+          patch: outfitLogPatch,
         },
       }
     }
@@ -346,6 +452,23 @@ const mapToolIntentToTaskOptions = (toolName = '', toolArgs = {}, runtimeContext
       },
     }
   }
+  if (toolName === 'update_cloth_image') {
+    return {
+      action: 'update_cloth_image',
+      latestResult: {
+        selectedCloth: { cloth_id: args.cloth_id, name: args.name || '' },
+        image: args.image || '',
+      },
+    }
+  }
+  if (toolName === 'import_closet_data') {
+    return {
+      action: 'import_closet_data',
+      latestResult: {
+        items: Array.isArray(args.items) ? args.items : [],
+      },
+    }
+  }
   if (toolName === 'delete_cloth') {
     return { action: 'delete_cloth', latestResult: { selectedCloth: { cloth_id: args.cloth_id, name: args.name || '' } } }
   }
@@ -360,6 +483,18 @@ const mapToolIntentToTaskOptions = (toolName = '', toolArgs = {}, runtimeContext
   }
   if (toolName === 'update_user_sex') {
     return { action: 'update_user_sex', latestResult: { sex: args.sex } }
+  }
+  if (toolName === 'update_user_name') {
+    return { action: 'update_user_name', latestResult: { name: args.name } }
+  }
+  if (toolName === 'upload_user_avatar') {
+    return { action: 'upload_user_avatar', latestResult: { image: args.image || '' } }
+  }
+  if (toolName === 'upload_character_model') {
+    return { action: 'upload_character_model', latestResult: { image: args.image || '' } }
+  }
+  if (toolName === 'delete_character_model') {
+    return { action: 'delete_character_model', latestResult: {} }
   }
   if (toolName === 'update_confirmation_preferences') {
     return { action: 'update_confirmation_preferences', latestResult: { nextLowRiskNoConfirm: Boolean(args.lowRiskNoConfirm) } }
@@ -404,6 +539,16 @@ const mapToolIntentToTaskOptions = (toolName = '', toolArgs = {}, runtimeContext
       action: 'create_outfit_log',
       latestResult: latestTask,
       suitIndex: Number.isFinite(args.suitIndex) ? args.suitIndex : 0,
+    }
+  }
+  if (toolName === 'update_outfit_log') {
+    const { outfit_log_id, ...patch } = args
+    return {
+      action: 'update_outfit_log',
+      latestResult: {
+        selectedOutfitLog: { id: outfit_log_id, log_date: args.logDate || '' },
+        patch,
+      },
     }
   }
   if (toolName === 'set_cloth_favorite') {
@@ -541,16 +686,23 @@ const executeLegacyAgentTask = async (userId, input, sourceEntry = 'agent-page',
 
   if (
     options?.action === 'update_user_sex' ||
+    options?.action === 'update_user_name' ||
+    options?.action === 'upload_user_avatar' ||
+    options?.action === 'upload_character_model' ||
+    options?.action === 'delete_character_model' ||
     options?.action === 'delete_outfit_log' ||
     options?.action === 'delete_suit' ||
     options?.action === 'delete_cloth' ||
     options?.action === 'update_cloth_fields' ||
+    options?.action === 'update_cloth_image' ||
     options?.action === 'save_suit' ||
     options?.action === 'create_outfit_log' ||
+    options?.action === 'update_outfit_log' ||
     options?.action === 'toggle_favorite' ||
     options?.action === 'update_confirmation_preferences' ||
     options?.action === 'create_cloth' ||
-    options?.action === 'create_clothes_batch'
+    options?.action === 'create_clothes_batch' ||
+    options?.action === 'import_closet_data'
   ) {
     if (LOW_RISK_ACTIONS.has(options.action)) {
       const profile = await getProfileInsight(userId, {})

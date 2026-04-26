@@ -29,6 +29,10 @@ const FALLBACK_PRESENTERS = {
     const name = safeString(result.name)
     return name ? `已读取“${name}”详情` : '已读取衣物详情'
   },
+  export_closet_data: (result = {}) => {
+    const total = Number(result.total || 0)
+    return total > 0 ? `已准备 ${total} 件衣物的衣橱导出数据` : '已准备衣橱导出数据'
+  },
   generate_scene_suits: (result = {}) => {
     if (result?.error === 'EMPTY_CLOSET') {
       return replaceKnownRoutesWithPageNames(safeString(result.message || '衣橱为空，请先添加衣物'))
@@ -59,6 +63,12 @@ const FALLBACK_PRESENTERS = {
     return count > 0 ? `已批量保存 ${count} 件衣物到衣橱` : '已批量保存到衣橱'
   },
   update_cloth_fields: () => '已更新衣物信息',
+  update_cloth_image: () => '已更新衣物图片',
+  import_closet_data: (result = {}) => {
+    const inserted = Number(result.inserted || 0)
+    const total = Number(result.total || 0)
+    return total > 0 ? `已导入 ${inserted}/${total} 件衣物` : '已导入衣橱数据'
+  },
   set_cloth_favorite: (result = {}) => (result.favorite ? '已收藏衣物' : '已取消收藏衣物'),
   delete_cloth: () => '已删除衣物',
   save_suit: (result = {}) => {
@@ -79,11 +89,22 @@ const FALLBACK_PRESENTERS = {
     const logDate = safeString(result.log_date || result.logDate)
     return logDate ? `已记录 ${logDate} 的穿搭` : '已记录穿搭'
   },
+  update_outfit_log: (result = {}) => {
+    const logDate = safeString(result.log_date || result.logDate)
+    return logDate ? `已更新 ${logDate} 的穿搭记录` : '已更新穿搭记录'
+  },
   delete_outfit_log: () => '已删除穿搭记录',
   update_user_sex: (result = {}) => {
     const sex = safeString(result.sex)
     return sex === 'man' ? '已更新性别为男' : sex === 'woman' ? '已更新性别为女' : '已更新性别设置'
   },
+  update_user_name: (result = {}) => {
+    const name = safeString(result.name)
+    return name ? `已更新昵称为“${name}”` : '已更新昵称'
+  },
+  upload_user_avatar: () => '已更新头像',
+  upload_character_model: () => '已更新人物模特',
+  delete_character_model: () => '已删除人物模特',
   update_confirmation_preferences: (result = {}) =>
     result.lowRiskNoConfirm ? '已开启低风险操作免确认' : '已关闭低风险操作免确认',
 }

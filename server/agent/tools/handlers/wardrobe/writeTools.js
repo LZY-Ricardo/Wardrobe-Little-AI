@@ -2,6 +2,8 @@ const {
   createClothForUser,
   deleteClothForUser,
   getClothByIdForUser,
+  importClothesForUser,
+  updateClothImageForUser,
   updateClothFieldsForUser,
 } = require('../../../../controllers/clothes')
 
@@ -83,6 +85,41 @@ const updateClothFields = async (userId, args = {}) => {
   return { cloth_id: clothId, updated: true, patch }
 }
 
+const updateClothImage = async (userId, args = {}, ctx = {}) => {
+  const clothId = coerceInteger(args.cloth_id)
+  if (!clothId || clothId <= 0) return { error: 'INVALID_CLOTH_ID' }
+  const image = safeString(args.image).trim()
+  if (!image) return { error: 'MISSING_IMAGE' }
+
+  const updater = ctx.updateClothImageForUser
+    || (ctx.updateClothFieldsForUser
+      ? async (safeUserId, safeClothId, safeImage) => {
+          const ok = await ctx.updateClothFieldsForUser(safeUserId, safeClothId, { image: safeImage })
+          if (!ok) return null
+          const getCloth = ctx.getClothByIdForUser || getClothByIdForUser
+          return getCloth(safeUserId, safeClothId)
+        }
+      : updateClothImageForUser)
+  const getCloth = ctx.getClothByIdForUser || getClothByIdForUser
+  const updated = await updater(userId, clothId, image)
+  if (!updated) {
+    const exists = await getCloth(userId, clothId)
+    if (!exists) return { error: 'NOT_FOUND' }
+    return { error: 'UPDATE_FAILED' }
+  }
+  return {
+    ...pickCloth(updated),
+    updated: true,
+  }
+}
+
+const importClosetData = async (userId, args = {}, ctx = {}) => {
+  const items = Array.isArray(args.items) ? args.items : []
+  if (!items.length) return { error: 'EMPTY_ITEMS' }
+  const importer = ctx.importClothesForUser || importClothesForUser
+  return importer(userId, { items })
+}
+
 const deleteCloth = async (userId, args = {}) => {
   const clothId = coerceInteger(args.cloth_id)
   if (!clothId || clothId <= 0) return { error: 'INVALID_CLOTH_ID' }
@@ -98,6 +135,8 @@ module.exports = {
   createCloth,
   createClothesBatch,
   deleteCloth,
+  importClosetData,
   setClothFavorite,
+  updateClothImage,
   updateClothFields,
 }

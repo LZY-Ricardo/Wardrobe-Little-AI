@@ -39,7 +39,7 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
   const selectedSuit = resolveSelectedSuit(latestTask)
   const outfitLog = resolveOutfitLog(latestTask)
 
-  if (taskType === 'create_cloth' || taskType === 'update_cloth_fields' || taskType === 'toggle_favorite') {
+  if (taskType === 'create_cloth' || taskType === 'update_cloth_fields' || taskType === 'update_cloth_image' || taskType === 'toggle_favorite') {
     if (!selectedCloth) return null
     return buildNavigationAction({
       pageKey: 'editCloth',
@@ -82,7 +82,19 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
     })
   }
 
+  if (taskType === 'update_outfit_log') {
+    return buildNavigationAction({
+      pageKey: 'outfitLogs',
+      label: '打开穿搭记录',
+      state: outfitLog ? buildAgentContextState({ focus: { type: 'outfitLog', entity: outfitLog } }) : null,
+    })
+  }
+
   if (taskType === 'delete_cloth') {
+    return buildNavigationAction({ pageKey: 'wardrobe', label: '打开虚拟衣柜' })
+  }
+
+  if (taskType === 'import_closet_data' || taskType === 'export_closet_data') {
     return buildNavigationAction({ pageKey: 'wardrobe', label: '打开虚拟衣柜' })
   }
 
@@ -121,6 +133,19 @@ const buildAssistantActionButton = ({ intent = '', reply = '', latestTask = null
       pageKey: 'person',
       label: '打开个人中心',
       reason: '继续完善个人信息或模特设置',
+    })
+  }
+
+  if (
+    taskType === 'update_user_name' ||
+    taskType === 'upload_user_avatar' ||
+    taskType === 'upload_character_model' ||
+    taskType === 'delete_character_model'
+  ) {
+    return buildNavigationAction({
+      pageKey: 'person',
+      label: '打开个人中心',
+      reason: '继续完善个人资料、头像或人物模特',
     })
   }
 

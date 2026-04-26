@@ -108,12 +108,16 @@ const mergeMediaAttachments = (...groups) => {
     .filter(Boolean)
     .forEach((item) => {
       const key = [
+        item?.type || '',
         item?.variant || '',
         item?.objectType || '',
         item?.objectId || '',
         item?.dataUrl || '',
+        item?.name || '',
+        item?.content ? JSON.stringify(item.content) : '',
       ].join(':')
-      if (!item?.dataUrl || seen.has(key)) return
+      const hasContent = Boolean(item?.dataUrl || item?.content)
+      if (!hasContent || seen.has(key)) return
       seen.add(key)
       merged.push(item)
     })
