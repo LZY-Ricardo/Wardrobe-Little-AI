@@ -87,6 +87,14 @@ const uniqStrings = (values) => {
   return result
 }
 
+const summarizeAssetStats = (list) => {
+  const clothes = Array.isArray(list) ? list : []
+  return {
+    clothesCount: clothes.length,
+    favoriteCount: clothes.reduce((count, item) => count + (item?.favorite ? 1 : 0), 0),
+  }
+}
+
 const SIZE_PICKER_META = {
   topSize: { title: '选择上装尺码', options: ['XS', 'S', 'M', 'L', 'XL', 'XXL'] },
   bottomSize: {
@@ -286,28 +294,21 @@ export default function Person() {
 
   const fetchAssetStats = useCallback(async (forceRefresh = false) => {
     setAssetError('')
-    if (!forceRefresh) {
-      const { getCachedClothes } = useClosetStore.getState()
-      const cached = getCachedClothes()
-      const list = Array.isArray(cached) ? cached : []
-      const clothesCount = list.length
-      const favoriteCount = list.reduce((count, item) => {
-        return count + (item?.favorite ? 1 : 0)
-      }, 0)
-      setAssetStats({ clothesCount, favoriteCount })
+
+    const closetStore = useClosetStore.getState()
+    const cached = closetStore.getCachedClothes()
+    const hasFetchedSnapshot = closetStore.lastFetchedAt > 0
+
+    if (!forceRefresh && hasFetchedSnapshot) {
+      setAssetStats(summarizeAssetStats(cached))
       setAssetLoading(false)
       return
     }
 
     setAssetLoading(true)
     try {
-      const { fetchAllClothes } = useClosetStore.getState()
-      const list = await fetchAllClothes(forceRefresh)
-      const clothesCount = list.length
-      const favoriteCount = list.reduce((count, item) => {
-        return count + (item?.favorite ? 1 : 0)
-      }, 0)
-      setAssetStats({ clothesCount, favoriteCount })
+      const list = await closetStore.fetchAllClothes(forceRefresh)
+      setAssetStats(summarizeAssetStats(list))
     } catch (error) {
       console.error('获取资产统计失败:', error)
       setAssetError('获取资产统计失败，请稍后重试')

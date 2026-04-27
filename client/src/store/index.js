@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import axios from '@/api'
+import { partializeClosetStore } from './closetPersist'
 
 const normalizeUserInfo = (userInfo) => {
   if (!userInfo || typeof userInfo !== 'object') return null
@@ -236,14 +237,7 @@ export const useClosetStore = create(
     {
       name: 'closet-store',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({
-        items: state.items,
-        allClothes: state.allClothes,
-        filters: state.filters,
-        page: state.page,
-        hasMore: state.hasMore,
-        lastFetchedAt: state.lastFetchedAt
-      })
+      partialize: partializeClosetStore,
     }
   )
 )

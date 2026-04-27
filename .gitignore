@@ -8,3 +8,8 @@
 .codex-client-dev.err.log
 .tmp-agent-upload.jpg
 .tmp-match-bottom.png
+/.codex-logs/
+/tmp_existing_frames/
+/tmp_home_alt/
+/tmp_home_design/
+/tmp_home_design_parts/
