@@ -59,6 +59,53 @@
   }
 }
 
+.inputSlot {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.placeholderTicker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8d867c;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: placeholderFade 2.4s ease-in-out;
+}
+
+@keyframes placeholderFade {
+  0% {
+    opacity: 0;
+    transform: translateY(calc(-50% + 6px));
+  }
+
+  15% {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+
+  82% {
+    opacity: 1;
+    transform: translateY(-50%);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(calc(-50% - 4px));
+  }
+}
+
 .searchIcon {
   flex: 0 0 auto;
   font-size: 18px;
@@ -116,6 +163,125 @@
   border: 1px solid transparent;
   background: #ece6db;
   color: #6d655b;
+}
+
+.preferenceRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preferenceGroup {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.preferenceChip {
+  flex: 0 0 auto;
+  height: 30px;
+  border-radius: 15px;
+  border: 1px solid #ddd4c7;
+  background: #f7f2eb;
+  color: #6d655b;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.preferenceChipActive {
+  border-color: #cadafd;
+  background: #e8eeff;
+  color: #2a64f6;
+}
+
+.weatherCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1px solid #e7e0d6;
+  background: #faf7f2;
+}
+
+.weatherContent {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.weatherValue {
+  min-width: 0;
+  color: #202025;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.weatherMeta {
+  flex: 0 0 auto;
+  color: #8d867c;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.weatherActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.weatherToggle,
+.weatherRefresh {
+  height: 28px;
+  border-radius: 14px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.weatherToggle {
+  border: 1px solid #ddd4c7;
+  background: #fffdf9;
+  color: #6d655b;
+}
+
+.weatherToggleActive {
+  border-color: #cadafd;
+  background: #e8eeff;
+  color: #2a64f6;
+}
+
+.weatherRefresh {
+  border: none;
+  background: #2d3850;
+  color: #ffffff;
+}
+
+@media (max-width: 360px) {
+  .weatherCard {
+    align-items: flex-start;
+  }
+
+  .weatherContent {
+    flex-wrap: wrap;
+  }
+
+  .weatherActions {
+    margin-left: auto;
+  }
 }
 
 .quickSceneChip-neutral {

@@ -63,6 +63,33 @@ const sceneRules = [
   },
 ]
 
+const FORMALITY_STYLE_MAP = {
+  轻松: ['休闲', '运动'],
+  日常: ['通勤', '休闲'],
+  正式: ['商务', '正式', '通勤'],
+}
+
+const TEMPERATURE_SEASON_MAP = {
+  偏热: ['夏', '春夏'],
+  适中: ['春', '秋', '春秋'],
+  偏冷: ['冬', '秋冬'],
+}
+
+const normalizePreference = (value, allowed = []) => {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  return allowed.includes(text) ? text : ''
+}
+
+const normalizeWeatherContext = (value) => {
+  if (!value || typeof value !== 'object') return null
+  const city = String(value.city || '').trim().slice(0, 32)
+  const temp = String(value.temp || '').trim().slice(0, 16)
+  const text = String(value.text || '').trim().slice(0, 32)
+  if (!city && !temp && !text) return null
+  return { city, temp, text }
+}
+
 const pickRule = (scene = '') => {
   const hit = sceneRules.find((rule) => rule.keywords.some((k) => scene.includes(k)))
   return hit || {
@@ -85,23 +112,27 @@ const projectCloth = (cloth) => ({
   favorite: cloth.favorite,
 })
 
-const scoreCloth = (cloth, rule) => {
+const scoreCloth = (cloth, rule, options = {}) => {
   let score = 1
   const { preferredTypes, styles, colors } = rule
   const type = cloth.type || ''
   const style = cloth.style || ''
   const color = cloth.color || ''
+  const season = cloth.season || ''
+  const { formality, temperaturePreference } = options
   if (preferredTypes?.some((t) => type.includes(t))) score += 3
   if (styles?.some((s) => style.includes(s))) score += 2
   if (colors?.some((c) => color.includes(c))) score += 1
+  if (FORMALITY_STYLE_MAP[formality]?.some((keyword) => style.includes(keyword))) score += 2
+  if (TEMPERATURE_SEASON_MAP[temperaturePreference]?.some((keyword) => season.includes(keyword))) score += 2
   if (cloth.favorite) score += 1
   return score
 }
 
-const categorize = (clothes = [], rule) => {
+const categorize = (clothes = [], rule, options = {}) => {
   const scored = clothes.map((item) => ({
     item,
-    score: scoreCloth(item, rule),
+    score: scoreCloth(item, rule, options),
   }))
   const isTop = (type = '') =>
     ['上衣', '衬衫', '针织', '毛衣', '外套', '夹克', '西装', '卫衣', 'T恤', 'POLO'].some((k) =>
@@ -122,9 +153,9 @@ const categorize = (clothes = [], rule) => {
   }
 }
 
-const buildRuleRecommendations = (scene, clothes) => {
+const buildRuleRecommendations = (scene, clothes, options = {}) => {
   const rule = pickRule(scene)
-  const { tops, bottoms, dresses, outers, shoes } = categorize(clothes, rule)
+  const { tops, bottoms, dresses, outers, shoes } = categorize(clothes, rule, options)
   const recommendations = []
 
   // 连衣裙组合
@@ -161,7 +192,7 @@ const buildRuleRecommendations = (scene, clothes) => {
   // 若仍不足，退化为单品推荐
   if (recommendations.length === 0 && clothes.length) {
     const sorted = [...clothes]
-      .map((item) => ({ item, score: scoreCloth(item, rule) }))
+      .map((item) => ({ item, score: scoreCloth(item, rule, options) }))
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
       .map(({ item }) => item)
@@ -177,9 +208,12 @@ const buildRuleRecommendations = (scene, clothes) => {
 }
 
 const buildPrompt = (scene, clothes, options = {}) => {
-  const { sex, season } = options
+  const { sex, season, formality, temperaturePreference, weatherContext } = options
   const head = `你是专业造型师，只能使用我提供的衣柜 cloth_id 组合穿搭，禁止虚构不存在的衣物。输出 JSON 数组。`
-  const sceneLine = `场景: ${scene || '通用场景'}${sex ? `，性别:${sex}` : ''}${season ? `，季节:${season}` : ''}`
+  const sceneLine = `场景: ${scene || '通用场景'}${sex ? `，性别:${sex}` : ''}${season ? `，季节:${season}` : ''}${formality ? `，正式度:${formality}` : ''}${temperaturePreference ? `，体感偏好:${temperaturePreference}` : ''}`
+  const weatherLine = weatherContext
+    ? `当前天气: ${weatherContext.city || '当前位置'} ${weatherContext.temp || ''} ${weatherContext.text || ''}`.trim()
+    : ''
   const items = clothes.slice(0, 40).map((c) => {
     const base = `${c.cloth_id}: ${c.name || c.type || '衣物'}`
     const meta = [c.type && `type=${c.type}`, c.color && `color=${c.color}`, c.style && `style=${c.style}`, c.season && `season=${c.season}`]
@@ -191,11 +225,17 @@ const buildPrompt = (scene, clothes, options = {}) => {
   return [
     head,
     sceneLine,
+    weatherLine,
     '衣柜清单 (仅可使用这些 cloth_id):',
     items.join('\n'),
     '要求：',
     '- 仅使用提供的 cloth_id，生成 3-5 套。',
     '- 每套字段：scene, reason, items:[{cloth_id, note?}].',
+    '- 优先选择季节匹配、风格协调、正式度符合场景的组合。',
+    '- 若给了正式度，整体风格要统一，不要一套里同时出现明显冲突的正式/休闲单品。',
+    '- 若给了体感偏好，优先选择更适合该温感的季节单品。',
+    '- 若提供了当前天气，请把温度和天气情况一起纳入穿搭判断。',
+    '- 优先完整套装：上装/下装/鞋；没有完整组合时再退化。',
     '- 不要返回未提供的衣物；不要输出多余解释；确保 JSON 可解析。',
     '输出示例:',
     `[{"scene":"${scene || '通用场景'}","reason":"正式低调","items":[{"cloth_id":1},{"cloth_id":2},{"cloth_id":3}]}]`,
@@ -341,6 +381,14 @@ const sanitizeSuits = (rawSuits, closetMap, scene, source) => {
 const generateSceneSuits = async (ctx) => {
   const rawScene = ctx.request.body?.scene
   const scene = String(rawScene || '').trim()
+  const formality = normalizePreference(ctx.request.body?.formality, ['轻松', '日常', '正式'])
+  const temperaturePreference = normalizePreference(ctx.request.body?.temperaturePreference, ['偏热', '适中', '偏冷'])
+  const useWeatherContext =
+    ctx.request.body?.useWeatherContext === true ||
+    ctx.request.body?.useWeatherContext === 1 ||
+    ctx.request.body?.useWeatherContext === '1' ||
+    ctx.request.body?.useWeatherContext === 'true'
+  const weatherContext = useWeatherContext ? normalizeWeatherContext(ctx.request.body?.weatherContext) : null
   const userId = ctx.userId
 
   if (!userId) {
@@ -379,12 +427,13 @@ const generateSceneSuits = async (ctx) => {
   })
 
   // 优先 LLM
-  const { suits: llmRaw, error: llmError } = await callLlm(scene, closet)
+  const options = { formality, temperaturePreference, weatherContext }
+  const { suits: llmRaw, error: llmError } = await callLlm(scene, closet, options)
   let suits = sanitizeSuits(llmRaw, closetMap, scene, 'llm')
 
   // LLM 失败或无可用结果时降级
   if (!suits.length) {
-    const ruleSuits = buildRuleRecommendations(scene, closet)
+    const ruleSuits = buildRuleRecommendations(scene, closet, options)
     suits = sanitizeSuits(ruleSuits, closetMap, scene, 'rule')
     ctx.body = {
       code: 1,

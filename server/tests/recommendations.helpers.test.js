@@ -8,14 +8,20 @@ const {
   normalizeRecommendationAdoptionPatch,
 } = require('../controllers/recommendations.helpers')
 
-test('buildRecommendationRequestSummary trims scene and keeps source', () => {
+test('buildRecommendationRequestSummary trims scene and keeps structured scene preferences', () => {
   const summary = buildRecommendationRequestSummary({
     scene: '  面试通勤  ',
+    formality: ' 正式 ',
+    temperaturePreference: ' 偏冷 ',
+    weatherSummary: ' 上海 18℃ 小雨 ',
     triggerSource: 'recommend-page',
   })
 
   assert.deepEqual(summary, {
     scene: '面试通勤',
+    formality: '正式',
+    temperaturePreference: '偏冷',
+    weatherSummary: '上海 18℃ 小雨',
     triggerSource: 'recommend-page',
   })
 })

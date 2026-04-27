@@ -9,6 +9,19 @@ import { buildAgentContextState } from '@/utils/agentContext'
 import { extractClothIds, toSuitSignature } from '@/utils/suitSignature'
 import { buildAutoSuitName } from '@/utils/suitName'
 import { getTodayInChina } from '@/utils/date'
+import { requestFreshWeather } from '@/pages/Home/weatherRefresh'
+import {
+  GEO_STATUS,
+  WEATHER_DATA_CACHE_KEY,
+  WEATHER_GEO_CACHE_KEY,
+  WEATHER_STALE_MS,
+  isGeoSupported,
+  isSecureGeoContext,
+  normalizeWeatherData,
+  readCachedGeoCoords,
+  readCachedWeatherMeta,
+  writeSessionJson,
+} from '@/utils/weatherContext'
 import { useSuitStore } from '@/store'
 import { buildRecommendCardModel, buildRecommendViewModel } from './viewModel'
 
@@ -169,6 +182,9 @@ const normalizeSuits = (raw = [], fallbackScene = '') => {
 }
 
 const isFavorited = (value) => value === 1 || value === true || value === '1' || value === 'true'
+const SCENE_PLACEHOLDERS = ['输入场景', '约会', '通勤', '运动', '面试', '商务']
+const FORMALITY_OPTIONS = ['不限', '轻松', '日常', '正式']
+const TEMPERATURE_OPTIONS = ['不限', '偏热', '适中', '偏冷']
 
 export default function Recommend({ embedded = false }) {
   const location = useLocation()
@@ -190,6 +206,16 @@ export default function Recommend({ embedded = false }) {
   const [suitSaving, setSuitSaving] = useState({})
   const [savedSuitSignatures, setSavedSuitSignatures] = useState(new Set())
   const [latestRecommendationId, setLatestRecommendationId] = useState(null)
+  const [placeholderIndex, setPlaceholderIndex] = useState(0)
+  const [inputFocused, setInputFocused] = useState(false)
+  const [formality, setFormality] = useState('不限')
+  const [temperaturePreference, setTemperaturePreference] = useState('不限')
+  const cachedWeatherMeta = React.useMemo(() => readCachedWeatherMeta(), [])
+  const [weather, setWeather] = useState(() => cachedWeatherMeta.weather)
+  const [weatherFetchedAt, setWeatherFetchedAt] = useState(() => cachedWeatherMeta.fetchedAt)
+  const [geoStatus, setGeoStatus] = useState(GEO_STATUS.IDLE)
+  const [weatherRefreshing, setWeatherRefreshing] = useState(false)
+  const [useWeatherContext, setUseWeatherContext] = useState(true)
 
   const fetchSavedSuits = React.useCallback(async (forceRefresh = false) => {
     try {
@@ -210,6 +236,49 @@ export default function Recommend({ embedded = false }) {
     void fetchSavedSuits()
   }, [fetchSavedSuits])
 
+  const fetchWeather = React.useCallback(async (coords) => {
+    setWeatherRefreshing(true)
+    try {
+      const res = coords
+        ? await axios.get('/weather/today', {
+            params: {
+              lat: coords.latitude,
+              lon: coords.longitude,
+            },
+          })
+        : await axios.get('/weather/today')
+
+      if (res?.data?.needsGeolocation) return null
+
+      if (res?.data) {
+        const nextWeather = normalizeWeatherData(res.data)
+        const fetchedAt = Date.now()
+        setWeather(nextWeather)
+        setWeatherFetchedAt(fetchedAt)
+        writeSessionJson(WEATHER_DATA_CACHE_KEY, {
+          weather: nextWeather,
+          fetchedAt,
+        })
+      }
+      return res?.data || null
+    } catch (err) {
+      console.warn('推荐页天气接口不可用', err)
+      if (coords) setGeoStatus(GEO_STATUS.WEATHER_ERROR)
+      return null
+    } finally {
+      setWeatherRefreshing(false)
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const cachedCoords = readCachedGeoCoords()
+    if (cachedCoords) {
+      void fetchWeather(cachedCoords)
+    } else {
+      void fetchWeather()
+    }
+  }, [fetchWeather])
+
   const handleBtnClick = () => {
     const value = scene.trim()
     if (!value) {
@@ -222,6 +291,9 @@ export default function Recommend({ embedded = false }) {
   const buildHistoryPayload = React.useCallback((value, suits = []) => ({
     recommendationType: 'scene',
     scene: value,
+    formality: formality === '不限' ? '' : formality,
+    temperaturePreference: temperaturePreference === '不限' ? '' : temperaturePreference,
+    weatherSummary: useWeatherContext && weather ? `${weather.city} ${weather.temp} ${weather.text}` : '',
     triggerSource: embedded ? 'match-hub' : 'recommend-page',
     suits: suits.map((item, index) => ({
       id: item?.id ?? index,
@@ -239,7 +311,7 @@ export default function Recommend({ embedded = false }) {
           }))
         : [],
     })),
-  }), [embedded])
+  }), [embedded, formality, temperaturePreference, useWeatherContext, weather])
 
   const generateSceneSuits = React.useCallback(async (value) => {
     setLoading(true)
@@ -247,7 +319,20 @@ export default function Recommend({ embedded = false }) {
     setServiceUnavailable(false)
     setLatestRecommendationId(null)
     try {
-      const res = await axios.post('/scene/generateSceneSuits', { scene: value })
+      const res = await axios.post('/scene/generateSceneSuits', {
+        scene: value,
+        formality: formality === '不限' ? '' : formality,
+        temperaturePreference: temperaturePreference === '不限' ? '' : temperaturePreference,
+        useWeatherContext: Boolean(useWeatherContext && weather),
+        weatherContext:
+          useWeatherContext && weather
+            ? {
+                city: weather.city,
+                temp: weather.temp,
+                text: weather.text,
+              }
+            : null,
+      })
       const list = normalizeSuits(res?.data ?? res, value)
       if (!list.length) {
         setSceneSuits([])
@@ -279,7 +364,7 @@ export default function Recommend({ embedded = false }) {
     } finally {
       setLoading(false)
     }
-  }, [buildHistoryPayload])
+  }, [buildHistoryPayload, formality, temperaturePreference, useWeatherContext, weather])
 
   const applyFavoritePatch = (patch = {}) => {
     const keys = Object.keys(patch)
@@ -414,6 +499,40 @@ export default function Recommend({ embedded = false }) {
     setScene(presetScene)
     void generateSceneSuits(presetScene)
   }, [generateSceneSuits, presetScene])
+
+  React.useEffect(() => {
+    if (scene.trim() || inputFocused) return undefined
+
+    const timer = window.setInterval(() => {
+      setPlaceholderIndex((prev) => (prev + 1) % SCENE_PLACEHOLDERS.length)
+    }, 2400)
+
+    return () => window.clearInterval(timer)
+  }, [inputFocused, scene])
+
+  const handleRefreshWeather = () =>
+    requestFreshWeather({
+      setGeoStatus,
+      writeSessionJson,
+      isGeoSupported,
+      isSecureGeoContext,
+      getCurrentPosition: (...args) => navigator.geolocation.getCurrentPosition(...args),
+      fetchWeather,
+      geoStatus: GEO_STATUS,
+      weatherGeoCacheKey: WEATHER_GEO_CACHE_KEY,
+      log: (...args) => console.log(...args),
+    })
+
+  const weatherSummary = weather ? `${weather.city} ${weather.temp} · ${weather.text}` : '未获取天气'
+  const weatherStatusText = useMemo(() => {
+    if (weatherRefreshing || geoStatus === GEO_STATUS.REQUESTING) return '更新中'
+    if (geoStatus === GEO_STATUS.DENIED) return '定位已关闭'
+    if (geoStatus === GEO_STATUS.UNAVAILABLE) return '当前环境不支持'
+    if (geoStatus === GEO_STATUS.ERROR) return '定位失败'
+    if (geoStatus === GEO_STATUS.WEATHER_ERROR) return '天气服务异常'
+    if (weather && typeof weatherFetchedAt === 'number' && Date.now() - weatherFetchedAt > WEATHER_STALE_MS) return '稍早'
+    return ''
+  }, [geoStatus, weather, weatherFetchedAt, weatherRefreshing])
 
   const pageModel = useMemo(
     () =>
@@ -602,13 +721,22 @@ export default function Recommend({ embedded = false }) {
         <div className={styles.composerRow}>
           <label className={styles.inputCard}>
             <SvgIcon iconName="icon-icon-sousuo" className={styles.searchIcon} />
-            <input
-              type="text"
-              placeholder="请输入场景，如约会、运动、商务"
-              value={scene}
-              onChange={(e) => setScene(e.target.value)}
-              disabled={loading}
-            />
+            <div className={styles.inputSlot}>
+              {!scene.trim() && !inputFocused ? (
+                <span key={SCENE_PLACEHOLDERS[placeholderIndex]} className={styles.placeholderTicker}>
+                  {SCENE_PLACEHOLDERS[placeholderIndex]}
+                </span>
+              ) : null}
+              <input
+                type="text"
+                value={scene}
+                onChange={(e) => setScene(e.target.value)}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                disabled={loading}
+                aria-label="输入推荐场景"
+              />
+            </div>
           </label>
 
           <button type="button" className={styles.primaryAction} onClick={handleBtnClick} disabled={loading || serviceUnavailable}>
@@ -636,6 +764,59 @@ export default function Recommend({ embedded = false }) {
             </button>
           ))}
           {sceneSuits.length ? <span className={styles.resultsMeta}>{pageModel.resultMeta}</span> : null}
+        </div>
+
+        <div className={styles.preferenceRow}>
+          <div className={styles.preferenceGroup}>
+            {FORMALITY_OPTIONS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`${styles.preferenceChip} ${formality === item ? styles.preferenceChipActive : ''}`}
+                onClick={() => setFormality(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <div className={styles.preferenceGroup}>
+            {TEMPERATURE_OPTIONS.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`${styles.preferenceChip} ${temperaturePreference === item ? styles.preferenceChipActive : ''}`}
+                onClick={() => setTemperaturePreference(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className={styles.weatherCard}>
+          <div className={styles.weatherContent}>
+            <span className={styles.weatherValue}>{weatherSummary}</span>
+            {weatherStatusText ? <span className={styles.weatherMeta}>{weatherStatusText}</span> : null}
+          </div>
+
+          <div className={styles.weatherActions}>
+            <button
+              type="button"
+              className={`${styles.weatherToggle} ${useWeatherContext ? styles.weatherToggleActive : ''}`}
+              onClick={() => setUseWeatherContext((prev) => !prev)}
+            >
+              {useWeatherContext ? '结合天气' : '仅按场景'}
+            </button>
+            <button
+              type="button"
+              className={styles.weatherRefresh}
+              onClick={() => void handleRefreshWeather()}
+              disabled={weatherRefreshing}
+            >
+              {weatherRefreshing ? '定位中' : '刷新'}
+            </button>
+          </div>
         </div>
       </section>
 

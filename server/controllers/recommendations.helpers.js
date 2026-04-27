@@ -37,6 +37,9 @@ const normalizeRecommendationAdoptionPatch = (current = {}, patch = {}) => {
 
 const buildRecommendationRequestSummary = (payload = {}) => ({
   scene: trimToString(payload.scene),
+  formality: trimToString(payload.formality),
+  temperaturePreference: trimToString(payload.temperaturePreference),
+  weatherSummary: trimToString(payload.weatherSummary),
   triggerSource: trimToString(payload.triggerSource || payload.source || 'recommend-page'),
 })
 
