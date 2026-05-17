@@ -34,6 +34,13 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - Backend: `cd server && npm install`，`npm run dev`（nodemon + Koa）。启动前准备 `.env`（DB、JWT、第三方键）。
 - Run FE/BE dev servers in parallel; align API base URL with frontend env 配置。
 
+## Local Diagram Tools / 本机绘图工具
+
+- Mermaid CLI 已安装，可直接使用命令：`mmdc`
+- PlantUML 已安装，可直接使用命令：`java -jar "F:/JavaVersion/plantuml/plantuml.jar"`
+- Java 默认版本为 17，`java` 命令已可直接使用
+- 当需要生成流程图、UML 图、ER 图、时序图或论文插图时，优先直接调用上述工具进行渲染与验证
+
 ## Coding Style & Naming Conventions / 代码风格与命名
 
 - JavaScript/JSX + ESLint recommended + React Hooks/Refresh；`no-unused-vars` 允许 `^[A-Z_]` 常量。保持 ES Modules。

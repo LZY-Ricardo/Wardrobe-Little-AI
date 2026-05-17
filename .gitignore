@@ -13,3 +13,10 @@
 /tmp_home_alt/
 /tmp_home_design/
 /tmp_home_design_parts/
+/tmp/
+/.dev-pids
+/.tmp-client.log
+/.tmp-client.err.log
+/.tmp-server.log
+/.tmp-server.err.log
+/.claude/skills/

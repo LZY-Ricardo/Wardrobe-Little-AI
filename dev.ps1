@@ -4,12 +4,18 @@ $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host "Starting Clothora dev servers..." -ForegroundColor Cyan
 
+$npmCmd = (Get-Command "npm.cmd" -ErrorAction SilentlyContinue).Source
+if (-not $npmCmd) {
+    Write-Error "npm.cmd not found. Please install Node.js/npm and ensure it is available in PATH."
+    exit 1
+}
+
 # Start backend
-$backend = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory "$RootDir\server" -PassThru -NoNewWindow
+$backend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev" -WorkingDirectory "$RootDir\server" -PassThru -NoNewWindow
 Write-Host "Backend  PID: $($backend.Id) (Koa)" -ForegroundColor Green
 
 # Start frontend
-$frontend = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory "$RootDir\client" -PassThru -NoNewWindow
+$frontend = Start-Process -FilePath $npmCmd -ArgumentList "run", "dev" -WorkingDirectory "$RootDir\client" -PassThru -NoNewWindow
 Write-Host "Frontend PID: $($frontend.Id) (Vite)" -ForegroundColor Green
 
 Write-Host ""
