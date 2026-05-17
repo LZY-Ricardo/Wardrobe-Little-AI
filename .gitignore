@@ -20,3 +20,4 @@
 /.tmp-server.log
 /.tmp-server.err.log
 /.claude/skills/
+/.claude/settings.local.json
