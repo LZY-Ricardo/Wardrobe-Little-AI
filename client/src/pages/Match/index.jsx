@@ -7,6 +7,7 @@ import axios from '@/api'
 import { buildAgentContextState } from '@/utils/agentContext'
 import test from '@/assets/test.jpg'
 import { useAuthStore, useMatchStore } from '@/store'
+import { createPreviewUploadFile } from './previewUpload'
 import { buildPreviewStageModel } from './viewModel'
 
 import styles from './index.module.less'
@@ -271,9 +272,9 @@ export default function Match({ embedded = false }) {
       const bottomBlob = await bottom.blob()
       const modelBlob = await model.blob()
 
-      const topFile = new File([topBlob], 'top.jpg', { type: 'image/jpeg' })
-      const bottomFile = new File([bottomBlob], 'bottom.jpg', { type: 'image/jpeg' })
-      const modelFile = new File([modelBlob], 'model.jpg', { type: 'image/jpeg' })
+      const topFile = createPreviewUploadFile(topBlob, 'top')
+      const bottomFile = createPreviewUploadFile(bottomBlob, 'bottom')
+      const modelFile = createPreviewUploadFile(modelBlob, 'model')
 
       const formData = new FormData()
       formData.append('top', topFile)
