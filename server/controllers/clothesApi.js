@@ -4,6 +4,10 @@ const axios = require('axios')
 const FormData = require('form-data')
 const { createCircuitBreaker } = require('../utils/circuitBreaker')
 const { log } = require('../utils/logger')
+const clothesController = require('./clothes')
+const {
+    isPreviewCompatible,
+} = require('../utils/outfitPreviewCompatibility')
 
 // 环境变量中获取 PAT TOKEN
 const patToken = process.env.COZE_PAT_TOKEN;
@@ -126,6 +130,33 @@ const logPreviewEvent = (level, message, meta = {}) => {
         scope: 'clothes.genPreview',
         ...meta,
     })
+}
+
+const normalizeClothId = (value) => {
+    const clothId = Number.parseInt(value, 10)
+    return Number.isInteger(clothId) && clothId > 0 ? clothId : 0
+}
+
+const resolveTrustedBottomType = async ({ userId, bottomClothId, deps = {} } = {}) => {
+    const trustedBottomClothId = normalizeClothId(bottomClothId)
+    if (!trustedBottomClothId || !userId) {
+        const error = new Error('请重新选择下衣后再生成预览')
+        error.status = 400
+        throw error
+    }
+
+    const getClothByIdForUser = deps.getClothByIdForUser || clothesController.getClothByIdForUser
+    const bottomCloth = await getClothByIdForUser(userId, trustedBottomClothId)
+    if (!bottomCloth?.type) {
+        const error = new Error('请重新选择下衣后再生成预览')
+        error.status = 400
+        throw error
+    }
+
+    return {
+        bottomClothId: trustedBottomClothId,
+        bottomType: String(bottomCloth.type || '').trim(),
+    }
 }
 
 const uploadPreviewImage = async (file, label, headers, axiosPost) => {
@@ -403,27 +434,28 @@ const analyzeClothes = async (ctx) => {
 };
 
 // 生成搭配预览图
-const generatePreview = async (ctx) => {
+const generatePreview = async (ctx, deps = {}) => {
     const req = ctx.request;
     const requestId = ctx.state?.requestId || ''
     try {
-        ensureCozeConfig(workflow2_id)
-        if (cozeBreaker.isOpen()) {
-            ctx.status = 503
-            ctx.body = { code: 0, msg: '预览生成服务繁忙，请稍后重试' }
-            return
-        }
         // 获取上传的文件
         const topFile = req.files?.top?.[0];
         const bottomFile = req.files?.bottom?.[0];
         const modelFile = req.files?.characterModel?.[0];
 
         // 获取表单字段
-        const { sex } = req.body;
+        const { sex, bottomClothId = '' } = req.body;
+        const { bottomType, bottomClothId: trustedBottomClothId } = await resolveTrustedBottomType({
+            userId: ctx.userId,
+            bottomClothId,
+            deps,
+        })
 
         logPreviewEvent('info', 'preview_http_request_received', {
             requestId,
             sex: String(sex || '').trim(),
+            bottomType,
+            bottomClothId: trustedBottomClothId,
             topPresent: Boolean(topFile),
             bottomPresent: Boolean(bottomFile),
             characterModelPresent: Boolean(modelFile),
@@ -445,8 +477,24 @@ const generatePreview = async (ctx) => {
             ctx.body = { code: 0, msg: '请上传人物模特图片' }
             return
         }
+        if (!isPreviewCompatible({ sex, bottomType })) {
+            ctx.status = 400
+            ctx.body = { code: 0, msg: '当前模特不支持所选女性裙装预览' }
+            return
+        }
 
-        const analysisResult = await generatePreviewFromInputs({
+        const ensurePreviewConfig = deps.ensureCozeConfig || ensureCozeConfig
+        ensurePreviewConfig(workflow2_id)
+
+        const breaker = deps.breaker || cozeBreaker
+        if (breaker.isOpen()) {
+            ctx.status = 503
+            ctx.body = { code: 0, msg: '预览生成服务繁忙，请稍后重试' }
+            return
+        }
+
+        const runGeneratePreview = deps.generatePreviewFromInputs || generatePreviewFromInputs
+        const analysisResult = await runGeneratePreview({
             top: topFile,
             bottom: bottomFile,
             characterModel: modelFile,
@@ -477,5 +525,7 @@ module.exports = {
     __testables: {
         buildUpstreamErrorDetails,
         normalizePreviewImageInput,
+        normalizeClothId,
+        resolveTrustedBottomType,
     },
 }

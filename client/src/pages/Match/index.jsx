@@ -7,6 +7,10 @@ import axios from '@/api'
 import { buildAgentContextState } from '@/utils/agentContext'
 import test from '@/assets/test.jpg'
 import { useAuthStore, useMatchStore } from '@/store'
+import {
+  getGenerateCompatibilityIssue,
+  resolveVisibleMatchMaterials,
+} from './compatibility'
 import { createPreviewUploadFile } from './previewUpload'
 import { buildPreviewStageModel } from './viewModel'
 
@@ -122,7 +126,16 @@ export default function Match({ embedded = false }) {
   const cacheFresh = hasCache && fetchedAt > 0 && Date.now() - fetchedAt < MATCH_CACHE_TTL
   const currentLookClothes = [topClothes, bottomClothes].filter(Boolean)
   const canHandOffLook = currentLookClothes.length >= 2
-  const visibleMaterials = activeTab === 'top' ? topItems : bottomItems
+  const visibleMaterials = useMemo(
+    () =>
+      resolveVisibleMatchMaterials({
+        activeTab,
+        sex,
+        topItems,
+        bottomItems,
+      }),
+    [activeTab, sex, topItems, bottomItems],
+  )
 
   const stageModel = useMemo(
     () =>
@@ -263,6 +276,16 @@ export default function Match({ embedded = false }) {
       return
     }
 
+    const compatibilityIssue = getGenerateCompatibilityIssue({
+      sex,
+      topClothes,
+      bottomClothes,
+    })
+    if (compatibilityIssue) {
+      Toast.show({ content: compatibilityIssue, duration: 1200 })
+      return
+    }
+
     try {
       const top = await fetch(topClothes.image)
       const bottom = await fetch(bottomClothes.image)
@@ -280,6 +303,10 @@ export default function Match({ embedded = false }) {
       formData.append('top', topFile)
       formData.append('bottom', bottomFile)
       formData.append('sex', sex)
+      formData.append('topClothId', String(topClothes?.cloth_id || ''))
+      formData.append('bottomClothId', String(bottomClothes?.cloth_id || ''))
+      formData.append('topType', topClothes?.type || '')
+      formData.append('bottomType', bottomClothes?.type || '')
       formData.append('characterModel', modelFile)
 
       setLoading(true)

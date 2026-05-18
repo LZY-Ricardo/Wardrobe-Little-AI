@@ -120,3 +120,41 @@ test('generateOutfitPreview accepts remote image url returned by preview service
   assert.equal(result.attachments[0].dataUrl, 'https://cdn.example.com/tryon.jpg')
   assert.equal(result.attachments[0].mimeType, 'image/jpeg')
 })
+
+test('generateOutfitPreview blocks male profile skirt combinations', async () => {
+  const result = await generateOutfitPreview(1, {}, {
+    latestTask: {
+      manualSuitDraft: {
+        name: '白色衬衫上衣 + 黑色半身裙',
+        scene: '搭配中心',
+        source: 'match-page',
+        items: [23, 29],
+      },
+    },
+    getUserInfoById: async () => ({
+      id: 1,
+      sex: 'man',
+      characterModel: 'data:image/jpeg;base64,model',
+    }),
+    listClothesByIds: async () => ([
+      {
+        cloth_id: 23,
+        name: '白色衬衫上衣',
+        type: '上衣 / 衬衫',
+        image: 'data:image/jpeg;base64,shirt',
+      },
+      {
+        cloth_id: 29,
+        name: '黑色半身裙',
+        type: '下衣 / 半身裙',
+        image: 'data:image/jpeg;base64,skirt',
+      },
+    ]),
+    generatePreviewFromInputs: async () => {
+      throw new Error('preview service should not be called for incompatible outfits')
+    },
+  })
+
+  assert.equal(result.error, 'OUTFIT_PREVIEW_INCOMPATIBLE')
+  assert.match(result.summary, /不支持女性裙装预览/)
+})

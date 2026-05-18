@@ -138,3 +138,123 @@ test('generatePreviewFromInputs surfaces upstream workflow business message', as
     },
   )
 })
+
+test('generatePreview rejects male profile skirt request before workflow execution', async () => {
+  const ctx = {
+    userId: 42,
+    request: {
+      body: {
+        sex: 'man',
+        bottomType: '下衣 / 长裤',
+        bottomClothId: '18',
+      },
+      files: {
+        top: [{ originalname: 'top.jpg', mimetype: 'image/jpeg', size: 3, buffer: Buffer.from('top') }],
+        bottom: [{ originalname: 'bottom.jpg', mimetype: 'image/jpeg', size: 6, buffer: Buffer.from('bottom') }],
+        characterModel: [{ originalname: 'model.jpg', mimetype: 'image/jpeg', size: 5, buffer: Buffer.from('model') }],
+      },
+    },
+    state: {
+      requestId: 'req-preview-compat',
+    },
+    status: 200,
+    body: null,
+  }
+
+  await clothesApi.generatePreview(ctx, {
+    getClothByIdForUser: async () => ({
+      cloth_id: 18,
+      type: '下衣 / 半身裙',
+    }),
+  })
+
+  assert.equal(ctx.status, 400)
+  assert.deepEqual(ctx.body, {
+    code: 0,
+    msg: '当前模特不支持所选女性裙装预览',
+  })
+})
+
+test('generatePreview rejects preview requests without trusted bottom cloth id', async () => {
+  const ctx = {
+    userId: 42,
+    request: {
+      body: {
+        sex: 'man',
+        bottomType: '下衣 / 长裤',
+      },
+      files: {
+        top: [{ originalname: 'top.jpg', mimetype: 'image/jpeg', size: 3, buffer: Buffer.from('top') }],
+        bottom: [{ originalname: 'bottom.jpg', mimetype: 'image/jpeg', size: 6, buffer: Buffer.from('bottom') }],
+        characterModel: [{ originalname: 'model.jpg', mimetype: 'image/jpeg', size: 5, buffer: Buffer.from('model') }],
+      },
+    },
+    state: {
+      requestId: 'req-preview-missing-bottom-id',
+    },
+    status: 200,
+    body: null,
+  }
+
+  await clothesApi.generatePreview(ctx, {
+    getClothByIdForUser: async () => {
+      throw new Error('should not query clothes without a trusted bottom cloth id')
+    },
+  })
+
+  assert.equal(ctx.status, 400)
+  assert.deepEqual(ctx.body, {
+    code: 0,
+    msg: '请重新选择下衣后再生成预览',
+  })
+})
+
+test('generatePreview continues with trusted compatible bottom cloth id', async () => {
+  const ctx = {
+    userId: 42,
+    request: {
+      body: {
+        sex: 'woman',
+        bottomClothId: '28',
+      },
+      files: {
+        top: [{ originalname: 'top.jpg', mimetype: 'image/jpeg', size: 3, buffer: Buffer.from('top') }],
+        bottom: [{ originalname: 'bottom.jpg', mimetype: 'image/jpeg', size: 6, buffer: Buffer.from('bottom') }],
+        characterModel: [{ originalname: 'model.jpg', mimetype: 'image/jpeg', size: 5, buffer: Buffer.from('model') }],
+      },
+    },
+    state: {
+      requestId: 'req-preview-compatible',
+    },
+    status: 200,
+    body: null,
+  }
+
+  const calls = []
+  await clothesApi.generatePreview(ctx, {
+    getClothByIdForUser: async () => ({
+      cloth_id: 28,
+      type: '下衣 / 长裤',
+    }),
+    breaker: {
+      isOpen: () => false,
+    },
+    ensureCozeConfig: () => {},
+    generatePreviewFromInputs: async (payload) => {
+      calls.push(payload)
+      return 'data:image/png;base64,preview'
+    },
+  })
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].sex, 'woman')
+  assert.equal(calls[0].requestId, 'req-preview-compatible')
+  assert.equal(calls[0].top.originalname, 'top.jpg')
+  assert.equal(calls[0].bottom.originalname, 'bottom.jpg')
+  assert.equal(calls[0].characterModel.originalname, 'model.jpg')
+  assert.equal(ctx.status, 200)
+  assert.deepEqual(ctx.body, {
+    code: 1,
+    data: 'data:image/png;base64,preview',
+  })
+})

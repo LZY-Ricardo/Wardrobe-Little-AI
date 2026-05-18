@@ -5,6 +5,7 @@ const {
 const { getUserInfoById } = require('../../../../controllers/user')
 const { generatePreviewFromInputs } = require('../../../../controllers/clothesApi')
 const { buildAssistantImageAttachments } = require('../../../../controllers/unifiedAgentAttachments')
+const { isPreviewCompatible } = require('../../../../utils/outfitPreviewCompatibility')
 
 const isImageDataUrl = (value = '') => /^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(String(value || '').trim())
 const isRemoteImageUrl = (value = '') => /^https?:\/\/\S+/i.test(String(value || '').trim())
@@ -224,6 +225,13 @@ const generateOutfitPreview = async (userId, args = {}, ctx = {}) => {
     return {
       error: 'USER_SEX_REQUIRED',
       summary: '请先完善性别信息后再生成预览图。',
+    }
+  }
+
+  if (!isPreviewCompatible({ sex, bottomType: currentLook?.bottom?.type || '' })) {
+    return {
+      error: 'OUTFIT_PREVIEW_INCOMPATIBLE',
+      summary: '当前男模特不支持女性裙装预览，请更换下衣。',
     }
   }
 

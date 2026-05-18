@@ -338,7 +338,7 @@ router.put('/:id', verify(), async (ctx) => {
 })
 
 // 生成搭配预览图
-router.post('/genPreview', upload.fields([{ name: 'top', maxCount: 1 }, { name: 'bottom', maxCount: 1 },{ name: 'characterModel', maxCount: 1 }]), generatePreview)
+router.post('/genPreview', verify(), upload.fields([{ name: 'top', maxCount: 1 }, { name: 'bottom', maxCount: 1 },{ name: 'characterModel', maxCount: 1 }]), generatePreview)
 
 
 
